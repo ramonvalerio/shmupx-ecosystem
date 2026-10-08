@@ -17,7 +17,13 @@ fn app_version() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![app_version])
+        .manage(capture::RunState::default())
+        .invoke_handler(tauri::generate_handler![
+            app_version,
+            capture::commands::iniciar_corrida_safe,
+            capture::commands::finalizar_corrida_manual,
+            steam::commands::inicializar_jogo_steam,
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

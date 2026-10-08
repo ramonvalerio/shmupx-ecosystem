@@ -9,28 +9,39 @@ Contexto: `docs/adr/001..003` e `docs/specs/002`.
 - [ ] 0.3 Definir eventos Tauri tipados (`run://tick`, `run://expired`, `input://ptt`) e expô-los ao frontend.
 
 ## 1. Módulo `steam` (detecção de processos)
-- [ ] 1.1 Adicionar `sysinfo`; implementar varredura de processos em `steam/detector.rs`.
+- [x] 1.1a Adicionar `sysinfo`; implementar `is_steam_running()` em `steam/detector.rs` (varredura por nome de processo `steam.exe`/`steam`).
+- [ ] 1.1b Varredura completa de processos para o `GameDetector` (depende de 1.2–1.4).
 - [ ] 1.2 Localizar a instalação da Steam (registro do Windows) e ler `libraryfolders.vdf`.
 - [ ] 1.3 Ler `appmanifest_*.acf` para mapear pasta de instalação → `app_id` + nome.
 - [ ] 1.4 Implementar `GameDetector` casando o executável do processo com o `installdir` do manifest.
-- [ ] 1.5 Polling leve (1–2 s) emitindo `steam://game-changed` apenas em mudança.
+- [x] 1.5a Stub de monitoramento: `steam/commands.rs::spawn_launch_monitor` faz polling (2s, timeout 60s) por qualquer processo novo após `steam://run/<app_id>` e emite `steam://game-launched` / `steam://game-launch-timeout`. **Heurística provisória** (qualquer processo novo, não necessariamente o jogo) — trocar por casamento exato via manifesto quando 1.2–1.4 existirem; é o ponto de partida para disparar o FFmpeg automaticamente no futuro.
+- [ ] 1.5b Polling leve (1–2 s) emitindo `steam://game-changed` apenas em mudança real de jogo (depende de 1.2–1.4).
 - [ ] 1.6 Testes com fixtures de `.acf` e lista de processos fake.
+
+### Comandos Tauri expostos (steam/commands.rs)
+- [x] `inicializar_jogo_steam(steam_app_id)`: valida `app_id` e Steam em execução, dispara `steam://run/<app_id>` via abridor de URI do SO (Windows/macOS/Linux) e agenda o monitor de lançamento em background.
 
 ## 2. Módulo `capture` — timer seguro
 - [ ] 2.1 Implementar máquina de estados de `RunTimer` (Idle → Running → Expired/Finished) com `Instant`.
 - [ ] 2.2 Task assíncrona de tick (1 s) emitindo `run://tick` com tempo restante.
-- [ ] 2.3 Aceitar `max_duration` vindo do servidor (45–60 min) e clamp no limite superior.
-- [ ] 2.4 Ao expirar, disparar sinal de corte para a sessão FFmpeg e emitir `run://expired`.
+- [x] 2.3a Timer de corte via `tokio::spawn` + `tokio::time::sleep` (duração fixa de 5 min para testes rápidos; `TEST_RUN_DURATION` em `capture/run_timer.rs` — substituir por `max_duration` do servidor quando a integração com o backend existir).
+- [ ] 2.3b Aceitar `max_duration` vindo do servidor (45–60 min) e clamp no limite superior (depende do backend).
+- [x] 2.4 Ao expirar, matar o processo FFmpeg (`child.kill().await`) e emitir `run://expired` com o `jogo_id` (`capture/commands.rs::spawn_safe_timer`).
 - [ ] 2.5 Testes com `tokio::time::pause` cobrindo expiração, finalização antecipada e dupla finalização.
 
 ## 3. Módulo `capture` — FFmpeg
-- [ ] 3.1 Resolver o binário do FFmpeg (sidecar do Tauri ou caminho configurado) e validar versão.
-- [ ] 3.2 Montar a linha de comando de captura (gdigrab/ddagrab + áudio WASAPI) a partir de `RecordingConfig`.
-- [ ] 3.3 Spawn com `tokio::process`, monitorar stderr (progresso) e código de saída.
-- [ ] 3.4 Parada graciosa (`q` no stdin) com fallback para kill após timeout.
-- [ ] 3.5 Saída RTMP opcional (tee muxer) compartilhando o mesmo processo.
-- [ ] 3.6 Integrar corte por timer (2.4) e marcar a run como `invalid` se o processo morrer fora do esperado.
+- [x] 3.1a Verificação de disponibilidade do binário no PATH (`ffmpeg -version`) via `capture::ffmpeg::is_ffmpeg_available`.
+- [ ] 3.1b Resolver via sidecar do Tauri (hoje depende do PATH do sistema) e validar versão mínima.
+- [ ] 3.2 Montar a linha de comando de captura real (gdigrab/ddagrab + áudio WASAPI) a partir de `RecordingConfig` — hoje `spawn_ffmpeg` usa um padrão de teste (`testsrc`) só para validar o ciclo de vida do processo.
+- [x] 3.3 Spawn assíncrono com `tokio::process::Command`, PID armazenado em estado global (`capture::state::RunState`, `tauri::State` com `Arc<Mutex<Option<RunHandle>>>`).
+- [x] 3.4 Parada graciosa (`q` no stdin + `shutdown`) com fallback para `kill` após timeout de 3s (`capture::ffmpeg::graceful_stop`, usado pelo comando `finalizar_corrida_manual`).
+- [ ] 3.5 Saída RTMP opcional (tee muxer) compartilhando o mesmo processo — `RecordingConfig.rtmp_url` já existe, falta o muxer `tee` real.
+- [ ] 3.6 Marcar a run como `invalid` no backend se o processo morrer fora do esperado (hoje só é tratado localmente).
 - [ ] 3.7 Extrair metadados do arquivo final (duração, hash SHA-256) para o payload de submissão.
+
+### Comandos Tauri expostos (capture/commands.rs)
+- [x] `iniciar_corrida_safe(jogo_id)`: valida FFmpeg no PATH, spawna o processo, guarda PID/estado e agenda o timer seguro. Retorna o PID.
+- [x] `finalizar_corrida_manual()`: encerra a corrida ativa de forma graciosa.
 
 ## 4. Módulo `input` (hotkeys de controle)
 - [ ] 4.1 Escolher backend de entrada (`gilrs` ou XInput/`windows` crate) e ler eventos em thread dedicada.
@@ -47,5 +58,7 @@ Contexto: `docs/adr/001..003` e `docs/specs/002`.
 - [ ] 5.4 Submissão do resultado ao backend (run_id, profileVersion, variant, hash do vídeo).
 
 ## 6. Frontend (React)
-- [ ] 6.1 Telas: lista de salas, sala, HUD de run (timer), configurações de hotkey/captura.
-- [ ] 6.2 Cliente Supabase (Auth + Realtime) para salas.
+- [x] 6.1a Esqueleto visual do painel de controle (tema escuro arcade, duas colunas, sem scroll global): `App.tsx`, `components/GameRoomList.tsx`, `components/RoomView.tsx`, `components/ChatFeed.tsx`, `components/ChatInput.tsx`, `types/room.ts`, `data/mockRooms.ts`. Dados e mensagens são mock local (sem WebSocket/Realtime real ainda). Botão "Iniciar Jogo via Steam" só loga no console — falta integrar com `invoke("inicializar_jogo_steam", ...)`.
+- [ ] 6.1b Integrar o botão "Iniciar Jogo via Steam" ao comando Tauri real (`@tauri-apps/api` `invoke`) e aos eventos `steam://game-launched` / `steam://game-launch-timeout`.
+- [ ] 6.1c HUD de run (timer) e configurações de hotkey/captura.
+- [ ] 6.2 Cliente Supabase (Auth + Realtime) para salas reais (substituir mocks de `data/mockRooms.ts`).

@@ -1,3 +1,7 @@
+use std::collections::HashSet;
+
+use sysinfo::{ProcessesToUpdate, System};
+
 /// Jogo Steam detectado em execução.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DetectedGame {
@@ -7,7 +11,46 @@ pub struct DetectedGame {
 }
 
 /// Porta do domínio: quem sabe dizer qual jogo está ativo.
-/// A implementação concreta (varredura de processos) vem em TASKS.md.
+/// A implementação concreta (varredura de processos casada com manifestos `.acf`) vem em
+/// TASKS.md 1.2–1.4; hoje só a varredura bruta de processos existe (abaixo).
 pub trait GameDetector: Send + Sync {
     fn current_game(&self) -> Option<DetectedGame>;
+}
+
+const STEAM_PROCESS_NAMES: &[&str] = &["steam.exe", "steam"];
+
+/// Verifica se o cliente oficial da Steam está em execução no sistema do jogador.
+pub fn is_steam_running() -> bool {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+
+    system.processes().values().any(|process| {
+        let name = process.name().to_string_lossy();
+        STEAM_PROCESS_NAMES
+            .iter()
+            .any(|candidate| name.eq_ignore_ascii_case(candidate))
+    })
+}
+
+/// Snapshot dos PIDs ativos no sistema, usado como baseline para detectar o surgimento
+/// do processo do jogo após o disparo via `steam://run/<app_id>`.
+pub fn snapshot_pids() -> HashSet<u32> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    system.processes().keys().map(|pid| pid.as_u32()).collect()
+}
+
+/// Heurística inicial (stub): procura por qualquer processo que não existia no `baseline`.
+///
+/// TODO(TASKS.md 1.2–1.4): trocar por casamento exato via `appmanifest_*.acf` (installdir →
+/// app_id) para não confundir o jogo com qualquer outro processo iniciado no intervalo.
+pub fn find_new_process(baseline: &HashSet<u32>) -> Option<(u32, String)> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+
+    system
+        .processes()
+        .iter()
+        .find(|(pid, _)| !baseline.contains(&pid.as_u32()))
+        .map(|(pid, process)| (pid.as_u32(), process.name().to_string_lossy().into_owned()))
 }
