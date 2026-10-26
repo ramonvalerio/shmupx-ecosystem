@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE public.perfis_jogadores\n        SET pontuacao_global_normalizada = (\n            SELECT COALESCE(AVG(nota_normalizada), 0)\n            FROM public.runs\n            WHERE jogador_id = $1 AND status = 'valida'\n        )\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d36f0dddac5efbab322f0e8d9273af2afe71829cc0fd55d73d4af2a3df1e3f03"
+}

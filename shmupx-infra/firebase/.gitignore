@@ -1,0 +1,7 @@
+node_modules/
+*-debug.log
+*.local.md
+.firebase/
+.env
+.env.*
+!.env.example

@@ -1,0 +1,30 @@
+{
+  "indexes": [
+    { "collectionGroup": "gameplays", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "ownerId", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "gameplays", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "ownerId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" }
+    ]},
+    { "collectionGroup": "events", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "published", "order": "ASCENDING" },
+      { "fieldPath": "startsAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "entries", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "bestScore", "order": "DESCENDING" },
+      { "fieldPath": "achievedAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "globalRankings", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "totalRating", "order": "DESCENDING" },
+      { "fieldPath": "playerId", "order": "ASCENDING" }
+    ]}
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "gameplays", "fieldPath": "analysis", "indexes": [] },
+    { "collectionGroup": "gameplays", "fieldPath": "video", "indexes": [] },
+    { "collectionGroup": "analysisJobs", "fieldPath": "diagnostics", "indexes": [] }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE public.runs\n        SET status = 'valida',\n            score_bruto = $1,\n            vidas_perdidas = $2,\n            continues_usados = $3,\n            nota_normalizada = $4,\n            submetida_em = now()\n        WHERE id = $5\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d8fc740a0d9a031be97fbff1f4fb704fdde9dca91096ea551cb6484c2f42682d"
+}

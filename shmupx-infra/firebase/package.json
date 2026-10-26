@@ -1,0 +1,15 @@
+{
+  "name": "shmupx-firebase-config",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/firestore.rules.test.mjs"
+  },
+  "overrides": {
+    "@firebase/firestore": { "@grpc/grpc-js": "^1.13.6" }
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.1.0"
+  }
+}

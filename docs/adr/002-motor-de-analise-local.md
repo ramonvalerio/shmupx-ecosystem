@@ -1,6 +1,6 @@
 # ADR 002 — Motor de análise local (ONNX), perfis versionados e variantes CRT/LCD
 
-- **Status:** Aceito
+- **Status:** Substituído quanto à escolha do motor pela [ADR 004](004-validadores-offline-por-jogo.md). A implementação ONNX anterior permanece durante a transição.
 - **Data:** 2026-10-08
 
 ## Contexto

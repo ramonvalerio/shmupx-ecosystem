@@ -1,3 +1,5 @@
-# shmupx-infra
+# ShmupX Infra
 
-Infraestrutura como código (Terraform). Ainda não inicializado.
+Configurações de infraestrutura da plataforma.
+
+- [Firebase](firebase/README.md): modelo de dados, regras, índices e testes locais do Firestore Standard.

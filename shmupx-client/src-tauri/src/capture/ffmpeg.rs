@@ -6,15 +6,47 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 
+/// Nome do dispositivo DirectShow usado por padrão para capturar o áudio do *sistema*
+/// (mixer de saída, não microfone). Depende de um driver de loopback instalado na máquina
+/// do jogador (ex.: "virtual-audio-capturer"/VB-Cable/Stereo Mix habilitado).
+///
+/// TODO(TASKS.md 3.1b): detectar os dispositivos `dshow` disponíveis em runtime (via
+/// `ffmpeg -list_devices true -f dshow -i dummy`) e permitir override nas configurações,
+/// em vez de fixar este nome.
+pub const DEFAULT_AUDIO_DEVICE: &str = "virtual-audio-capturer";
+
 /// Configuração de uma gravação local (e stream RTMP opcional).
 #[derive(Debug, Clone)]
 pub struct RecordingConfig {
     pub output_path: PathBuf,
     /// Se presente, também transmite via RTMP (ex.: YouTube Live).
     pub rtmp_url: Option<String>,
+    /// Taxa de quadros da captura de tela (gdigrab). 60 fps é importante para a leitura
+    /// correta de HUD/placar em shmups rápidos (ver docs/adr/002).
+    pub framerate: u32,
+    /// Preset do `libx264`; `ultrafast`/`superfast` priorizam CPU baixa sobre tamanho do arquivo,
+    /// já que a codificação roda em paralelo com o jogo.
+    pub video_preset: String,
+    /// Nome do dispositivo de áudio DirectShow (`dshow`) a capturar. `None` grava sem áudio.
+    pub audio_device: Option<String>,
 }
 
-/// Sessão de FFmpeg em segundo plano. Corpo pendente (ver TASKS.md 3.2–3.5).
+impl RecordingConfig {
+    /// Configuração padrão de uma run: 60 fps, preset `ultrafast`, áudio do sistema via
+    /// [`DEFAULT_AUDIO_DEVICE`]. Os campos são públicos para ajuste fino (ex.: trocar o preset
+    /// em máquinas mais fracas ou desativar áudio quando o dispositivo não existir).
+    pub fn new(output_path: PathBuf) -> Self {
+        Self {
+            output_path,
+            rtmp_url: None,
+            framerate: 60,
+            video_preset: "ultrafast".to_string(),
+            audio_device: Some(DEFAULT_AUDIO_DEVICE.to_string()),
+        }
+    }
+}
+
+/// Sessão de FFmpeg em segundo plano. Corpo pendente (ver TASKS.md 3.5–3.7).
 pub struct FfmpegSession {
     pub config: RecordingConfig,
 }
@@ -36,20 +68,47 @@ pub fn is_ffmpeg_available() -> bool {
         .unwrap_or(false)
 }
 
-/// Inicia o processo filho do FFmpeg em segundo plano, de forma assíncrona.
-///
-/// A linha de comando de captura real (gdigrab/ddagrab + WASAPI) é definida em TASKS.md 3.2;
-/// este esqueleto grava um padrão de teste (`testsrc`) apenas para validar o ciclo de vida
-/// do processo (spawn, PID, corte por timer, parada graciosa).
+/// Inicia o processo filho do FFmpeg em segundo plano: captura a tela inteira do Windows
+/// via GDI (`gdigrab`) a taxa fixa, mixa com o áudio do sistema via DirectShow (`dshow`,
+/// sem depender de microfone) e codifica em tempo real com `libx264`/`aac`.
 pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
     let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+
+    // Vídeo: tela inteira do Windows via GDI, a uma taxa de quadros fixa (60 fps por padrão).
     cmd.args([
-        "-y",
         "-f",
-        "lavfi",
+        "gdigrab",
+        "-framerate",
+        &config.framerate.to_string(),
         "-i",
-        "testsrc=size=640x360:rate=30",
+        "desktop",
     ]);
+
+    // Áudio: mixer do sistema via DirectShow — efeitos sonoros do jogo sem microfone externo.
+    if let Some(audio_device) = &config.audio_device {
+        cmd.args(["-f", "dshow", "-i", &format!("audio={audio_device}")]);
+    }
+
+    cmd.args([
+        "-c:v",
+        "libx264",
+        "-preset",
+        &config.video_preset,
+        "-pix_fmt",
+        "yuv420p",
+    ]);
+
+    if config.audio_device.is_some() {
+        cmd.args(["-c:a", "aac"]);
+    }
+
+    // MP4 fragmentado (moov no início, não no fim): mesmo se o processo for encerrado
+    // abruptamente pelo corte do timer seguro (kill, não `graceful_stop`), o arquivo
+    // gravado até aquele ponto permanece legível em vez de ficar com índice corrompido
+    // (ver docs/specs/002, seção 2: "só o trecho gravado até então é elegível").
+    cmd.args(["-movflags", "+frag_keyframe+empty_moov"]);
+
     cmd.arg(&config.output_path);
 
     if let Some(rtmp_url) = &config.rtmp_url {

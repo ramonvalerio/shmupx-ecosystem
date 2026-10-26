@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import type { GameRoom } from "../types/room";
 
 interface GameRoomListProps {
@@ -7,13 +8,13 @@ interface GameRoomListProps {
 }
 
 export default function GameRoomList({ rooms, selectedRoomId, onSelectRoom }: GameRoomListProps) {
+  const { t } = useI18n();
   return (
     <aside className="flex h-full w-80 flex-shrink-0 flex-col border-r border-white/5 bg-zinc-950">
       <div className="border-b border-white/5 px-5 py-5">
-        <p className="font-arcade text-[10px] text-emerald-400">SHMUPX</p>
+        <p className="font-arcade text-[10px] text-emerald-400">{t("SHMUPX")}</p>
         <h2 className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">
-          Salas Ativas
-        </h2>
+          {t(" Salas Ativas ")}</h2>
       </div>
 
       <ul className="scrollbar-arcade flex-1 space-y-2 overflow-y-auto px-3 py-4">
@@ -31,7 +32,7 @@ export default function GameRoomList({ rooms, selectedRoomId, onSelectRoom }: Ga
               <p className={`text-sm font-semibold ${isSelected ? "text-emerald-300" : "text-zinc-100"}`}>
                 {room.title}
               </p>
-              <p className="mt-1 text-xs text-zinc-500">{room.playersOnline} online agora</p>
+              <p className="mt-1 text-xs text-zinc-500">{room.playersOnline} {t(" online agora")}</p>
               <button
                 type="button"
                 onClick={() => onSelectRoom(room.id)}
@@ -41,7 +42,7 @@ export default function GameRoomList({ rooms, selectedRoomId, onSelectRoom }: Ga
                     : "border-fuchsia-400/50 text-fuchsia-300 hover:bg-fuchsia-400/10"
                 }`}
               >
-                {isSelected ? "Na Sala" : "Entrar na Sala"}
+                {isSelected ? t("Na Sala") : t("Entrar na Sala")}
               </button>
             </li>
           );

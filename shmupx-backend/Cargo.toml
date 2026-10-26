@@ -1,0 +1,15 @@
+[package]
+name = "shmupx-backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "json", "uuid", "chrono"] }
+uuid = { version = "1", features = ["serde", "v4"] }
+jsonwebtoken = "9"
+chrono = { version = "0.4", features = ["serde"] }

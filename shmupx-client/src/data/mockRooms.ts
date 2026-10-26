@@ -1,9 +1,9 @@
 import type { ChatMessage, GameRoom } from "../types/room";
 
 export const MOCK_ROOMS: GameRoom[] = [
-  { id: "mushihimesama", title: "Mushihimesama", playersOnline: 128 },
-  { id: "dodonpachi", title: "DoDonPachi", playersOnline: 74 },
-  { id: "crimson-clover", title: "Crimson Clover", playersOnline: 41 },
+  { id: "mushihimesama", title: "Mushihimesama", playersOnline: 128, steamAppId: 1358040 },
+  { id: "dodonpachi", title: "DoDonPachi", playersOnline: 74, steamAppId: 1358050 },
+  { id: "crimson-clover", title: "Crimson Clover", playersOnline: 41, steamAppId: 452480 },
 ];
 
 export const MOCK_MESSAGES: Record<string, ChatMessage[]> = {

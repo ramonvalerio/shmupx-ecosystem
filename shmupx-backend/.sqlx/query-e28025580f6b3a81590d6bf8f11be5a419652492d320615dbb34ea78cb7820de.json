@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE public.perfis_jogadores SET fichas_disponiveis = fichas_disponiveis - 1 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e28025580f6b3a81590d6bf8f11be5a419652492d320615dbb34ea78cb7820de"
+}

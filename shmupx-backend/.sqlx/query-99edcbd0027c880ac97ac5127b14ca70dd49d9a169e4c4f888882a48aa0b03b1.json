@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE public.runs SET status = 'expirada', submetida_em = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "99edcbd0027c880ac97ac5127b14ca70dd49d9a169e4c4f888882a48aa0b03b1"
+}

@@ -5,8 +5,12 @@
 //! - `capture` : controle do FFmpeg e timer seguro da run.
 //! - `input`   : hotkeys globais de joystick/controle em segundo plano.
 
+pub mod analysis;
+pub mod auth;
 pub mod capture;
 pub mod input;
+pub mod net;
+pub mod session;
 pub mod steam;
 
 #[tauri::command]
@@ -18,11 +22,16 @@ fn app_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .manage(capture::RunState::default())
+        .manage(capture::RecordingState::default())
+        .manage(session::SessionState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             capture::commands::iniciar_corrida_safe,
             capture::commands::finalizar_corrida_manual,
             steam::commands::inicializar_jogo_steam,
+            session::commands::definir_token_autenticacao,
+            session::commands::definir_sala_ativa,
+            auth::commands::login_google_desktop,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -32,6 +41,9 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            input::spawn_listener(app.handle().clone());
+
             Ok(())
         })
         .run(tauri::generate_context!())

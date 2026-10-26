@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Prototype schema. Authentication owns credentials and verified email.
+    // users/{uid}: private profile, only displayName (1..32), locale (pt-BR/en),
+    //   createdAt and updatedAt timestamps. Document ID is the Firebase Auth UID.
+    // publicProfiles/{uid}: server-published display name/avatar; no private fields.
+    // games/{gameId}, events/{eventId}, seasons/{seasonId}: server-written;
+    //   published bool controls visibility to authenticated clients.
+    // gameplays/{runId}: server-owned record, ownerId is immutable Firebase UID;
+    //   gameId, status, capture/analysis/result metadata, no raw video bytes.
+    // wallets/{uid}: server-owned balance; wallets/{uid}/entries/{id}: ledger.
+    // seasons/{id}/gameRankings/{gameId}/entries/{uid}: server-published rankings.
+    // seasons/{id}/globalRankings/{uid}: server-published global ranking.
+    // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
+    // backend validation and IAM remain mandatory for every server write.
+
+    function signedIn() { return request.auth != null; }
+    function owns(uid) { return signedIn() && request.auth.uid == uid; }
+    function validUser(data) {
+      return data.keys().hasAll(['displayName', 'locale', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['displayName', 'locale', 'createdAt', 'updatedAt'])
+        && data.displayName is string
+        && data.displayName.size() >= 1 && data.displayName.size() <= 32
+        && data.locale in ['pt-BR', 'en']
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    function publishedSeason(id) {
+      return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;
+    }
+
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid) && validUser(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if owns(uid) && validUser(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+    match /publicProfiles/{uid} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /games/{gameId} {
+      allow read: if signedIn() && resource.data.published == true;
+      allow write: if false;
+    }
+    match /events/{eventId} {
+      allow read: if signedIn() && resource.data.published == true;
+      allow write: if false;
+    }
+    match /seasons/{seasonId} {
+      allow read: if signedIn() && resource.data.published == true;
+      allow write: if false;
+      match /gameRankings/{gameId}/entries/{uid} {
+        allow read: if signedIn() && publishedSeason(seasonId);
+        allow write: if false;
+      }
+      match /globalRankings/{uid} {
+        allow read: if signedIn() && publishedSeason(seasonId);
+        allow write: if false;
+      }
+    }
+    match /gameplays/{runId} {
+      allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow write: if false;
+    }
+    match /wallets/{uid} {
+      allow read: if owns(uid);
+      allow write: if false;
+      match /entries/{entryId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

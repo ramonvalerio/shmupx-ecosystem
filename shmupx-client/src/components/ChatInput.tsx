@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -6,6 +7,7 @@ interface ChatInputProps {
 }
 
 export default function ChatInput({ onSendMessage }: ChatInputProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -24,15 +26,14 @@ export default function ChatInput({ onSendMessage }: ChatInputProps) {
       <input
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        placeholder="Mensagem para a sala..."
+        placeholder={t("Mensagem para a sala...")}
         className="flex-1 rounded-md border border-white/10 bg-zinc-900 px-4 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-400/60"
       />
       <button
         type="submit"
         className="rounded-md border border-emerald-400/60 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-400/20"
       >
-        Enviar
-      </button>
+        {t(" Enviar ")}</button>
     </form>
   );
 }

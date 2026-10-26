@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, server_started_at, max_duration_segundos\n        FROM public.runs\n        WHERE jogador_id = $1 AND jogo_id = $2 AND status = 'ativa'\n        ORDER BY server_started_at DESC\n        LIMIT 1\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "server_started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "max_duration_segundos",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ccfcdcd498aa706c2802e28fae44271cc902d068b699befd32fc5e978a05975c"
+}

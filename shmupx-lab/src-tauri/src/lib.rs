@@ -1,6 +1,9 @@
+pub mod profiles;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![profiles::commands::exportar_perfil_jogo])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

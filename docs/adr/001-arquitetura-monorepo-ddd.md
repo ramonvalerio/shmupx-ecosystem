@@ -14,13 +14,14 @@ Adotar um **monorepo** com responsabilidades isoladas por pasta e linguagem ubí
 | Pasta | Papel | Stack |
 |---|---|---|
 | `shmupx-client/` | App desktop do jogador | Tauri v2, Rust, React |
+| `shmupx_offline/` | Scripts locais de validação por jogo | Python, OpenCV |
 | `shmupx-lab/` | Backoffice local do admin | Tauri v2, Rust, React |
 | `shmupx-frontend/` | Portal web público (rankings) | React/Next.js |
 | `shmupx-backend/` | API e Supabase (migrations, Edge Functions) | PostgreSQL, pgvector |
 | `shmupx-infra/` | Infraestrutura como código | Terraform |
 | `docs/` | Specs e ADRs | Markdown |
 
-> **Estado atual:** `shmupx-client/` e `shmupx-lab/` têm esqueletos Tauri v2 compilando. `shmupx-frontend/`, `shmupx-backend/` e `shmupx-infra/` são apenas placeholders. Os projetos legados vivem fora deste repositório.
+> **Estado registrado em 2026-10-08 (histórico):** `shmupx-client/` e `shmupx-lab/` têm esqueletos Tauri v2 compilando. `shmupx-frontend/`, `shmupx-backend/` e `shmupx-infra/` são apenas placeholders. Os projetos legados vivem fora deste repositório.
 
 ### Bounded Contexts
 
@@ -41,3 +42,7 @@ Adotar um **monorepo** com responsabilidades isoladas por pasta e linguagem ubí
 - (+) Um único histórico, refatorações atômicas entre contratos.
 - (+) Specs/ADRs versionados junto ao código.
 - (−) CI precisa filtrar por caminho para evitar builds desnecessários.
+
+## Atualização em 2026-10-26
+
+A análise passa a usar scripts offline por jogo, conforme a [ADR 004](004-validadores-offline-por-jogo.md). O código Python fica em `shmupx_offline/`; o Rust do Client executa o processo Python com timeout e validação da resposta. A homologação ponta a ponta e o catálogo real ainda estão pendentes. O [README raiz](../../README.md) descreve a divisão atual.

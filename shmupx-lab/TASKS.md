@@ -3,9 +3,10 @@
 Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 
 ## 0. Fundação
-- [ ] 0.1 Escolher store de estado (ex.: Zustand) e roteamento; montar o layout em `src/components/layout`.
+- [x] 0.1a Layout inicial do backoffice em `src/components/layout` (`GameSidebar.tsx`): menu lateral com jogos cadastrados (mockados em `src/data/mockGames.ts`) e painel central (`App.tsx`). Sem store/roteamento dedicados ainda — estado local em `useState`.
+- [ ] 0.1b Escolher store de estado (ex.: Zustand) e roteamento quando o app crescer além de uma tela.
 - [ ] 0.2 Camada `src/lib/tauri` com wrappers tipados de `invoke`.
-- [ ] 0.3 Banco local (SQLite via `rusqlite`/plugin SQL) para jogos, datasets, perfis e execuções de treino.
+- [ ] 0.3 Banco local (SQLite via `rusqlite`/plugin SQL) para jogos, datasets, perfis e execuções de treino (hoje `MOCK_GAMES` é estático).
 
 ## 1. Gerenciador de datasets (`features/datasets`)
 - [ ] 1.1 Cadastro de jogo (nome, `steam_app_id`, notas).
@@ -15,11 +16,16 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 1.5 Rotular frames (placar, vidas, game over) para alimentar o treino.
 
 ## 2. Canvas de mapeamento (`features/mapping`, `components/canvas`)
-- [ ] 2.1 Canvas com zoom/pan sobre o frame de referência.
-- [ ] 2.2 Desenho/edição de retângulos (mover, redimensionar) com coordenadas normalizadas 0..1 (`types/profile.ts`).
-- [ ] 2.3 Tipos de região: `score`, `lives`, `continues`, `gameOver`.
+- [x] 2.1a Upload de screenshot de referência (`MappingCanvas.tsx`) com leitura das dimensões naturais (`naturalWidth`/`naturalHeight`) e exibição escalada (sem distorcer as coordenadas reais).
+- [ ] 2.1b Zoom/pan sobre o frame de referência (hoje só escala para caber em `MAX_DISPLAY_WIDTH`).
+- [x] 2.2a Desenho/edição de retângulos: mover (arrastar) e redimensionar (alça no canto) via mouse, implementado sem dependência externa (`window.mousemove`/`mouseup`), com coordenadas armazenadas em **pixels exatos** da imagem (`MappingBox` em `types/mapping.ts`) — a conversão para 0..1 (`Region`) fica para a exportação do perfil.
+- [ ] 2.2b Persistir os retângulos por jogo/variante (hoje só vive em memória via `App.tsx`, perdido ao recarregar).
+- [x] 2.3a Três regiões obrigatórias mapeadas por padrão ao criar um mapeamento: `score` ("High Score"), `lives` ("Vidas Restantes"), `gameOver` ("Tela de Game Over") — ver `createDefaultMappingBoxes()`.
+- [ ] 2.3b Tipo de região `continues` (hoje só as três obrigatórias do Spec 001 estão cobertas).
 - [ ] 2.4 Pré-visualização do recorte e overlay sobre vários frames para checar consistência.
 - [ ] 2.5 Undo/redo e atalhos de teclado.
+- [x] 2.6 Comando Tauri `exportar_perfil_jogo` (`src-tauri/src/profiles/commands.rs`): recebe `game_id`, `variant` ("LCD"/"CRT"), as `MappingBox` em pixels e `img_width`/`img_height`; normaliza cada região dividindo x/largura por `img_width` e y/altura por `img_height` (clamp 0..1), monta o `AnalysisProfile` (versão com auto-incremento de PATCH a partir do arquivo existente, ou `v0.1.0` na primeira exportação) e salva em `app_data_dir()/exports/profile_<game_id>_<variant>.json`. Botão "Exportar Perfil" em `GameWorkspace.tsx` chama o comando via `invoke` e mostra um banner de sucesso/erro inline.
+  - **Pendências:** `sha256`/`modelRef` ficam de fora (só entram na publicação real, TASKS 5.2); não há persistência das `MappingBox` entre sessões (perdidas ao recarregar, ver 2.2b); `continues` ainda não é desenhável no canvas (2.3b), só aceito pelo Rust se vier do frontend no futuro.
 
 ## 3. Treinamento local (`features/training`)
 - [ ] 3.1 Comando Rust para gerar dataset de recortes a partir das regiões + rótulos.

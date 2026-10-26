@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT AVG(score_bruto)::float8 AS mu, STDDEV(score_bruto)::float8 AS sigma\n        FROM public.runs\n        WHERE jogo_id = $1 AND status = 'valida'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mu",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "sigma",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b6e172cb8c4c80596a546d71bcbe9e7eaaec9a8240a69d380ae39e511a60bfe5"
+}
