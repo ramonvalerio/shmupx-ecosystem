@@ -3,5 +3,6 @@
 
 pub mod health;
 pub mod jogos;
+pub mod me;
 pub mod rankings;
 pub mod runs;

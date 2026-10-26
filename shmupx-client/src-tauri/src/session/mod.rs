@@ -1,4 +1,4 @@
-//! Bounded context `session`: credencial (JWT do Supabase Auth) e sala ativa do jogador nesta
+//! Bounded context `session`: credencial (ID token do Firebase Auth) e sala ativa do jogador nesta
 //! sessão do app. Guardado em Rust (não só no React) porque fluxos autônomos — o timer seguro
 //! expirando, o push-to-talk disparado pelo gamepad — precisam chamar o backend/a Edge Function
 //! sem depender de um `invoke` vindo do frontend no momento exato em que isso acontece.
@@ -27,4 +27,4 @@ impl SessionState {
     }
 }
 
-pub use commands::{definir_sala_ativa, definir_token_autenticacao};
+pub use commands::{definir_sala_ativa, definir_token_autenticacao, limpar_token_autenticacao};

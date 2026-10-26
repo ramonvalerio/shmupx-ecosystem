@@ -9,22 +9,23 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::middleware::auth::exigir_usuario_autenticado;
+use crate::middleware::jogador::exigir_jogador;
 use crate::services::ranking;
 
 /// Margem extra sobre `max_duration_segundos` para absorver latência de rede/processamento do
 /// Client entre o fim do timer seguro e a chegada do POST aqui (Spec 002: "tolerância de envio").
 const TOLERANCIA_ENVIO_SEGUNDOS: i64 = 120;
 
-/// `usuario_id` nunca vem do payload — `route_layer` exige um JWT válido do Supabase Auth em
-/// ambas as rotas e injeta o UUID autenticado via `Extension<Uuid>` (ver `middleware/auth.rs`).
+/// `usuario_id` nunca vem do payload — `route_layer` exige um ID token válido do Firebase em
+/// ambas as rotas e injeta o UUID do perfil do jogador via `Extension<Uuid>` (ver
+/// `middleware/jogador.rs`).
 /// `route_layer` (em vez de `layer`) escopa isso só às rotas já registradas aqui, sem afetar o
 /// resto do app depois do `.merge()` em `main.rs` (ex.: `/health`, `/api/jogos` continuam públicas).
-pub fn router() -> Router<PgPool> {
+pub fn router(pool: PgPool) -> Router<PgPool> {
     Router::new()
         .route("/api/runs/start", post(iniciar_run))
         .route("/api/runs", post(submeter_run))
-        .route_layer(middleware::from_fn(exigir_usuario_autenticado))
+        .route_layer(middleware::from_fn_with_state(pool, exigir_jogador))
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,7 +128,7 @@ struct SubmeterRunResponse {
 /// 3. `continues_usados > 0` não invalida a run (ela ainda é registrada), mas corta a nota em
 ///    90% (ver `services::ranking`) — a cultura 1-Credit-Clear do ranking competitivo.
 ///
-/// `usuario_id` vem do JWT (`Extension<Uuid>`, injetado pelo middleware de autenticação), não
+/// `usuario_id` vem do ID token do Firebase (`Extension<Uuid>`, injetado pelo middleware de autenticação), não
 /// do corpo da requisição — ninguém consegue mais submeter (ou gastar a ficha ativa de) outro
 /// jogador só sabendo o UUID dele.
 async fn submeter_run(

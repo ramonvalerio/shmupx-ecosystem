@@ -34,10 +34,8 @@ export default function App() {
   const selectedRoom = MOCK_ROOMS.find((room) => room.id === selectedRoomId) ?? null;
   const messages = selectedRoomId ? messagesByRoom[selectedRoomId] ?? [] : [];
 
-  // Sessão Firebase (Google). O ID token do Firebase NÃO é repassado a
-  // `definir_token_autenticacao`: o shmupx-backend atual valida JWT do Supabase. Sem token na
-  // sessão Rust, início de run e voz do RobotX recusam localmente até o backend migrar para
-  // Firebase Auth.
+  // Sessão Firebase (Google). useAuth também mantém o ID token vigente na sessão Rust, que o
+  // usa nas chamadas ao shmupx-backend.
   const auth = useAuth();
 
   useEffect(() => {

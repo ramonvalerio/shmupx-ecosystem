@@ -308,3 +308,12 @@ adicionada) para gerar um token HS256 válido com um `sub` escolhido, subi o ser
 - [ ] 5.3 `shmupx-client` ainda não chama esta função (TASKS.md do client, item 4.5): o `.wav`
       gerado por `capture/audio.rs` hoje só fica salvo localmente, nada o envia.
 - [ ] 5.4 Sem teste automatizado (unitário/integração) para o pipeline da Edge Function.
+
+## Identidade Firebase (ADR 005, etapa 1 — ponte no Postgres)
+- [x] `middleware/firebase.rs`: valida ID token do Firebase (RS256, chaves JWK do Google em cache, `aud`/`iss` do projeto, `exp`/`iat`/`auth_time`, `sub`). Exige `FIREBASE_PROJECT_ID=shmupx-project-id`. Revogação não é checada (exigiria Admin SDK).
+- [x] `middleware/jogador.rs`: resolve/cria `perfis_jogadores` pelo `firebase_uid` e injeta `Extension<Uuid>`; novos jogadores começam com 50 fichas (`FICHAS_INICIAIS`).
+- [x] `/api/runs/start` e `/api/runs` usam o Firebase; validação HS256 do Supabase removida. `GET /api/me` devolve a identidade do token.
+- [x] Migration `20261026120000_perfis_firebase.sql`: remove FK de `auth.users`, adiciona `firebase_uid` único, default de fichas 50.
+- [ ] Aplicar a migration e homologar contra Postgres real (não executada: Docker indisponível).
+- [ ] Edge Function `robotx-voice` ainda valida JWT do Supabase: voz do RobotX recusa o token Firebase até migrar.
+- [ ] Etapa 2: mover fichas e runs para o Firestore (`wallets`, `gameplays`) e aposentar a ponte.

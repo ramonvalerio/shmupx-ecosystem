@@ -43,8 +43,9 @@ async fn main() {
     let app = Router::new()
         .merge(routes::health::router())
         .merge(routes::jogos::router())
+        .merge(routes::me::router())
         .merge(routes::rankings::router())
-        .merge(routes::runs::router())
+        .merge(routes::runs::router(pool.clone()))
         .with_state(pool)
         .layer(cors)
         .layer(TraceLayer::new_for_http());

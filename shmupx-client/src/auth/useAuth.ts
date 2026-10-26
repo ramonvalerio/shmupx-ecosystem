@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, onIdTokenChanged } from "firebase/auth";
+import { isTauri, invoke } from "@tauri-apps/api/core";
 import { auth, ensurePlayerProfile, signInWithGoogle, signOutPlayer, type PlayerProfile } from "./firebase";
 import { useI18n } from "../i18n";
 
@@ -28,6 +29,18 @@ export function useAuth() {
   // O idioma só vale para o perfil criado na primeira entrada; não reassinar por causa dele.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
+
+  // O Rust chama o backend sozinho (timer seguro expirando, push-to-talk), então precisa sempre
+  // do ID token vigente. onIdTokenChanged dispara no login, na renovação horária e no logout.
+  useEffect(() => {
+    if (!isTauri()) return;
+    return onIdTokenChanged(auth, (user) => {
+      const sync = user
+        ? user.getIdToken().then((token) => invoke("definir_token_autenticacao", { token }))
+        : invoke("limpar_token_autenticacao");
+      sync.catch((error) => console.error("falha ao sincronizar a sessão com o Rust:", error));
+    });
+  }, []);
 
   const signIn = useCallback(async () => {
     setState({ status: "signed-out", busy: true });

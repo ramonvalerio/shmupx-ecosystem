@@ -30,6 +30,7 @@ pub fn run() {
             capture::commands::finalizar_corrida_manual,
             steam::commands::inicializar_jogo_steam,
             session::commands::definir_token_autenticacao,
+            session::commands::limpar_token_autenticacao,
             session::commands::definir_sala_ativa,
             auth::commands::login_google_desktop,
         ])

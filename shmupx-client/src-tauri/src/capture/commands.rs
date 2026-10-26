@@ -37,7 +37,7 @@ pub async fn iniciar_corrida_safe(
     }
 
     let token = session.snapshot().token.ok_or_else(|| {
-        "início de run indisponível: o backend de fichas ainda não aceita o login Google (Firebase)".to_string()
+        "sem sessão: entre com sua conta Google antes de iniciar uma run".to_string()
     })?;
 
     // Débito de ficha + abertura da "ficha ativa" no backend ANTES de qualquer gravação local —
