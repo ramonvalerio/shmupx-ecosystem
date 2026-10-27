@@ -315,6 +315,9 @@ adicionada) para gerar um token HS256 válido com um `sub` escolhido, subi o ser
 - [x] `services/gameplays.rs`: `POST /api/runs/start` debita 1 ficha em `wallets/{uid}` (carteira nasce com 50, lançamentos em `entries`) e abre `gameplays/{runId}` em `recording`; `POST /api/runs` recebe `run_id`, valida dono, jogo e janela, grava `result` e muda para `needs_review` (reenvio idêntico é idempotente).
 - [x] Postgres opcional: `/api/jogos` e `/api/rankings` só sobem com `DATABASE_URL`. Ponte `firebase_uid` no Postgres descartada antes de ser aplicada.
 - [x] Testes de integração no emulador: `npx firebase-tools emulators:exec --only firestore --project demo-shmupx "cd ../../shmupx-backend && cargo test -- --ignored --test-threads=1"` (rodar em `shmupx-infra/firebase`).
-- [ ] Publicar `games/earthion` (`published: true`, `maxDurationSeconds`) em produção — sem ele nenhuma run inicia.
+- [x] Catálogo (`services/catalogo.rs`, `routes/admin.rs`): `GET /api/admin/games` e `PUT /api/admin/games/{id}` gerenciam `games/{gameId}` (title, steamAppId, maxDurationSeconds, published). Admin = e-mail verificado em `ADMIN_EMAILS` (vírgulas); a decisão é do servidor a cada chamada. O Lab publica por aqui; o Client lê os `published` direto do Firestore.
+- [x] Metadados opcionais em `games/{id}` (`developer`, `publisher`, `genre`, `year` 1970–2100, `platform` e `modes` de listas fixas; textos até 80 caracteres). Cada gravação os substitui: o que não vem na entrada é apagado.
+- [ ] Cadastrar `earthion` pelo Lab (com o `steam_app_id` real) e publicar — sem jogo publicado nenhuma run inicia.
+- [ ] Segurança do ranking (o Client não é confiável): o servidor deve receber a evidência da run (vídeo ou quadros-chave) e reanalisar por amostragem e em placares altos; limites de frequência; detecção de resultados fora do padrão; gravar a versão do validador na gameplay. Pré-requisito para publicar ranking.
 - [ ] Aprovação de `needs_review`, nota normalizada e publicação dos rankings no Firestore (preservar a regra dos 5 jogos mais jogados).
 - [ ] Edge Function `robotx-voice` ainda valida JWT do Supabase.

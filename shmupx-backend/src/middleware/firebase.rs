@@ -28,6 +28,24 @@ const CACHE_PADRAO: Duration = Duration::from_secs(3600);
 pub struct FirebaseUser {
     pub uid: String,
     pub email: Option<String>,
+    /// O Google confirmou a posse do e-mail. Só um e-mail verificado vale para a lista de admins.
+    pub email_verified: bool,
+}
+
+impl FirebaseUser {
+    /// Admin = e-mail verificado presente em `ADMIN_EMAILS` (separado por vírgulas, sem
+    /// diferenciar maiúsculas). Sem a variável, ninguém é admin. A decisão é sempre do servidor.
+    pub fn e_admin(&self) -> bool {
+        let lista = std::env::var("ADMIN_EMAILS").unwrap_or_default();
+        self.e_admin_em(&lista)
+    }
+
+    fn e_admin_em(&self, lista: &str) -> bool {
+        let Some(email) = self.email.as_deref().filter(|_| self.email_verified) else {
+            return false;
+        };
+        lista.split(',').map(str::trim).any(|admin| !admin.is_empty() && admin.eq_ignore_ascii_case(email))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,6 +53,8 @@ struct Claims {
     sub: String,
     auth_time: u64,
     email: Option<String>,
+    #[serde(default)]
+    email_verified: bool,
 }
 
 /// Middleware: exige `Authorization: Bearer <ID token do Firebase>` e injeta `FirebaseUser`.
@@ -170,7 +190,7 @@ fn validar_com_chave(
         return Err(AppError::unauthorized("token inválido ou expirado"));
     }
 
-    Ok(FirebaseUser { uid: claims.sub, email: claims.email })
+    Ok(FirebaseUser { uid: claims.sub, email: claims.email, email_verified: claims.email_verified })
 }
 
 #[cfg(test)]
@@ -194,6 +214,7 @@ mod tests {
         exp: u64,
         auth_time: u64,
         email: &'a str,
+        email_verified: bool,
     }
 
     fn claims(sub: &str) -> ClaimsDeTeste<'_> {
@@ -206,7 +227,28 @@ mod tests {
             exp: agora + 3600,
             auth_time: agora - 10,
             email: "jogador@example.com",
+            email_verified: true,
         }
+    }
+
+    fn usuario(email: Option<&str>, verificado: bool) -> FirebaseUser {
+        FirebaseUser { uid: "uid".into(), email: email.map(str::to_string), email_verified: verificado }
+    }
+
+    #[test]
+    fn admin_exige_email_verificado_na_lista() {
+        let lista = " Dono@Example.com , outro@example.com ";
+        assert!(usuario(Some("dono@example.com"), true).e_admin_em(lista));
+        assert!(usuario(Some("outro@example.com"), true).e_admin_em(lista));
+        assert!(!usuario(Some("dono@example.com"), false).e_admin_em(lista));
+        assert!(!usuario(Some("intruso@example.com"), true).e_admin_em(lista));
+        assert!(!usuario(None, true).e_admin_em(lista));
+    }
+
+    #[test]
+    fn lista_vazia_nao_tem_admin() {
+        assert!(!usuario(Some("dono@example.com"), true).e_admin_em(""));
+        assert!(!usuario(Some(""), true).e_admin_em(","));
     }
 
     fn assinar(claims: &ClaimsDeTeste) -> String {
@@ -222,7 +264,10 @@ mod tests {
     #[test]
     fn token_valido_extrai_uid_e_email() {
         let usuario = validar(&assinar(&claims("uid-abc123"))).unwrap();
-        assert_eq!(usuario, FirebaseUser { uid: "uid-abc123".into(), email: Some("jogador@example.com".into()) });
+        assert_eq!(
+            usuario,
+            FirebaseUser { uid: "uid-abc123".into(), email: Some("jogador@example.com".into()), email_verified: true }
+        );
     }
 
     #[test]

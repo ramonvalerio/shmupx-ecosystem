@@ -18,7 +18,7 @@ const app = initializeApp({
 
 // Sessão persistida no IndexedDB da WebView: o jogador continua conectado ao reabrir o app.
 export const auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
-const db = getFirestore(app);
+export const db = getFirestore(app);
 
 /** Cliente OAuth "Desktop" do Google no mesmo projeto. Público, definido em `.env.local`. */
 const DESKTOP_CLIENT_ID = import.meta.env.VITE_GOOGLE_DESKTOP_CLIENT_ID ?? "";

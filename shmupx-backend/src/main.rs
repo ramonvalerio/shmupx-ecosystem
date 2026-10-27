@@ -16,6 +16,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::firestore::Firestore;
+use crate::routes::auth::GoogleOAuth;
 
 #[tokio::main]
 async fn main() {
@@ -37,9 +38,19 @@ async fn main() {
     // e os apps Tauri. Antes de ir para produção, trocar por uma allowlist de origens real.
     let cors = CorsLayer::permissive();
 
+    // Troca do código de login do app desktop: o segredo do cliente OAuth fica só aqui.
+    let google = GoogleOAuth::do_ambiente().map(Arc::new);
+    if google.is_none() {
+        eprintln!(
+            "aviso: GOOGLE_DESKTOP_CLIENT_ID/GOOGLE_DESKTOP_CLIENT_SECRET ausentes; o login do app desktop não vai funcionar"
+        );
+    }
+
     let mut app = Router::new()
         .merge(routes::health::router())
+        .merge(routes::auth::router(google))
         .merge(routes::me::router())
+        .merge(routes::admin::router(firestore.clone()))
         .merge(routes::runs::router(firestore));
 
     // Legado: catálogo e ranking do portal ainda leem o PostgreSQL/Supabase. Só são montados
@@ -65,11 +76,13 @@ Falha ao conectar no Postgres (DATABASE_URL configurada, mas a conexão falhou):
 
     let app = app.layer(cors).layer(TraceLayer::new_for_http());
 
-    let listener = TcpListener::bind("0.0.0.0:3000")
+    // O Cloud Run informa a porta em PORT; localmente o padrão continua 3000.
+    let porta = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let listener = TcpListener::bind(format!("0.0.0.0:{porta}"))
         .await
-        .expect("falha ao abrir a porta 3000");
+        .unwrap_or_else(|err| panic!("falha ao abrir a porta {porta}: {err}"));
 
-    println!("shmupx-backend ouvindo em http://localhost:3000");
+    println!("shmupx-backend ouvindo em http://localhost:{porta}");
 
     axum::serve(listener, app)
         .await

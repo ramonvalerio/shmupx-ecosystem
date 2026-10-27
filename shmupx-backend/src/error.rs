@@ -16,6 +16,8 @@ pub enum AppError {
     NotFound(String),
     /// Estado válido mas em conflito com a regra de negócio (ex.: janela de envio expirada) — 409.
     Conflict(String),
+    /// Identidade válida, mas sem permissão para a operação (ex.: rota de admin) — 403.
+    Forbidden(String),
     /// Token ausente, malformado, com assinatura/expiração inválida — 401. O detalhe é seguro
     /// para o cliente ver (nunca contém o segredo nem o conteúdo do token).
     Unauthorized(String),
@@ -35,6 +37,10 @@ impl AppError {
 
     pub fn conflict(message: impl Into<String>) -> Self {
         Self::Conflict(message.into())
+    }
+
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::Forbidden(message.into())
     }
 
     pub fn unauthorized(message: impl Into<String>) -> Self {
@@ -65,6 +71,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             AppError::NotFound(message) => (StatusCode::NOT_FOUND, message),
             AppError::Conflict(message) => (StatusCode::CONFLICT, message),
+            AppError::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             AppError::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
             AppError::Internal(message) => {
                 eprintln!("erro interno: {message}");

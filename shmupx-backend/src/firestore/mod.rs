@@ -2,8 +2,9 @@
 //!
 //! O backend escreve o que as Security Rules proíbem ao cliente (fichas, gameplays). Credenciais:
 //! - `FIRESTORE_EMULATOR_HOST` definido: fala com o emulador local, sem credencial real;
-//! - senão, conta de serviço em `GOOGLE_APPLICATION_CREDENTIALS` (JSON fora do repositório),
-//!   trocada por um access token OAuth 2.0 (fluxo JWT bearer) com escopo do Datastore.
+//! - conta de serviço em `GOOGLE_APPLICATION_CREDENTIALS` (JSON fora do repositório),
+//!   trocada por um access token OAuth 2.0 (fluxo JWT bearer) com escopo do Datastore;
+//! - no Cloud Run, sem JSON: token da conta de serviço do serviço, pelo servidor de metadados.
 //!
 //! Acesso administrativo ignora as Rules: toda validação de escrita fica no backend.
 
@@ -33,7 +34,12 @@ pub struct Firestore {
 enum Credencial {
     Emulador,
     ContaServico { conta: ContaServico, token: Mutex<Option<(String, u64)>> },
+    /// Cloud Run: a conta de serviço do próprio serviço, via servidor de metadados. Sem JSON.
+    Metadados { token: Mutex<Option<(String, u64)>> },
 }
+
+const METADADOS_TOKEN_URL: &str =
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 
 #[derive(Deserialize)]
 struct ContaServico {
@@ -57,18 +63,18 @@ impl Firestore {
             return Ok(Self { http, raiz, base_url: format!("http://{host}/v1"), credencial: Credencial::Emulador });
         }
 
-        let caminho = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").map_err(|_| {
-            "GOOGLE_APPLICATION_CREDENTIALS não configurada (caminho do JSON da conta de serviço)".to_string()
-        })?;
+        let base_url = "https://firestore.googleapis.com/v1".to_string();
+        let Ok(caminho) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") else {
+            // `K_SERVICE` é definida pelo Cloud Run, que oferece o servidor de metadados.
+            if std::env::var("K_SERVICE").is_ok() {
+                return Ok(Self { http, raiz, base_url, credencial: Credencial::Metadados { token: Mutex::new(None) } });
+            }
+            return Err("GOOGLE_APPLICATION_CREDENTIALS não configurada (caminho do JSON da conta de serviço)".to_string());
+        };
         let conta: ContaServico = std::fs::read_to_string(&caminho)
             .map_err(|e| format!("falha ao ler a conta de serviço: {e}"))
             .and_then(|texto| serde_json::from_str(&texto).map_err(|e| format!("conta de serviço inválida: {e}")))?;
-        Ok(Self {
-            http,
-            raiz,
-            base_url: "https://firestore.googleapis.com/v1".to_string(),
-            credencial: Credencial::ContaServico { conta, token: Mutex::new(None) },
-        })
+        Ok(Self { http, raiz, base_url, credencial: Credencial::ContaServico { conta, token: Mutex::new(None) } })
     }
 
     /// Nome completo de um documento, usado nas escritas: `projects/.../documents/<caminho>`.
@@ -116,6 +122,63 @@ impl Firestore {
         Ok(())
     }
 
+    /// Grava só os campos da `mascara` do documento, criando-o se não existir. Sem transação:
+    /// serve a escritas administrativas independentes, em que o último valor vence.
+    pub async fn gravar(&self, caminho: &str, campos: Campos, mascara: &[&str]) -> Result<(), AppError> {
+        let escrita = json!({
+            "update": { "name": self.nome(caminho), "fields": campos },
+            "updateMask": { "fieldPaths": mascara },
+        });
+        let _: Value = self.post(&format!("{}:commit", self.raiz), &json!({ "writes": [escrita] })).await?;
+        Ok(())
+    }
+
+    /// Lista os documentos de uma coleção de primeiro nível, como `(id, campos)`.
+    pub async fn listar(&self, colecao: &str) -> Result<Vec<(String, Campos)>, AppError> {
+        #[derive(Deserialize)]
+        struct Documento {
+            name: String,
+            #[serde(default)]
+            fields: Campos,
+        }
+        #[derive(Deserialize)]
+        struct Pagina {
+            #[serde(default)]
+            documents: Vec<Documento>,
+            #[serde(default, rename = "nextPageToken")]
+            proxima: Option<String>,
+        }
+
+        // Teto de segurança: o catálogo é pequeno, e uma coleção enorme não deve travar a rota.
+        const LIMITE: usize = 1000;
+        let mut itens = Vec::new();
+        let mut pagina: Option<String> = None;
+        loop {
+            let mut pedido = self
+                .http
+                .get(format!("{}/{}/{colecao}", self.base_url, self.raiz))
+                .bearer_auth(self.access_token().await?)
+                .query(&[("pageSize", "300")]);
+            if let Some(token) = &pagina {
+                pedido = pedido.query(&[("pageToken", token.as_str())]);
+            }
+            let resposta = pedido
+                .send()
+                .await
+                .map_err(|e| AppError::internal(format!("falha de rede com o Firestore: {e}")))?;
+            let lote: Pagina = Self::corpo(resposta).await?;
+            for documento in lote.documents {
+                let id = documento.name.rsplit('/').next().unwrap_or_default().to_string();
+                itens.push((id, documento.fields));
+            }
+            match lote.proxima {
+                Some(token) if itens.len() < LIMITE => pagina = Some(token),
+                _ => break,
+            }
+        }
+        Ok(itens)
+    }
+
     /// Libera a transação quando a operação desiste antes do commit. Falha aqui é inofensiva:
     /// a transação expira sozinha no servidor.
     pub async fn desfazer(&self, transacao: &str) {
@@ -151,9 +214,11 @@ impl Firestore {
     }
 
     async fn access_token(&self) -> Result<String, AppError> {
-        let Credencial::ContaServico { conta, token } = &self.credencial else {
+        let (conta, token) = match &self.credencial {
             // O emulador aceita este token fixo como administrador.
-            return Ok("owner".to_string());
+            Credencial::Emulador => return Ok("owner".to_string()),
+            Credencial::Metadados { token } => return self.token_metadados(token).await,
+            Credencial::ContaServico { conta, token } => (conta, token),
         };
 
         let mut cache = token.lock().await;
@@ -197,6 +262,36 @@ impl Firestore {
             .json()
             .await
             .map_err(|e| AppError::internal(format!("resposta OAuth em formato inesperado: {e}")))?;
+
+        *cache = Some((resposta.access_token.clone(), agora + resposta.expires_in));
+        Ok(resposta.access_token)
+    }
+
+    async fn token_metadados(&self, token: &Mutex<Option<(String, u64)>>) -> Result<String, AppError> {
+        let mut cache = token.lock().await;
+        let agora = agora();
+        if let Some((valor, expira)) = cache.as_ref() {
+            if agora + 60 < *expira {
+                return Ok(valor.clone());
+            }
+        }
+
+        #[derive(Deserialize)]
+        struct Resposta {
+            access_token: String,
+            expires_in: u64,
+        }
+        let resposta: Resposta = self
+            .http
+            .get(METADADOS_TOKEN_URL)
+            .header("Metadata-Flavor", "Google")
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(|e| AppError::internal(format!("falha ao obter token do servidor de metadados: {e}")))?
+            .json()
+            .await
+            .map_err(|e| AppError::internal(format!("token de metadados em formato inesperado: {e}")))?;
 
         *cache = Some((resposta.access_token.clone(), agora + resposta.expires_in));
         Ok(resposta.access_token)

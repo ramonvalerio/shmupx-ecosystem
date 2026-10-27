@@ -1,0 +1,5 @@
+target
+supabase
+*.json
+!Cargo.lock
+.env*

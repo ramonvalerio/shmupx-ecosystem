@@ -2,9 +2,12 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-/// `shmupx-backend` (Axum). Sem variável de ambiente ainda — porta fixa de dev, igual ao que
-/// `main.rs` do backend escuta.
-const BACKEND_BASE_URL: &str = "http://localhost:3000";
+/// `shmupx-backend` (Axum). O build de distribuição define `SHMUPX_BACKEND_URL` com o endereço
+/// publicado; sem ela, aponta para o backend local de desenvolvimento.
+const BACKEND_BASE_URL: &str = match option_env!("SHMUPX_BACKEND_URL") {
+    Some(url) => url,
+    None => "http://localhost:3000",
+};
 
 /// Generoso o bastante para uma query de banco lenta, mas finito: uma chamada de rede travada
 /// não deve travar o app do jogador indefinidamente (ex.: backend fora do ar).
@@ -89,6 +92,37 @@ pub async fn submeter_run(
         .map_err(|e| format!("falha de rede ao submeter a run: {e}"))?;
 
     responder_ou_erro(response).await
+}
+
+#[derive(Debug, Serialize)]
+struct TrocaCodigoPayload<'a> {
+    code: &'a str,
+    code_verifier: &'a str,
+    redirect_uri: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+struct TrocaCodigoResponse {
+    id_token: String,
+}
+
+/// `POST /api/auth/google/token`: o backend troca o código do login Google pelo `id_token`
+/// usando o `client_secret`, que não é distribuído com o app.
+pub async fn trocar_codigo_google(
+    code: &str,
+    code_verifier: &str,
+    redirect_uri: &str,
+) -> Result<String, String> {
+    let response = client()?
+        .post(format!("{BACKEND_BASE_URL}/api/auth/google/token"))
+        .json(&TrocaCodigoPayload { code, code_verifier, redirect_uri })
+        .send()
+        .await
+        .map_err(|e| format!("falha de rede ao concluir o login (backend fora do ar?): {e}"))?;
+
+    responder_ou_erro::<TrocaCodigoResponse>(response)
+        .await
+        .map(|r| r.id_token)
 }
 
 async fn responder_ou_erro<T: for<'de> Deserialize<'de>>(

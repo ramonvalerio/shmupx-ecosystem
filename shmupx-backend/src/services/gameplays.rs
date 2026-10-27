@@ -47,7 +47,7 @@ pub struct RunSubmetida {
 }
 
 /// IDs de documento vêm do cliente; só aceitamos o formato que nós mesmos geramos/publicamos.
-fn id_valido(id: &str) -> bool {
+pub(crate) fn id_valido(id: &str) -> bool {
     (1..=128).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 

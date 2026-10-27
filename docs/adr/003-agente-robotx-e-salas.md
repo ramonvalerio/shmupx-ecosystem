@@ -1,6 +1,6 @@
 # ADR 003 — Agente RobotX, voz por hotkey e isolamento de RAG por sala
 
-- **Status:** Aceito
+- **Status:** Adiada pela [ADR 006](006-pacote-por-jogo-e-robotx-offline.md). O RobotX gratuito é offline e só funciona fora da gameplay; voz durante o jogo fica como candidata ao plano pago, com este documento como referência. As partes em Supabase (Realtime, pgvector, Edge Function) precisam de revisão por causa da [ADR 005](005-rankings-no-firebase.md).
 - **Data:** 2026-10-08
 
 ## Contexto

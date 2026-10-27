@@ -1,6 +1,6 @@
 # Firebase do ShmupX
 
-Projeto: `shmupx-project-id`. Banco: `(default)`, edição **Standard**, plano **Spark**. Metadados confirmados pela CLI em 2026-10-26: região `southamerica-east1`, `databaseEdition: STANDARD`, `freeTier: true`. Autenticação da ferramenta concluída. Nove testes de regras passaram no emulador Standard. Regras e índices publicados em 2026-10-26 após autorização explícita do usuário. A CLI confirmou a compilação e liberação das regras; uma consulta posterior confirmou os cinco índices compostos e as três exclusões de indexação. Nenhum documento de usuário ou gameplay foi criado nesta publicação.
+Projeto: `shmupx-project-id`. Banco: `(default)`, edição **Standard**, plano **Spark**. Banco recriado em 2026-10-27 na região `us-central1`, edição Standard (metadados confirmados pela CLI); a região `southamerica-east1` anterior foi descartada por custo e o Cloud Run do backend fica na mesma região. Após a recriação, regras e índices precisam ser republicados. Autenticação da ferramenta concluída. Nove testes de regras passaram no emulador Standard. Regras e índices publicados em 2026-10-26 após autorização explícita do usuário. A CLI confirmou a compilação e liberação das regras; uma consulta posterior confirmou os cinco índices compostos e as três exclusões de indexação. Nenhum documento de usuário ou gameplay foi criado nesta publicação.
 
 ## Responsabilidades
 

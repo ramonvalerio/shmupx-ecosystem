@@ -2,24 +2,19 @@ use std::time::Duration;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+use crate::net::backend;
+
 const AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
-const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 
 /// Só identidade: permissão de upload no YouTube é pedida separadamente, ao conectar o canal.
 const SCOPES: &str = "openid email profile";
 
 /// Tempo para o jogador concluir o consentimento no navegador.
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
-
-/// O Google exige `client_secret` também para clientes "Desktop", embora o trate como não
-/// confidencial nesse tipo de cliente. Vem do ambiente de build, nunca do repositório; sem ele a
-/// troca só funciona com clientes que dispensam o segredo.
-const CLIENT_SECRET: Option<&str> = option_env!("SHMUPX_GOOGLE_CLIENT_SECRET");
 
 const PAGINA_OK: &str = "<!doctype html><meta charset=utf-8><title>ShmupX</title>\
 <body style=\"font-family:sans-serif;background:#1c1c1c;color:#eee;text-align:center;padding-top:20vh\">\
@@ -63,7 +58,8 @@ pub async fn login(client_id: &str) -> Result<String, String> {
         .await
         .map_err(|_| "tempo do login esgotado".to_string())??;
 
-    trocar_codigo(client_id, &code, &verifier, &redirect_uri).await
+    // A troca exige o `client_secret`, que só o backend conhece; o app nunca o carrega.
+    backend::trocar_codigo_google(&code, &verifier, &redirect_uri).await
 }
 
 /// Aceita conexões até chegar o redirecionamento do Google. Requisições alheias (favicon,
@@ -124,52 +120,6 @@ async fn responder(stream: &mut TcpStream, status: &str, corpo: &str) {
     );
     let _ = stream.write_all(resposta.as_bytes()).await;
     let _ = stream.shutdown().await;
-}
-
-#[derive(Deserialize)]
-struct TokenResponse {
-    id_token: Option<String>,
-}
-
-async fn trocar_codigo(
-    client_id: &str,
-    code: &str,
-    verifier: &str,
-    redirect_uri: &str,
-) -> Result<String, String> {
-    let mut form = vec![
-        ("client_id", client_id),
-        ("code", code),
-        ("code_verifier", verifier),
-        ("grant_type", "authorization_code"),
-        ("redirect_uri", redirect_uri),
-    ];
-    if let Some(secret) = CLIENT_SECRET {
-        form.push(("client_secret", secret));
-    }
-
-    let response = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("falha ao construir cliente HTTP: {e}"))?
-        .post(TOKEN_URL)
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| format!("falha de rede ao concluir o login: {e}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let corpo = response.text().await.unwrap_or_default();
-        return Err(format!("Google recusou a troca do código (HTTP {status}): {corpo}"));
-    }
-
-    response
-        .json::<TokenResponse>()
-        .await
-        .map_err(|e| format!("resposta do Google em formato inesperado: {e}"))?
-        .id_token
-        .ok_or_else(|| "Google não devolveu id_token".to_string())
 }
 
 fn aleatorio_base64(bytes: usize) -> Result<String, String> {

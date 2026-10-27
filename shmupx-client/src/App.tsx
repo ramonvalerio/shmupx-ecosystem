@@ -1,12 +1,13 @@
 import { useI18n } from "./i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isTauri, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ClientShell from "./components/ClientShell";
 import RoomView from "./components/RoomView";
 import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
-import { MOCK_MESSAGES, MOCK_ROOMS } from "./data/mockRooms";
+import { MOCK_MESSAGES } from "./data/mockRooms";
+import { useCatalog } from "./data/useCatalog";
 import type { ChatMessage } from "./types/room";
 import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
@@ -31,12 +32,18 @@ export default function App() {
   const recordingRoomId = runs.find((run) => run.status === "recording")?.gameId ?? null;
   const expiredDialogRef = useDialogFocus(expiredRoomId !== null, () => setExpiredRoomId(null));
 
-  const selectedRoom = MOCK_ROOMS.find((room) => room.id === selectedRoomId) ?? null;
-  const messages = selectedRoomId ? messagesByRoom[selectedRoomId] ?? [] : [];
-
   // Sessão Firebase (Google). useAuth também mantém o ID token vigente na sessão Rust, que o
   // usa nas chamadas ao shmupx-backend.
   const auth = useAuth();
+
+  // Catálogo publicado pelo Lab (Firestore). Só lê depois do login: as Rules exigem sessão.
+  const rooms = useCatalog(auth.state.status === "signed-in");
+  // O listener da Steam é registrado uma vez; a ref evita que ele enxergue um catálogo antigo.
+  const roomsRef = useRef(rooms);
+  roomsRef.current = rooms;
+
+  const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? null;
+  const messages = selectedRoomId ? messagesByRoom[selectedRoomId] ?? [] : [];
 
   useEffect(() => {
     if (!isTauri() || !selectedRoomId) return;
@@ -48,7 +55,7 @@ export default function App() {
   useEffect(() => {
     if (!isTauri()) return;
     const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
-      const room = MOCK_ROOMS.find((candidate) => candidate.steamAppId === event.payload.app_id);
+      const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
       if (!room) return;
 
       invoke<number>("iniciar_corrida_safe", { jogoId: room.id })
@@ -93,14 +100,14 @@ export default function App() {
     }));
   }
 
-  const expiredRoom = MOCK_ROOMS.find((room) => room.id === expiredRoomId) ?? null;
+  const expiredRoom = rooms.find((room) => room.id === expiredRoomId) ?? null;
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
   if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} />;
 
   return (
     <>
-    <ClientShell profile={auth.state.profile} onProfile={auth.setProfile} onSignOut={auth.signOut} rooms={MOCK_ROOMS} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={setSelectedRoomId} runs={runs}>
+    <ClientShell profile={auth.state.profile} onProfile={auth.setProfile} onSignOut={auth.signOut} rooms={rooms} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={setSelectedRoomId} runs={runs}>
       <RoomView
         room={selectedRoom}
         messages={messages}

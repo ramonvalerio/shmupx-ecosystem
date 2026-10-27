@@ -7,7 +7,7 @@
 
 O usuário ampliou o escopo para usuários, jogos, eventos, gameplays, estado das análises, fichas e rankings por jogo/global. Firebase Authentication será responsável pela identidade; Cloud Firestore guardará os registros da plataforma. Vídeos continuam locais no primeiro estágio, mantendo o plano Spark e a análise offline.
 
-Projeto `shmupx-project-id`, banco `(default)`, edição Standard, com modo de produção selecionado. Os metadados consultados pela CLI confirmam a região `southamerica-east1`, edição `STANDARD` e `freeTier: true`. O console enviado confirma o banco criado e vazio.
+Projeto `shmupx-project-id`, banco `(default)`, edição Standard, com modo de produção selecionado. O banco foi recriado em 2026-10-27 na região `us-central1` (a mais barata, Tier 1, e a mesma do Cloud Run do backend); a região anterior, `southamerica-east1`, foi descartada por custo, e a região de um banco Firestore não pode ser alterada. Os metadados consultados pela CLI confirmam a região `us-central1` e a edição `STANDARD`.
 
 A configuração em `shmupx-infra/firebase/` contém protótipo de regras, índices e testes no emulador. A autenticação da CLI foi concluída. Após autorização explícita do usuário, regras e índices foram publicados com sucesso em 2026-10-26; a consulta posterior confirmou os cinco índices compostos e três exclusões de indexação. O backend PostgreSQL/Supabase ainda existe: a mudança de destino não migra registros, identidades ou sessões automaticamente.
 

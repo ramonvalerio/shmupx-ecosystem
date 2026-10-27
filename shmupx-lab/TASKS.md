@@ -9,7 +9,8 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 0.3 Banco local (SQLite via `rusqlite`/plugin SQL) para jogos, datasets, perfis e execuções de treino (hoje `MOCK_GAMES` é estático).
 
 ## 1. Gerenciador de datasets (`features/datasets`)
-- [ ] 1.1 Cadastro de jogo (nome, `steam_app_id`, notas).
+- [x] 1.1 Cadastro de jogo: tela **Catálogo** (`features/catalog`) com título, ID curto, `steam_app_id`, duração máxima da run e publicar/despublicar, gravando em `games/{gameId}` pelo backend (`/api/admin/games`). Login Google igual ao do Client; admin definido no servidor por `ADMIN_EMAILS`. Pendente: notas.
+  - **Preenchimento por IA** (migrado do Lab antigo, `src-tauri/src/ai`): botão "Preencher com IA" e "Buscar na internet" (pesquisa na web como reserva). O Rust chama a Messages API da Anthropic com a chave de `ANTHROPIC_API_KEY` do PC do admin (nunca vai à tela, ao backend ou ao Firestore). Modelo padrão `claude-sonnet-5-5`, trocável por `SHMUPX_LAB_AI_MODEL`. Resposta em JSON estruturado, normalizada e só uma proposta: o admin revisa e salva. O `steam_app_id` sugerido é um palpite e a tela pede conferência na loja. Cache local `ai_cache.json` (200 entradas) evita pagar duas vezes pelo mesmo título. Campos opcionais gravados em `games/{id}`: developer, publisher, genre, year, platform, modes. Fora do escopo desta migração: geração de logo/imagem, busca de capa, análise de perfil por IA.
 - [ ] 1.2 Importar pastas de vídeos/screenshots por referência (sem copiar gigabytes), com indexação no SQLite.
 - [ ] 1.3 Geração de miniaturas e extração de frames de referência via FFmpeg (comando Rust, em background).
 - [ ] 1.4 Grid virtualizado de mídia, filtros por jogo/tipo/tela (LCD/CRT) e marcação de frames-chave.
@@ -40,7 +41,9 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 4.3 Comparação lado a lado de resultados LCD vs CRT no mesmo dataset.
 - [ ] 4.4 Diff entre versões de perfil (regiões e métricas).
 
-## 5. Publicação (Supabase)
+## 5. Publicação (Firebase, ADR 005 e 006)
+- Publicação do **catálogo** já feita (1.1). Abaixo, a publicação de **scripts e perfis**: o app executará código baixado, então o pacote precisa ser **assinado** (chave privada só com o admin, fora do app) e o Client só aceita pacote com hash e assinatura válidos. As tarefas 5.1 a 5.4 abaixo, escritas para o Supabase, devem ser reescritas para Firebase Storage + `games/{gameId}` antes de implementar.
+- [ ] 5.0 Testar o validador no Lab: rodar o script do jogo num vídeo local, comparar com o resultado esperado e guardar casos de teste de regressão.
 - [ ] 5.1 Autenticação de admin e configuração do projeto Supabase.
 - [ ] 5.2 Empacotar `profile.json` + `model.onnx`, calcular SHA-256 e enviar ao Storage (`profiles/{gameId}/{version}/{variant}/`).
 - [ ] 5.3 Registrar release em `profile_releases` (canal `draft` → `stable`); releases imutáveis.
