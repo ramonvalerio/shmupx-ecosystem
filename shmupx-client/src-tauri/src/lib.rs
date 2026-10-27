@@ -22,6 +22,7 @@ fn app_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .manage(capture::RunState::default())
+        .manage(capture::AnalysisQueue::default())
         .manage(capture::RecordingState::default())
         .manage(session::SessionState::default())
         .invoke_handler(tauri::generate_handler![

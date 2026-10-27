@@ -64,6 +64,40 @@ pub struct SubmeterRunResponse {
     pub status: String,
 }
 
+/// Por que o encerramento da run falhou.
+#[derive(Debug)]
+pub enum FalhaEncerramento {
+    /// O servidor recusou (409): a gameplay passou do tempo da ficha, ou a run já foi encerrada.
+    Recusado(String),
+    /// Rede ou outro erro: o resultado ainda pode ser enviado (o backend aplica a janela da gameplay).
+    Outro(String),
+}
+
+#[derive(Debug, Serialize)]
+struct EncerrarRunPayload<'a> {
+    run_id: &'a str,
+}
+
+/// `POST /api/runs/end`: fim da gameplay (STOP ou corte da ficha). O servidor registra o fim pelo
+/// próprio relógio; depois disso a análise local pode levar o tempo que precisar.
+pub async fn encerrar_run(token: &str, run_id: &str) -> Result<(), FalhaEncerramento> {
+    let response = client()
+        .map_err(FalhaEncerramento::Outro)?
+        .post(format!("{BACKEND_BASE_URL}/api/runs/end"))
+        .bearer_auth(token)
+        .json(&EncerrarRunPayload { run_id })
+        .send()
+        .await
+        .map_err(|e| FalhaEncerramento::Outro(format!("falha de rede ao encerrar a run: {e}")))?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    let corpo = response.text().await.unwrap_or_default();
+    let detalhe = format!("backend respondeu HTTP {status}: {corpo}");
+    Err(if status == reqwest::StatusCode::CONFLICT { FalhaEncerramento::Recusado(detalhe) } else { FalhaEncerramento::Outro(detalhe) })
+}
+
 /// `POST /api/runs`: submete o resultado da run (fim do timer seguro ou parada manual).
 ///
 /// Recebe somente métricas medidas pelo validador offline e aprovadas pelo contrato local.

@@ -162,7 +162,9 @@ pub async fn analisar_run(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     #[cfg(windows)]
-    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    // Sem janela e com prioridade abaixo do normal: a análise pode rodar enquanto o jogador já
+    // está em outra run, e não deve roubar CPU do jogo nem da gravação.
+    command.creation_flags(0x08000000 | 0x00004000); // CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS
     let mut child = command
         .spawn()
         .map_err(|e| format!("não foi possível iniciar Python: {e}"))?;

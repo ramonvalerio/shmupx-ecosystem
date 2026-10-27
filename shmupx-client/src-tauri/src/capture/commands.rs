@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -6,7 +8,7 @@ use crate::net::backend;
 use crate::session::SessionState;
 
 use super::ffmpeg::{self, RecordingConfig};
-use super::state::{RunHandle, RunState};
+use super::state::{AnalysisQueue, RunHandle, RunState};
 
 #[derive(Debug, Clone, Serialize)]
 struct RunExpiredPayload {
@@ -14,9 +16,9 @@ struct RunExpiredPayload {
     pid: u32,
 }
 
-/// Inicia uma corrida: valida o FFmpeg, debita a ficha no backend (`POST /api/runs/start`),
-/// usa a `max_duration_segundos` que o backend devolveu — não um valor fixo local — para o
-/// timer seguro, e só então faz o spawn do processo de captura.
+/// Inicia uma corrida: começa a captura e confirma que o FFmpeg está gravando; só então debita
+/// a ficha no backend (`POST /api/runs/start`) e usa a `max_duration_segundos` devolvida para o
+/// timer seguro. Uma captura que não inicia não custa ficha.
 #[tauri::command]
 pub async fn iniciar_corrida_safe(
     app: AppHandle,
@@ -40,36 +42,41 @@ pub async fn iniciar_corrida_safe(
         "sem sessão: entre com sua conta Google antes de iniciar uma run".to_string()
     })?;
 
-    // Débito de ficha + abertura da "ficha ativa" no backend ANTES de qualquer gravação local —
-    // se o backend recusar (sem saldo, jogo/jogador inexistente, token inválido/expirado), a
-    // run nem chega a começar a gravar.
-    let inicio = backend::iniciar_run(&token, &jogo_id)
-        .await
-        .map_err(|e| format!("backend recusou iniciar a run: {e}"))?;
-
     let data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))?;
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-    // Cada run preserva seu vídeo mesmo se outra começar durante a análise.
-    let safe_id: String = inicio
-        .run_id
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
-        .collect();
-    if safe_id.is_empty() {
-        return Err("backend retornou ID de run inválido".into());
-    }
-    let output_path = data_dir.join(format!("shmupx_run_{safe_id}.mp4"));
-    let run_id = inicio.run_id.clone();
+    // Cada run preserva seu vídeo mesmo se outra começar durante a análise. O nome é local (a
+    // captura começa antes de o backend devolver o id da run).
+    let carimbo = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or_default();
+    let output_path = data_dir.join(format!("shmupx_run_{carimbo}.mp4"));
     let config = RecordingConfig::new(output_path.clone());
 
-    let child = ffmpeg::spawn_ffmpeg(&config).map_err(|e| e.to_string())?;
+    let mut child = ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
+    if let Err(erro) = ffmpeg::confirmar_inicio(&mut child, &config).await {
+        let _ = std::fs::remove_file(&output_path);
+        return Err(erro.to_string());
+    }
     let pid = child
         .id()
         .ok_or_else(|| "processo FFmpeg sem PID (já finalizado?)".to_string())?;
+
+    // Débito de ficha + abertura da "ficha ativa" no backend com a captura já confirmada. Se o
+    // backend recusar (sem saldo, jogo não publicado, token inválido), a captura é descartada.
+    let inicio = match backend::iniciar_run(&token, &jogo_id).await {
+        Ok(inicio) => inicio,
+        Err(e) => {
+            let _ = child.kill().await;
+            let _ = std::fs::remove_file(&output_path);
+            return Err(format!("backend recusou iniciar a run: {e}"));
+        }
+    };
+    let run_id = inicio.run_id.clone();
 
     *guard = Some(RunHandle {
         child,
@@ -89,7 +96,8 @@ pub async fn iniciar_corrida_safe(
     Ok(pid)
 }
 
-/// Para a captura e processa a gravação. Eventos comunicam análise/envio/falha à UI.
+/// Para a captura, avisa o backend do fim da gameplay e põe a análise na fila. Retorna logo:
+/// o jogador pode iniciar outra run enquanto esta é analisada em segundo plano.
 #[tauri::command]
 pub async fn finalizar_corrida_manual(
     app: AppHandle,
@@ -98,22 +106,17 @@ pub async fn finalizar_corrida_manual(
     let mut guard = state
         .0
         .try_lock()
-        .map_err(|_| "aguarde o processamento da corrida anterior".to_string())?;
+        .map_err(|_| "aguarde a parada da corrida anterior".to_string())?;
     let mut handle = guard
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
-    // Mantém exclusão até o envio: gravação e processamento continuam mutuamente exclusivos.
     if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
-        emit_analysis(
-            &app,
-            &handle,
-            "failed",
-            Some(format!("falha ao encerrar captura: {error}")),
-        );
+        emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao encerrar captura: {error}")));
         return Err(error.to_string());
     }
-    process_run(&app, &handle).await;
+    // Com a captura fechada, a próxima run já pode começar.
     drop(guard);
+    encerrar_e_enfileirar(&app, handle).await;
     Ok(())
 }
 
@@ -125,26 +128,65 @@ struct RunAnalysisPayload {
     message: Option<String>,
 }
 
-fn emit_analysis(app: &AppHandle, handle: &RunHandle, status: &str, message: Option<String>) {
+fn emit_analysis(app: &AppHandle, jogo_id: &str, pid: u32, status: &str, message: Option<String>) {
     let _ = app.emit(
         "run://analysis",
-        RunAnalysisPayload {
-            jogo_id: handle.jogo_id.clone(),
-            pid: handle.pid,
-            status: status.into(),
-            message,
-        },
+        RunAnalysisPayload { jogo_id: jogo_id.to_string(), pid, status: status.into(), message },
     );
 }
 
-async fn process_run(app: &AppHandle, handle: &RunHandle) {
-    emit_analysis(app, handle, "analyzing", None);
+/// O que a análise precisa depois que a captura terminou (sem o processo do FFmpeg).
+struct AnaliseJob {
+    pid: u32,
+    jogo_id: String,
+    run_id: String,
+    token: String,
+    video_path: PathBuf,
+}
+
+/// O ID token do Firebase vale ~1 h: uma análise longa na fila envia com o token atual da sessão.
+fn token_atual(app: &AppHandle, guardado: &str) -> String {
+    app.state::<SessionState>().snapshot().token.unwrap_or_else(|| guardado.to_string())
+}
+
+/// Registra no servidor o fim da gameplay e agenda a análise. Se o servidor disser que a
+/// gameplay passou do tempo da ficha, não há o que analisar; uma falha de rede não impede a
+/// análise (o envio ainda cabe na janela da gameplay).
+async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
+    let job = AnaliseJob {
+        pid: handle.pid,
+        jogo_id: handle.jogo_id,
+        run_id: handle.run_id,
+        token: handle.token,
+        video_path: handle.video_path,
+    };
+    match backend::encerrar_run(&token_atual(app, &job.token), &job.run_id).await {
+        Ok(()) => {}
+        Err(backend::FalhaEncerramento::Recusado(erro)) => {
+            log::warn!("capture: run {} recusada no encerramento: {erro}", job.run_id);
+            emit_analysis(app, &job.jogo_id, job.pid, "failed", Some(format!("vídeo preservado; a run foi encerrada pelo servidor: {erro}")));
+            return;
+        }
+        Err(backend::FalhaEncerramento::Outro(erro)) => {
+            log::warn!("capture: aviso de encerramento da run {} falhou: {erro}", job.run_id);
+        }
+    }
+    emit_analysis(app, &job.jogo_id, job.pid, "analyzing", None);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
+}
+
+/// Espera a vez na fila, analisa o vídeo e envia o resultado. Sem prazo para a análise: o limite
+/// de tempo é da gameplay, já registrado no encerramento.
+async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
+    let fila = app.state::<AnalysisQueue>().0.clone();
+    let _vez = fila.lock().await;
     let result = async {
-        let result = analysis::analisar_run(app, &handle.video_path, &handle.jogo_id).await?;
+        let result = analysis::analisar_run(app, &job.video_path, &job.jogo_id).await?;
         backend::submeter_run(
-            &handle.token,
-            &handle.run_id,
-            &handle.jogo_id,
+            &token_atual(app, &job.token),
+            &job.run_id,
+            &job.jogo_id,
             result.score_bruto,
             result.vidas_perdidas,
             result.continues_usados,
@@ -155,10 +197,10 @@ async fn process_run(app: &AppHandle, handle: &RunHandle) {
     }
     .await;
     match result {
-        Ok(()) => emit_analysis(app, handle, "submitted", None),
+        Ok(()) => emit_analysis(app, &job.jogo_id, job.pid, "submitted", None),
         Err(error) => {
-            log::warn!("capture: run {} não enviada: {error}", handle.run_id);
-            emit_analysis(app, handle, "failed", Some(error));
+            log::warn!("capture: run {} não enviada: {error}", job.run_id);
+            emit_analysis(app, &job.jogo_id, job.pid, "failed", Some(error));
         }
     }
 }
@@ -178,24 +220,13 @@ fn spawn_safe_timer(
             return;
         }
         if let Some(mut handle) = guard.take() {
+            drop(guard);
             if let Err(error) = handle.child.kill().await {
-                emit_analysis(
-                    &app,
-                    &handle,
-                    "failed",
-                    Some(format!("falha ao cortar captura: {error}")),
-                );
+                emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao cortar captura: {error}")));
                 return;
             }
-            let _ = app.emit(
-                "run://expired",
-                RunExpiredPayload {
-                    jogo_id,
-                    pid: handle.pid,
-                },
-            );
-            process_run(&app, &handle).await;
-            drop(guard);
+            let _ = app.emit("run://expired", RunExpiredPayload { jogo_id, pid: handle.pid });
+            encerrar_e_enfileirar(&app, handle).await;
         }
     });
 }

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import ChatFeed from "./ChatFeed";
 import ChatInput from "./ChatInput";
 import type { ChatMessage, GameRoom } from "../types/room";
+import type { SessionRun } from "../types/submission";
 
 interface RoomViewProps {
   room: GameRoom;
@@ -14,6 +15,10 @@ interface RoomViewProps {
   onSendMessage: (text: string) => void;
   /** Abre o ranking deste jogo na mesma aba da sala. */
   onOpenRanking: () => void;
+  /** Run mais recente deste jogo nesta sessão: o aviso mostra o andamento e o desfecho. */
+  lastRun?: SessionRun;
+  /** Motivo de a última tentativa de gravação não ter começado (ex.: FFmpeg, ficha). */
+  startError?: string;
 }
 
 const MOCK_FICHAS_DIGITAIS = 3;
@@ -29,7 +34,25 @@ export function GameArt({ room, className = "" }: { room: GameRoom; className?: 
 }
 
 /** Sala dedicada do jogo: cabeçalho com ações, chat no centro e jogadores presentes à direita. */
-export default function RoomView({ room, messages, isRecording, playerName, onSendMessage, onOpenRanking }: RoomViewProps) {
+/** Aviso do andamento/desfecho da última run do jogo. */
+function RunOutcome({ run, onOpenRanking }: { run: SessionRun; onOpenRanking: () => void }) {
+  const { t } = useI18n();
+  if (run.status === "recording") return null;
+  const tone = run.status === "submitted" ? "success" : run.status === "failed" ? "warning" : "";
+  const text =
+    run.status === "analyzing" ? t("Analisando a gameplay da última run. O resultado aparece aqui quando terminar.")
+    : run.status === "submitted" ? t("Última run enviada: o resultado entrou em revisão.")
+    : run.status === "expired" ? t("O tempo da ficha acabou e a gravação foi encerrada; a gameplay está sendo processada.")
+    : t("A última run não foi enviada: {reason}", { reason: run.message ?? t("motivo não informado") });
+  return (
+    <p className={`room-banner ${tone}`} role="status">
+      {text}
+      <button type="button" className="text-action" onClick={onOpenRanking}>{t("Ver no ranking")}</button>
+    </p>
+  );
+}
+
+export default function RoomView({ room, messages, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError }: RoomViewProps) {
   const { t } = useI18n();
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -72,7 +95,7 @@ export default function RoomView({ room, messages, isRecording, playerName, onSe
   let mainDisabled = isLaunching || room.steamAppId === 0;
   let mainVariant = "primary";
   if (isStopping) {
-    mainLabel = "Analisando gameplay...";
+    mainLabel = "Encerrando a gravação...";
     mainDisabled = true;
     mainVariant = "";
   } else if (isRecording) {
@@ -103,6 +126,8 @@ export default function RoomView({ room, messages, isRecording, playerName, onSe
       <div className="game-room-main">
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
+        {startError && <p className="room-banner warning" role="alert">{t("A gravação não começou: {reason}", { reason: startError })}</p>}
+        {lastRun && <RunOutcome run={lastRun} onOpenRanking={onOpenRanking} />}
         {room.steamAppId === 0 && <p className="room-banner">{t("Este jogo não tem app_id da Steam no catálogo; o início pela Steam fica indisponível.")}</p>}
         <div className="game-panel-tabs" role="group" aria-label={t("Conteúdo do painel do jogo")}>
           <button type="button" aria-pressed={!showDetails} onClick={() => setShowDetails(false)}>{t("Sala")}</button>

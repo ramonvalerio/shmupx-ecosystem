@@ -3,12 +3,17 @@
 //! - `iniciar`: numa transação, valida o jogo publicado e o saldo, debita 1 ficha em
 //!   `wallets/{uid}` com lançamento imutável em `wallets/{uid}/entries`, e abre
 //!   `gameplays/{runId}` em `recording`. Carteira inexistente nasce com `FICHAS_INICIAIS`.
-//! - `submeter`: grava o resultado do validador offline na gameplay do próprio jogador, dentro
-//!   da janela `serverStartedAt + maxDurationSeconds + tolerância`. O estado vai para
-//!   `needs_review`: completar a análise não aprova a gameplay (README do Firebase); aprovação e
-//!   publicação de ranking são etapas posteriores do backend.
+//! - `encerrar`: no STOP (ou no corte da ficha), registra o fim da captura pelo relógio do
+//!   servidor e confere que a gameplay coube em `serverStartedAt + maxDurationSeconds +
+//!   tolerância`. O estado vai para `processing`: gravação encerrada, análise pendente.
+//! - `submeter`: grava o resultado do validador offline na gameplay do próprio jogador. O limite
+//!   de tempo é da **gameplay**, não da análise: uma run em `processing` aceita o resultado a
+//!   qualquer momento. Uma run ainda em `recording` (cliente antigo, ou o aviso de encerramento
+//!   se perdeu) segue a janela da gameplay. O estado vai para `needs_review`: completar a análise
+//!   não aprova a gameplay (README do Firebase); aprovação e publicação de ranking são etapas
+//!   posteriores do backend.
 
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, SubsecRound, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -23,7 +28,8 @@ pub const FICHAS_INICIAIS: i64 = 50;
 /// Duração usada quando o jogo não define `maxDurationSeconds` (Spec 002: 45 a 60 min).
 const DURACAO_PADRAO_SEGUNDOS: i64 = 3600;
 
-/// Margem sobre a duração máxima para a latência entre o fim do timer e o envio (Spec 002).
+/// Margem sobre a duração máxima para a latência entre o fim da gameplay (STOP ou corte da
+/// ficha) e o aviso ao servidor (Spec 002).
 pub const TOLERANCIA_ENVIO_SEGUNDOS: i64 = 120;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -38,6 +44,13 @@ pub struct Resultado {
     pub score_bruto: i64,
     pub vidas_perdidas: i32,
     pub continues_usados: i32,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RunEncerrada {
+    pub run_id: String,
+    pub status: &'static str,
+    pub server_ended_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -125,6 +138,75 @@ async fn iniciar_na_transacao(fs: &Firestore, tx: &str, uid: &str, game_id: &str
     Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32 })
 }
 
+/// A gameplay (do início ao aviso de encerramento) coube no tempo da ficha, com a tolerância.
+fn dentro_do_tempo(captura: &Campos, agora: DateTime<Utc>) -> Result<bool, AppError> {
+    let inicio = ler_data(captura, "serverStartedAt").ok_or_else(|| AppError::internal("gameplay sem serverStartedAt"))?;
+    let max_duracao = ler_inteiro(captura, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS);
+    Ok(agora - inicio <= ChronoDuration::seconds(max_duracao + TOLERANCIA_ENVIO_SEGUNDOS))
+}
+
+/// Encerra a captura da run: o servidor registra o fim pelo próprio relógio. Repetir o aviso de
+/// uma run já encerrada é idempotente.
+pub async fn encerrar(fs: &Firestore, uid: &str, run_id: &str) -> Result<RunEncerrada, AppError> {
+    if !id_valido(run_id) {
+        return Err(AppError::bad_request("run_id inválido"));
+    }
+    let tx = fs.iniciar_transacao().await?;
+    let saida = encerrar_na_transacao(fs, &tx, uid, run_id).await;
+    if matches!(saida, Err(_) | Ok(Encerramento::JaEncerrada(_))) {
+        fs.desfazer(&tx).await;
+    }
+    match saida? {
+        Encerramento::Encerrada(run) | Encerramento::JaEncerrada(run) => Ok(run),
+        Encerramento::Excedeu => Err(AppError::conflict("a gameplay passou do tempo da ficha; a run expirou")),
+    }
+}
+
+enum Encerramento {
+    Encerrada(RunEncerrada),
+    JaEncerrada(RunEncerrada),
+    Excedeu,
+}
+
+async fn encerrar_na_transacao(fs: &Firestore, tx: &str, uid: &str, run_id: &str) -> Result<Encerramento, AppError> {
+    let caminho = format!("gameplays/{run_id}");
+    let gameplay = fs
+        .ler(&caminho, tx)
+        .await?
+        .filter(|g| ler_texto(g, "ownerId").as_deref() == Some(uid))
+        .ok_or_else(|| AppError::not_found("run não encontrada"))?;
+    let captura = ler_mapa(&gameplay, "capture").unwrap_or_default();
+
+    match ler_texto(&gameplay, "status").as_deref() {
+        Some("recording") => {}
+        Some("processing") => {
+            let fim = ler_data(&captura, "serverEndedAt").ok_or_else(|| AppError::internal("gameplay sem serverEndedAt"))?;
+            return Ok(Encerramento::JaEncerrada(RunEncerrada { run_id: run_id.to_string(), status: "processing", server_ended_at: fim }));
+        }
+        _ => return Err(AppError::conflict("esta run já foi encerrada")),
+    }
+
+    // Microssegundos, a precisão que o Firestore guarda: o valor devolvido bate com o gravado.
+    let agora = Utc::now().trunc_subsecs(6);
+    if !dentro_do_tempo(&captura, agora)? {
+        let escrita = atualizar(fs, &caminho, campos(&[("status", texto("expired")), ("updatedAt", data(agora))]), Some(&["status", "updatedAt"]));
+        fs.confirmar(tx, vec![escrita]).await?;
+        return Ok(Encerramento::Excedeu);
+    }
+    let escrita = atualizar(
+        fs,
+        &caminho,
+        campos(&[
+            ("status", texto("processing")),
+            ("updatedAt", data(agora)),
+            ("capture", mapa(campos(&[("serverEndedAt", data(agora))]))),
+        ]),
+        Some(&["status", "updatedAt", "capture.serverEndedAt"]),
+    );
+    fs.confirmar(tx, vec![escrita]).await?;
+    Ok(Encerramento::Encerrada(RunEncerrada { run_id: run_id.to_string(), status: "processing", server_ended_at: agora }))
+}
+
 pub async fn submeter(
     fs: &Firestore,
     uid: &str,
@@ -177,23 +259,23 @@ async fn submeter_na_transacao(
     }
 
     let submetida = RunSubmetida { run_id: run_id.to_string(), status: "needs_review" };
+    let captura = ler_mapa(&gameplay, "capture").unwrap_or_default();
+    let agora = Utc::now();
     match ler_texto(&gameplay, "status").as_deref() {
-        Some("recording") => {}
+        // Captura encerrada no servidor: a análise pode levar o tempo que precisar.
+        Some("processing") => {}
+        // Sem aviso de encerramento, o envio é o único marco: vale a janela da gameplay.
+        Some("recording") => {
+            if !dentro_do_tempo(&captura, agora)? {
+                let escrita = atualizar(fs, &caminho, campos(&[("status", texto("expired")), ("updatedAt", data(agora))]), Some(&["status", "updatedAt"]));
+                fs.confirmar(tx, vec![escrita]).await?;
+                return Ok(Saida::Expirada);
+            }
+        }
         Some("needs_review") if ler_mapa(&gameplay, "result").as_ref().map(ler_resultado) == Some(Some(resultado.clone())) => {
             return Ok(Saida::JaRegistrado(submetida));
         }
         _ => return Err(AppError::conflict("esta run já foi encerrada")),
-    }
-
-    let captura = ler_mapa(&gameplay, "capture").unwrap_or_default();
-    let inicio = ler_data(&captura, "serverStartedAt").ok_or_else(|| AppError::internal("gameplay sem serverStartedAt"))?;
-    let max_duracao = ler_inteiro(&captura, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS);
-    let agora = Utc::now();
-
-    if agora - inicio > ChronoDuration::seconds(max_duracao + TOLERANCIA_ENVIO_SEGUNDOS) {
-        let escrita = atualizar(fs, &caminho, campos(&[("status", texto("expired")), ("updatedAt", data(agora))]), Some(&["status", "updatedAt"]));
-        fs.confirmar(tx, vec![escrita]).await?;
-        return Ok(Saida::Expirada);
     }
 
     let campos_resultado = campos(&[
@@ -317,6 +399,70 @@ mod tests {
         let intacta = fs.ler(&format!("gameplays/{}", segunda.run_id), &leitura).await.unwrap().unwrap();
         assert_eq!(ler_texto(&intacta, "status").as_deref(), Some("recording"));
         fs.desfazer(&leitura).await;
+    }
+
+    /// Gameplay criada direto no banco, com o início no passado (simula o relógio andando).
+    async fn gameplay_antiga(fs: &Firestore, uid: &str, jogo: &str, status: &str, minutos_atras: i64) -> String {
+        let run_id = Uuid::new_v4().to_string();
+        let inicio = Utc::now() - ChronoDuration::minutes(minutos_atras);
+        let mut captura = campos(&[("serverStartedAt", data(inicio)), ("maxDurationSeconds", inteiro(600))]);
+        if status == "processing" {
+            captura.insert("serverEndedAt".into(), data(inicio + ChronoDuration::minutes(9)));
+        }
+        let tx = fs.iniciar_transacao().await.unwrap();
+        fs.confirmar(&tx, vec![criar(fs, &format!("gameplays/{run_id}"), campos(&[
+            ("ownerId", texto(uid)),
+            ("gameId", texto(jogo)),
+            ("status", texto(status)),
+            ("capture", mapa(captura)),
+        ]))]).await.unwrap();
+        run_id
+    }
+
+    async fn status_de(fs: &Firestore, run_id: &str) -> Option<String> {
+        let leitura = fs.iniciar_transacao().await.unwrap();
+        let gameplay = fs.ler(&format!("gameplays/{run_id}"), &leitura).await.unwrap().unwrap();
+        fs.desfazer(&leitura).await;
+        ler_texto(&gameplay, "status")
+    }
+
+    /// O limite é da gameplay: encerrar marca o fim pelo relógio do servidor e a análise pode
+    /// demorar o quanto precisar; passar do tempo da ficha expira a run.
+    #[tokio::test]
+    #[ignore = "exige o emulador do Firestore"]
+    async fn encerramento_separa_tempo_de_gameplay_do_tempo_de_analise_no_emulador() {
+        // SAFETY: ver o teste acima.
+        unsafe { std::env::set_var("FIREBASE_PROJECT_ID", "demo-shmupx") };
+        let fs = Firestore::do_ambiente().unwrap();
+        let jogo = format!("jogo-{}", Uuid::new_v4());
+        let uid = format!("uid-{}", Uuid::new_v4());
+        let tx = fs.iniciar_transacao().await.unwrap();
+        fs.confirmar(&tx, vec![criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(600))]))]).await.unwrap();
+        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: 0, continues_usados: 0 };
+
+        // Fluxo normal: encerrar (idempotente), depois enviar.
+        let run = iniciar(&fs, &uid, &jogo).await.unwrap();
+        assert!(encerrar(&fs, "uid-intruso", &run.run_id).await.is_err(), "outro jogador não encerra");
+        let encerrada = encerrar(&fs, &uid, &run.run_id).await.unwrap();
+        assert_eq!(encerrada.status, "processing");
+        assert_eq!(encerrar(&fs, &uid, &run.run_id).await.unwrap().server_ended_at, encerrada.server_ended_at);
+        assert_eq!(status_de(&fs, &run.run_id).await.as_deref(), Some("processing"));
+        assert_eq!(submeter(&fs, &uid, &run.run_id, &jogo, resultado.clone()).await.unwrap().status, "needs_review");
+        assert!(encerrar(&fs, &uid, &run.run_id).await.is_err(), "run com resultado não volta a encerrar");
+
+        // Análise longa: a captura terminou no tempo, o resultado chega 3 horas depois e vale.
+        let analise_longa = gameplay_antiga(&fs, &uid, &jogo, "processing", 180).await;
+        assert_eq!(submeter(&fs, &uid, &analise_longa, &jogo, resultado.clone()).await.unwrap().status, "needs_review");
+
+        // Gameplay que passou do tempo da ficha: o encerramento expira a run.
+        let excedeu = gameplay_antiga(&fs, &uid, &jogo, "recording", 30).await;
+        assert!(encerrar(&fs, &uid, &excedeu).await.is_err());
+        assert_eq!(status_de(&fs, &excedeu).await.as_deref(), Some("expired"));
+
+        // Sem aviso de encerramento, vale a janela da gameplay no envio.
+        let sem_aviso = gameplay_antiga(&fs, &uid, &jogo, "recording", 30).await;
+        assert!(submeter(&fs, &uid, &sem_aviso, &jogo, resultado).await.is_err());
+        assert_eq!(status_de(&fs, &sem_aviso).await.as_deref(), Some("expired"));
     }
 
     #[tokio::test]

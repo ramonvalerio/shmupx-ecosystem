@@ -455,3 +455,5 @@ button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 700px) { .game-room-header { flex-wrap: wrap; } .game-room-actions { margin-left: 0; justify-content: flex-start; } }
 .theme-light .room-tab > button[role=tab], .theme-light .room-tab-close, .theme-light .segmented button { color: #1f6feb; }
 .theme-light .segmented button[aria-pressed=true] { color: #fff; }
+.room-banner .text-action { margin-left: auto; flex-shrink: 0; }
+.room-banner.success { color: #3fd98b; background: #3fd98b12; }

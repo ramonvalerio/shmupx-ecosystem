@@ -11,4 +11,4 @@ pub use audio::RecordingState;
 pub use commands::{finalizar_corrida_manual, iniciar_corrida_safe};
 pub use ffmpeg::{FfmpegSession, RecordingConfig};
 pub use run_timer::{RunTimer, RunTimerState};
-pub use state::RunState;
+pub use state::{AnalysisQueue, RunState};

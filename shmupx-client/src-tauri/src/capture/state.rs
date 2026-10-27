@@ -19,6 +19,11 @@ pub struct RunHandle {
     pub video_path: PathBuf,
 }
 
+/// Fila das análises: uma por vez (são pesadas), em ordem de chegada (o `Mutex` do Tokio é
+/// justo). Fica separada de `RunState`: uma nova run pode começar enquanto outra é analisada.
+#[derive(Clone, Default)]
+pub struct AnalysisQueue(pub Arc<Mutex<()>>);
+
 /// Estado global compartilhado (gerenciado pelo Tauri via `tauri::State`).
 /// `Arc<Mutex<..>>` porque a task do timer precisa acessá-lo fora do comando que a criou.
 #[derive(Clone, Default)]

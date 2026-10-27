@@ -32,17 +32,23 @@ pub struct RecordingConfig {
 }
 
 impl RecordingConfig {
-    /// Configuração padrão de uma run: 60 fps, preset `ultrafast`, áudio do sistema via
-    /// [`DEFAULT_AUDIO_DEVICE`]. Os campos são públicos para ajuste fino (ex.: trocar o preset
-    /// em máquinas mais fracas ou desativar áudio quando o dispositivo não existir).
+    /// Configuração padrão de uma run: 60 fps, preset `ultrafast`, **sem áudio**. A validação
+    /// lê só a imagem, e o dispositivo de loopback ([`DEFAULT_AUDIO_DEVICE`]) raramente existe:
+    /// pedir um áudio ausente faz o FFmpeg abortar no início e a run fica sem vídeo. O áudio volta
+    /// como opção quando houver transmissão (com o dispositivo detectado, não fixo).
     pub fn new(output_path: PathBuf) -> Self {
         Self {
             output_path,
             rtmp_url: None,
             framerate: 60,
             video_preset: "ultrafast".to_string(),
-            audio_device: Some(DEFAULT_AUDIO_DEVICE.to_string()),
+            audio_device: None,
         }
+    }
+
+    /// Log do FFmpeg ao lado do vídeo (`run.mp4` -> `run.ffmpeg.log`), para diagnosticar falhas.
+    pub fn log_path(&self) -> PathBuf {
+        self.output_path.with_extension("ffmpeg.log")
     }
 }
 
@@ -115,12 +121,60 @@ pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
         cmd.args(["-f", "flv", rtmp_url]);
     }
 
+    // O stderr vai para um arquivo: sem ele, uma falha do FFmpeg (ex.: dispositivo ausente) some
+    // e a run parece gravar sem gerar vídeo.
+    let log = std::fs::File::create(config.log_path())?;
     cmd.stdin(Stdio::piped());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
+    cmd.stderr(Stdio::from(log));
     cmd.kill_on_drop(true);
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     cmd.spawn()
+}
+
+/// Tempo que o FFmpeg precisa sobreviver para a captura contar como iniciada.
+const CONFIRMACAO_INICIO: Duration = Duration::from_millis(1500);
+
+/// Confirma que a captura começou: o FFmpeg aborta logo no início quando algo está errado
+/// (dispositivo, codec, permissão). Se ele já saiu, devolve a última linha do log como motivo.
+pub async fn confirmar_inicio(child: &mut Child, config: &RecordingConfig) -> io::Result<()> {
+    tokio::time::sleep(CONFIRMACAO_INICIO).await;
+    if child.try_wait()?.is_none() {
+        return Ok(());
+    }
+    let log = std::fs::read_to_string(config.log_path()).unwrap_or_default();
+    Err(io::Error::other(format!("a captura de tela não iniciou: {}", ultima_linha(&log))))
+}
+
+/// Última linha útil do log do FFmpeg (as anteriores costumam ser banner e configuração).
+pub fn ultima_linha(log: &str) -> String {
+    log.lines()
+        .rev()
+        .map(str::trim)
+        .find(|linha| !linha.is_empty())
+        .map(|linha| linha.chars().take(300).collect())
+        .unwrap_or_else(|| "sem detalhe no log do FFmpeg".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_padrao_grava_sem_audio_e_log_fica_ao_lado_do_video() {
+        let config = RecordingConfig::new(PathBuf::from("C:/dados/shmupx_run_1.mp4"));
+        assert!(config.audio_device.is_none());
+        assert_eq!(config.log_path(), PathBuf::from("C:/dados/shmupx_run_1.ffmpeg.log"));
+    }
+
+    #[test]
+    fn ultima_linha_do_log_explica_a_falha() {
+        let log = "ffmpeg version 8.0\n  built with gcc\nError opening input file audio=virtual-audio-capturer.\nError opening input files: I/O error\n\n";
+        assert_eq!(ultima_linha(log), "Error opening input files: I/O error");
+        assert_eq!(ultima_linha(""), "sem detalhe no log do FFmpeg");
+    }
 }
 
 /// Parada graciosa: envia `q` ao stdin do FFmpeg (fecha o arquivo corretamente) e aguarda

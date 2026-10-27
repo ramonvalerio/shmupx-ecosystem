@@ -29,6 +29,8 @@ export default function App() {
   const [messagesByRoom, setMessagesByRoom] = useState<Record<string, ChatMessage[]>>(MOCK_MESSAGES);
   const [expiredRoomId, setExpiredRoomId] = useState<string | null>(null);
   const [runs, setRuns] = useState<SessionRun[]>([]);
+  // Por jogo: por que a última tentativa de gravação não começou (mostrado na sala).
+  const [startErrors, setStartErrors] = useState<Record<string, string>>({});
   const recordingRoomId = runs.find((run) => run.status === "recording")?.gameId ?? null;
   const expiredDialogRef = useDialogFocus(expiredRoomId !== null, () => setExpiredRoomId(null));
 
@@ -60,8 +62,12 @@ export default function App() {
         .then((nativePid) => {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: room.id, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);
+          setStartErrors(({ [room.id]: _, ...rest }) => rest);
         })
-        .catch((error) => console.error("falha ao iniciar a corrida segura:", error));
+        .catch((error) => {
+          console.error("falha ao iniciar a corrida segura:", error);
+          setStartErrors((current) => ({ ...current, [room.id]: typeof error === "string" ? error : String(error) }));
+        });
     });
 
     const unlistenExpired = listen<RunExpiredPayload>("run://expired", (event) => {
@@ -121,6 +127,8 @@ export default function App() {
           playerName={profileName}
           onSendMessage={(text) => handleSendMessage(room.id, text)}
           onOpenRanking={actions.openRanking}
+          lastRun={runs.find((run) => run.gameId === room.id)}
+          startError={startErrors[room.id]}
         />
       )}
     />
