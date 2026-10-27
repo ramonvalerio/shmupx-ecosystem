@@ -1,5 +1,5 @@
-//! Execução do validador Python de cada jogo (`shmupx_offline`, ADR 004), com o mesmo contrato
-//! `client-v1` que o Client usa. Diferente do Client, o Lab não recusa resultados duvidosos:
+//! Execução dos scripts de validação do Lab (`shmupx-lab/validators`, ADR 004): o motor Python
+//! genérico roda o script `games/<jogo>/<versão>/` com o mesmo contrato `client-v1` que o Client usa. Diferente do Client, o Lab não recusa resultados duvidosos:
 //! guarda o relatório inteiro e calcula se o Client o aceitaria sem revisão.
 
 use std::ffi::OsString;
@@ -25,23 +25,25 @@ pub struct ScriptInfo {
     pub id: String,
     pub name: String,
     pub version: String,
+    /// `draft` (rascunho) ou `approved`.
+    pub status: String,
 }
 
-/// Pasta do `shmupx_offline`: `SHMUPX_OFFLINE_ROOT`, ou a do repositório em desenvolvimento.
-pub fn raiz_offline() -> Result<PathBuf, String> {
-    let raiz = match std::env::var_os("SHMUPX_OFFLINE_ROOT") {
+/// Pasta `validators` do Lab: `SHMUPX_VALIDATORS_ROOT`, ou a do repositório em desenvolvimento.
+pub fn raiz_validadores() -> Result<PathBuf, String> {
+    let raiz = match std::env::var_os("SHMUPX_VALIDATORS_ROOT") {
         Some(raiz) => PathBuf::from(raiz),
-        None if cfg!(debug_assertions) => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shmupx_offline"),
-        None => return Err("defina SHMUPX_OFFLINE_ROOT com a pasta do shmupx_offline".into()),
+        None if cfg!(debug_assertions) => Path::new(env!("CARGO_MANIFEST_DIR")).join("../validators"),
+        None => return Err("defina SHMUPX_VALIDATORS_ROOT com a pasta validators do shmupx-lab".into()),
     };
-    let raiz = raiz.canonicalize().map_err(|e| format!("pasta do shmupx_offline indisponível: {e}"))?;
+    let raiz = raiz.canonicalize().map_err(|e| format!("pasta validators indisponível: {e}"))?;
     if !raiz.join("analyze.py").is_file() {
         return Err(format!("analyze.py não encontrado em {}", raiz.display()));
     }
     Ok(raiz)
 }
 
-/// Python do ambiente do script: `SHMUPX_PYTHON`, senão o `.venv` do `shmupx_offline`, senão o do PATH.
+/// Python do ambiente dos scripts: `SHMUPX_PYTHON`, senão o `.venv` da pasta `validators`, senão o do PATH.
 pub fn python(raiz: &Path) -> OsString {
     if let Some(python) = std::env::var_os("SHMUPX_PYTHON") {
         return python;
@@ -110,7 +112,7 @@ fn ultima_linha(bytes: &[u8]) -> String {
         .unwrap_or_else(|| "sem detalhe".to_string())
 }
 
-/// Validadores registrados (`analyze.py --list-games`; não exige OpenCV).
+/// Scripts de todos os jogos, um por versão (`analyze.py --list-games`; não exige OpenCV).
 pub async fn listar_scripts(raiz: &Path) -> Result<Vec<ScriptInfo>, String> {
     let argumentos = [OsString::from("analyze.py"), OsString::from("--list-games")];
     let (ok, saida, erro) = executar(raiz, &argumentos, TIMEOUT_CONSULTA).await?;
@@ -167,11 +169,12 @@ async fn ler_stderr(leitor: impl AsyncRead + Unpin, progresso: &watch::Sender<f3
     ultimas.into_iter().collect::<Vec<_>>().join("\n").into_bytes()
 }
 
-/// Analisa o vídeo com o script do jogo, publicando o progresso (0 a 100). Falhas do script
+/// Analisa o vídeo com a versão pedida do script do jogo, publicando o progresso (0 a 100). Falhas do script
 /// viram um `Resultado` com `erro` (contam no percentual). `None` = cancelado pelo admin.
 pub async fn analisar(
     raiz: &Path,
     jogo: &str,
+    versao: &str,
     video: &Path,
     progresso: watch::Sender<f32>,
     cancelar: watch::Receiver<bool>,
@@ -182,6 +185,8 @@ pub async fn analisar(
         video.as_os_str().to_owned(),
         "--game".into(),
         jogo.into(),
+        "--version".into(),
+        versao.into(),
         "--player".into(),
         "lab".into(),
         "--format".into(),
@@ -206,7 +211,7 @@ pub async fn analisar(
     };
     let duracao = inicio.elapsed().as_secs();
     Some(match execucao {
-        Ok((Ok(status), saida, _)) if status.success() => interpretar(&saida, jogo, duracao),
+        Ok((Ok(status), saida, _)) if status.success() => interpretar(&saida, jogo, versao, duracao),
         Ok((Ok(_), _, erro)) => Resultado::falha(format!("o script falhou: {}", ultima_linha(&erro)), duracao),
         Ok((Err(e), _, _)) => Resultado::falha(format!("falha ao aguardar o Python: {e}"), duracao),
         Err(_) => Resultado::falha(format!("o script passou de {} minutos e foi encerrado", TIMEOUT_ANALISE.as_secs() / 60), duracao),
@@ -238,7 +243,7 @@ struct Gameplay {
 /// Lê o relatório `client-v1`. `aceito_automatico` segue a regra do Client
 /// (`shmupx-client/src-tauri/src/analysis/offline.rs`): confiança alta, sem revisão, sem game
 /// over, sem continue e com placar.
-fn interpretar(bytes: &[u8], jogo: &str, duracao_segundos: u64) -> Resultado {
+fn interpretar(bytes: &[u8], jogo: &str, versao: &str, duracao_segundos: u64) -> Resultado {
     let bruto: Value = match serde_json::from_slice(bytes) {
         Ok(valor) => valor,
         Err(e) => return Resultado::falha(format!("relatório inválido do script: {e}"), duracao_segundos),
@@ -247,8 +252,8 @@ fn interpretar(bytes: &[u8], jogo: &str, duracao_segundos: u64) -> Resultado {
         Ok(relatorio) => relatorio,
         Err(e) => return Resultado::falha(format!("relatório fora do formato client-v1: {e}"), duracao_segundos),
     };
-    if relatorio.schema_version != 1 || relatorio.game_id != jogo {
-        return Resultado::falha("relatório de outro formato ou de outro jogo".into(), duracao_segundos);
+    if relatorio.schema_version != 1 || relatorio.game_id != jogo || relatorio.validator_version != versao {
+        return Resultado::falha("relatório de outro formato, jogo ou versão do script".into(), duracao_segundos);
     }
     let g = &relatorio.gameplay;
     let contadores_validos = g.score.is_none_or(|s| s >= 0) && g.lives >= 0 && g.continues >= 0;
@@ -292,7 +297,7 @@ mod tests {
 
     #[test]
     fn relatorio_limpo_e_aceito_automaticamente() {
-        let r = interpretar(&relatorio("high", false, Some(123_400), 0, false), "earthion", 10);
+        let r = interpretar(&relatorio("high", false, Some(123_400), 0, false), "earthion", "1.0.0", 10);
         assert!(r.aceito_automatico && r.erro.is_none());
         assert_eq!((r.placar, r.vidas, r.continues), (Some(123_400), Some(2), Some(0)));
         assert_eq!(r.versao_validador.as_deref(), Some("1.0.0"));
@@ -308,7 +313,7 @@ mod tests {
             ("high", false, Some(1), 1, false),
             ("high", false, Some(1), 0, true),
         ] {
-            let r = interpretar(&relatorio(confianca, revisao, placar, continues, game_over), "earthion", 1);
+            let r = interpretar(&relatorio(confianca, revisao, placar, continues, game_over), "earthion", "1.0.0", 1);
             assert!(!r.aceito_automatico, "{confianca} {revisao} {placar:?} {continues} {game_over}");
             assert!(r.erro.is_none(), "leitura duvidosa não é erro do script");
         }
@@ -316,20 +321,21 @@ mod tests {
 
     #[test]
     fn saida_invalida_ou_de_outro_jogo_vira_falha() {
-        assert!(interpretar(b"nao e json", "earthion", 1).erro.is_some());
-        assert!(interpretar(b"{\"schema_version\":1}", "earthion", 1).erro.is_some());
-        assert!(interpretar(&relatorio("high", false, Some(1), 0, false), "outro", 1).erro.is_some());
+        assert!(interpretar(b"nao e json", "earthion", "1.0.0", 1).erro.is_some());
+        assert!(interpretar(b"{\"schema_version\":1}", "earthion", "1.0.0", 1).erro.is_some());
+        assert!(interpretar(&relatorio("high", false, Some(1), 0, false), "outro", "1.0.0", 1).erro.is_some());
+        assert!(interpretar(&relatorio("high", false, Some(1), 0, false), "earthion", "1.1.0", 1).erro.is_some(), "outra versão");
     }
 
-    /// Contra o shmupx_offline real do repositório (só precisa do Python, não do OpenCV).
+    /// Contra a pasta validators real do Lab (só precisa do Python, não do OpenCV).
     /// `cargo test -- --ignored scripts_reais`
     #[tokio::test]
     #[ignore = "exige Python instalado"]
     async fn scripts_reais_incluem_o_earthion() {
-        let raiz = raiz_offline().unwrap();
+        let raiz = raiz_validadores().unwrap();
         let scripts = listar_scripts(&raiz).await.unwrap();
-        let earthion = scripts.iter().find(|s| s.id == "earthion").expect("earthion registrado");
-        assert_eq!(earthion.version, "1.0.0");
+        let earthion = scripts.iter().find(|s| s.id == "earthion" && s.version == "1.0.0").expect("earthion 1.0.0");
+        assert_eq!(earthion.status, "approved");
     }
 
     #[test]

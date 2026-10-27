@@ -10,7 +10,7 @@ interface ScriptViewerProps {
   onClose: () => void;
 }
 
-/** Visualizador só de leitura dos arquivos do validador: uma aba por arquivo, com números de linha. */
+/** Visualizador só de leitura dos arquivos de uma versão do script: uma aba por arquivo, com números de linha. */
 export default function ScriptViewer({ gameId, script, onClose }: ScriptViewerProps) {
   const [files, setFiles] = useState<ScriptSourceFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,13 +19,13 @@ export default function ScriptViewer({ gameId, script, onClose }: ScriptViewerPr
 
   useEffect(() => {
     let alive = true;
-    getScriptSource(gameId)
+    getScriptSource(gameId, script.version)
       .then((result) => alive && setFiles(result))
       .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
     return () => {
       alive = false;
     };
-  }, [gameId]);
+  }, [gameId, script.version]);
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -56,6 +56,7 @@ export default function ScriptViewer({ gameId, script, onClose }: ScriptViewerPr
             <h2 className="mt-0.5 flex items-center gap-2 text-base font-semibold text-zinc-100">
               {script.name}
               <Badge tone="info">{script.id} {script.version}</Badge>
+              {script.status === "draft" && <Badge tone="warning">rascunho</Badge>}
             </h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200">
@@ -90,7 +91,7 @@ export default function ScriptViewer({ gameId, script, onClose }: ScriptViewerPr
             </div>
             {file && (
               <div className="flex items-center gap-3 border-b border-white/5 px-6 py-2 text-xs text-zinc-500">
-                <span className="min-w-0 flex-1 truncate font-mono" title={file.caminho}>shmupx_offline/{file.caminho}</span>
+                <span className="min-w-0 flex-1 truncate font-mono" title={file.caminho}>shmupx-lab/validators/{file.caminho}</span>
                 <span className="tabular-nums">{lines.length} linhas</span>
                 {file.truncado && <Badge tone="warning">cortado no limite de 512 KB</Badge>}
                 <CopyButton value={file.conteudo} label="Copiar o conteúdo do arquivo" />

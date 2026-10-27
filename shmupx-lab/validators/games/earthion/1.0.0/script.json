@@ -1,0 +1,8 @@
+{
+  "game": "earthion",
+  "name": "Earthion",
+  "version": "1.0.0",
+  "status": "approved",
+  "analyzer": "hud_score",
+  "notes": "Primeira versão, validada com gameplays 1CC (console em inglês e PC em português)."
+}

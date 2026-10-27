@@ -56,8 +56,10 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 5.4 Fluxo de promoção/rollback de release.
 
 ## 6. Validação dos scripts (`features/validation`, `src-tauri/src/validacao`)
-- [x] 6.1 Tela **Validação** por jogo do catálogo, com o status do script (registrado em `shmupx_offline`, versão via `analyze.py --list-games`).
-- [x] 6.2 Vídeos do YouTube (download pelo **yt-dlp**, com progresso; `SHMUPX_YTDLP_PATH` e `SHMUPX_YTDLP_COOKIES_FROM_BROWSER` opcionais) e arquivos locais (por referência, sem cópia).
+- [x] 6.1 Tela **Validação** por jogo do catálogo, com o status do script (versões via `analyze.py --list-games`).
+- [x] 6.0 Scripts independentes do `shmupx_offline`, em `shmupx-lab/validators` (veja o README de lá): motor genérico em `engine/` e um script por versão em `games/<jogo>/<versão>/` (`script.json`, `config.json`, `templates/`). A tela escolhe a versão, roda com `--version` e confere que o relatório veio dela; **Gerar script** cria a 0.1.0 de um jogo novo e **Nova versão** copia a escolhida para a próxima (rascunho). `SHMUPX_VALIDATORS_ROOT` aponta a pasta fora do modo de desenvolvimento.
+- [ ] 6.0.1 Aprovar uma versão pelo Lab (hoje: `status` no `script.json`) e publicar o pacote assinado para o Client (ADR 006). Até lá o Client continua com o `shmupx_offline`, que pode ser removido depois disso.
+- [x] 6.2 Vídeos do YouTube (download pelo **yt-dlp**, com progresso; `SHMUPX_YTDLP_PATH` opcional). Contra o bloqueio "confirme que não é um robô", a tela escolhe o navegador dos cookies do YouTube (`config.json` da pasta de validação; `SHMUPX_YTDLP_COOKIES_FROM_BROWSER` vale quando nada foi escolhido), e a falha aparece explicada na tabela e arquivos locais (por referência, sem cópia).
 - [x] 6.3 Gabarito por vídeo: placar real e, opcionais, vidas e continues (edição na linha e no painel).
 - [x] 6.4 Fila de análise (um vídeo por vez) rodando o script com o contrato `client-v1`; relatório completo guardado.
 - [x] 6.5 Métricas: **acerto** (placar lido = gabarito, entre os analisados com gabarito) e **aceitação automática** (o Client aceitaria sem revisão, mesma regra de `analysis/offline.rs`).

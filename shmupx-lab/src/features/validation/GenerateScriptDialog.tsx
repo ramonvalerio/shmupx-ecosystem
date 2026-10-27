@@ -11,7 +11,7 @@ interface GenerateScriptDialogProps {
   onGenerated: () => void;
 }
 
-/** Confirma e prepara a validação do jogo: calibração, pastas das imagens e registro com o analisador genérico. */
+/** Confirma e cria o primeiro script do jogo (0.1.0): manifesto, calibração e pastas das imagens. */
 export default function GenerateScriptDialog({ gameId, gameTitle, onClose, onGenerated }: GenerateScriptDialogProps) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,13 +66,13 @@ export default function GenerateScriptDialog({ gameId, gameTitle, onClose, onGen
             <>
               <p>
                 A lógica de análise é genérica (vídeo, HUD, dígitos, vidas, continues e attempts). O que é de cada jogo é a{" "}
-                <strong className="text-zinc-100">calibração</strong> e as <strong className="text-zinc-100">imagens dos dígitos</strong>. Isto cria, no{" "}
-                <code className="font-mono text-xs text-zinc-200">shmupx_offline</code>:
+                <strong className="text-zinc-100">calibração</strong> e as <strong className="text-zinc-100">imagens dos dígitos</strong>. Cada versão do script é uma pasta; isto cria a primeira em{" "}
+                <code className="font-mono text-xs text-zinc-200">shmupx-lab/validators/games/{gameId}/0.1.0/</code>:
               </p>
               <ul className="space-y-1.5 text-xs">
-                <li><code className="font-mono text-cyan-200">games/{gameId}.json</code> — a calibração do Earthion como ponto de partida</li>
-                <li><code className="font-mono text-cyan-200">templates/{gameId}/</code> — as pastas das imagens e o passo a passo do recorte</li>
-                <li><code className="font-mono text-cyan-200">shmupx/registry.py</code> — registro com o analisador genérico, versão <strong>0.1.0</strong> (rascunho)</li>
+                <li><code className="font-mono text-cyan-200">script.json</code> — nome, versão <strong>0.1.0</strong>, status rascunho e o analisador genérico</li>
+                <li><code className="font-mono text-cyan-200">config.json</code> — a calibração do Earthion como ponto de partida</li>
+                <li><code className="font-mono text-cyan-200">templates/</code> — as pastas das imagens e o passo a passo do recorte</li>
               </ul>
               <p className="rounded-md border border-white/5 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
                 Até você ajustar a posição do placar na calibração e recortar os dígitos deste jogo (com <code className="font-mono">tools/make_digit_templates.py</code>), a leitura não funciona.
@@ -86,7 +86,7 @@ export default function GenerateScriptDialog({ gameId, gameTitle, onClose, onGen
                 Rascunho {result.versao} criado.
               </p>
               <div>
-                <p className="text-xs text-zinc-500">Criados no shmupx_offline:</p>
+                <p className="text-xs text-zinc-500">Criado em shmupx-lab/validators:</p>
                 <ul className="mt-1 space-y-1 font-mono text-xs text-zinc-200">
                   {result.criados.map((item) => <li key={item}>{item}</li>)}
                 </ul>
@@ -94,8 +94,8 @@ export default function GenerateScriptDialog({ gameId, gameTitle, onClose, onGen
               <div>
                 <p className="text-xs text-zinc-500">Próximos passos:</p>
                 <ol className="mt-1 list-decimal space-y-1 pl-5 text-xs leading-relaxed">
-                  <li>Ajuste em <code className="font-mono">games/{gameId}.json</code> os rótulos do HUD e a posição do placar e das vidas (veja em <strong>Ver script</strong>).</li>
-                  <li>Recorte os dígitos com <code className="font-mono">tools/make_digit_templates.py VIDEO.mp4 --game {gameId}</code> (passo a passo em <code className="font-mono">templates/{gameId}/LEIA-ME.md</code>).</li>
+                  <li>Ajuste no <code className="font-mono">config.json</code> os rótulos do HUD e a posição do placar e das vidas (veja em <strong>Ver script</strong>).</li>
+                  <li>Recorte os dígitos com <code className="font-mono">tools/make_digit_templates.py VIDEO.mp4 --game {gameId} --version {result.versao}</code> (passo a passo em <code className="font-mono">templates/LEIA-ME.md</code>).</li>
                   <li>Adicione vídeos com gabarito (de preferência com continue ou game over) e rode o script aqui até o acerto ficar bom.</li>
                 </ol>
               </div>

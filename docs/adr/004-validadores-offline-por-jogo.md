@@ -25,4 +25,14 @@ O algoritmo de cada jogo evolui separadamente, com versão no registro. Os teste
 
 A integração Rust usa o adaptador Python, com argumentos separados (sem shell), timeout de 15 minutos, saída limitada e validação do envelope `client-v1`. Falhas não geram placares substitutos. Baixa confiança ou métricas heurísticas exigem revisão e não são enviadas automaticamente. O código ONNX anterior permanece isolado para referência.
 
+### Atualização (2026-10-27): scripts no Lab, um por versão
+
+Na prática, o analisador por HUD do Earthion é genérico (vídeo, HUD, dígitos, vidas, continues, attempts); o que muda entre jogos é a calibração e as imagens. Os scripts passam a viver no Lab, em `shmupx-lab/validators`, independentes do `shmupx_offline` (que foi o protótipo):
+
+- `engine/` é o motor comum; `engine/analyzers/` guarda os analisadores, escolhidos por nome.
+- Cada script é uma pasta `games/<jogo>/<versão>/` com `script.json` (nome, versão, status `draft`/`approved`, analisador), `config.json` e `templates/`. Mudar calibração ou imagens é criar uma versão nova; as anteriores continuam reproduzíveis.
+- Sem `--version`, vale a mais nova aprovada. O `validator_version` do relatório é a versão da pasta.
+
+O Client continua usando o `shmupx_offline` até receber os scripts publicados pelo Lab (ADR 006). Uma mudança no motor afeta todas as versões; quando a publicação existir, o pacote deve levar o motor junto com a versão.
+
 Ainda faltam catálogo real UUID → script, homologação com vídeos reais, fluxo de revisão/reenvio e empacotamento do runtime Python. Downloads e execução de scripts arbitrários não fazem parte desta decisão. Consulte [o guia operacional](../specs/004-integracao-offline-client.md).

@@ -1,0 +1,101 @@
+{
+  "description": "EARTHION (Mega Drive/Genesis e PC). HUD superior: SCORE/PONT + 8 dígitos, STAGE/FASE, vidas 'xN'. Tela RESULTS com Total Score/Pontos Totais após os créditos.",
+  "reference_height": 720,
+  "sample_interval_s": 2.0,
+  "hud_variants": [
+    {
+      "name": "console_en",
+      "label_template": "labels/hud_score.png",
+      "alt_label_templates": [
+        "labels/hud_target.png"
+      ],
+      "language": "en"
+    },
+    {
+      "name": "pc_pt",
+      "label_template": "labels/hud_pont.png",
+      "alt_label_templates": [
+        "labels/hud_alvo.png"
+      ],
+      "language": "pt"
+    }
+  ],
+  "hud_label_search_region": {
+    "x0": 0.0,
+    "y0": 0.0,
+    "x1": 0.6,
+    "y1": 0.3
+  },
+  "hud_label_min_score": 0.6,
+  "scale_search": {
+    "min": 0.4,
+    "max": 3.2,
+    "coarse_step": 0.01,
+    "fine_step": 0.005
+  },
+  "digit_templates": "digits",
+  "digit_size": [
+    24,
+    28
+  ],
+  "score": {
+    "dx": 147,
+    "dy": 2,
+    "count": 8,
+    "pitch": 24.0,
+    "pad": 4
+  },
+  "lives": {
+    "dx": 888,
+    "dy": 52,
+    "pad": 7,
+    "max_digits": 1
+  },
+  "stage": {
+    "dx": 817,
+    "dy": 27,
+    "pad": 7
+  },
+  "digit_min_score": 0.72,
+  "digit_min_margin": 0.02,
+  "results": {
+    "label_templates": [
+      "labels/res_total_en.png",
+      "labels/res_total_pt.png"
+    ],
+    "label_search_region": {
+      "x0": 0.0,
+      "y0": 0.5,
+      "x1": 0.8,
+      "y1": 1.0
+    },
+    "label_min_score": 0.7,
+    "digits_band": {
+      "dx0": 0,
+      "dx1": 560,
+      "dy0": -10,
+      "dy1": 40
+    },
+    "digit_scales": [
+      0.93,
+      0.97,
+      1.0
+    ],
+    "dense_fps": 10
+  },
+  "final_vote": {
+    "min_consecutive": 10,
+    "window_s": 20,
+    "dense_fps": 6
+  },
+  "lives_dense_fps": 4,
+  "restart": {
+    "score_drop_ratio": 0.5,
+    "confirm_samples": 3
+  },
+  "flash": {
+    "max_mean": 200,
+    "min_label_score": 0.6
+  },
+  "_comment_alt_labels": "alt_label_templates: rótulos que substituem SCORE durante chefes (TARGET/ALVO). Nesses quadros o placar não aparece, mas vidas e fase sim."
+}

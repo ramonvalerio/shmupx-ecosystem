@@ -13,9 +13,14 @@ use tokio::sync::watch;
 pub const VARIAVEL_CAMINHO: &str = "SHMUPX_YTDLP_PATH";
 /// Mensagem (e marca) de um download cancelado pelo admin.
 pub const CANCELADO: &str = "Download cancelado.";
-/// Opcional: navegador de onde o yt-dlp lê os cookies do YouTube (ex.: `chrome`), o contorno que o
-/// próprio yt-dlp recomenda para o bloqueio "Sign in to confirm you're not a bot".
+/// Opcional: navegador de onde o yt-dlp lê os cookies do YouTube (ex.: `firefox`), o contorno que o
+/// próprio yt-dlp recomenda para o bloqueio "Sign in to confirm you're not a bot". A escolha feita na
+/// tela (`config.json` da pasta de validação) vale antes desta variável.
 pub const VARIAVEL_COOKIES: &str = "SHMUPX_YTDLP_COOKIES_FROM_BROWSER";
+/// Navegadores que o `--cookies-from-browser` do yt-dlp conhece.
+pub const NAVEGADORES: [&str; 8] = ["firefox", "chrome", "edge", "brave", "opera", "vivaldi", "chromium", "safari"];
+/// Marca do bloqueio anti-robô do YouTube na saída do yt-dlp.
+const BLOQUEIO_YOUTUBE: &str = "confirm you";
 const TIMEOUT: Duration = Duration::from_secs(3600);
 const EXTENSOES_VIDEO: [&str; 5] = ["mp4", "mkv", "webm", "mov", "avi"];
 
@@ -32,6 +37,61 @@ fn arquivo_da_release() -> &'static str {
     } else {
         "yt-dlp_linux"
     }
+}
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct Config {
+    cookies_navegador: Option<String>,
+}
+
+fn caminho_config(raiz_validacao: &Path) -> PathBuf {
+    raiz_validacao.join("config.json")
+}
+
+/// Navegador escolhido na tela para os cookies do YouTube (`None` = sem cookies).
+pub fn navegador_salvo(raiz_validacao: &Path) -> Option<String> {
+    let texto = std::fs::read_to_string(caminho_config(raiz_validacao)).ok()?;
+    let config: Config = serde_json::from_str(&texto).ok()?;
+    config.cookies_navegador.filter(|n| NAVEGADORES.contains(&n.as_str()))
+}
+
+/// Grava a escolha do navegador (`None` desliga os cookies).
+pub fn salvar_navegador(raiz_validacao: &Path, navegador: Option<&str>) -> Result<(), String> {
+    if navegador.is_some_and(|n| !NAVEGADORES.contains(&n)) {
+        return Err("navegador não suportado pelo yt-dlp".into());
+    }
+    std::fs::create_dir_all(raiz_validacao).map_err(|e| format!("falha ao criar a pasta de dados: {e}"))?;
+    let config = Config { cookies_navegador: navegador.map(str::to_string) };
+    let texto = serde_json::to_string_pretty(&config).map_err(|e| format!("falha ao montar a configuração: {e}"))?;
+    std::fs::write(caminho_config(raiz_validacao), texto).map_err(|e| format!("falha ao gravar a configuração: {e}"))
+}
+
+/// Navegador dos cookies: a escolha da tela, senão a variável de ambiente.
+pub fn navegador_cookies(raiz_validacao: &Path) -> Option<OsString> {
+    navegador_salvo(raiz_validacao).map(OsString::from).or_else(|| std::env::var_os(VARIAVEL_COOKIES).filter(|v| !v.is_empty()))
+}
+
+/// O yt-dlp é Python empacotado: sem isto, num pipe do Windows ele escreve na página de código do
+/// console e acentos e apóstrofos chegam quebrados.
+fn comando(executavel: &Path) -> Command {
+    let mut comando = Command::new(executavel);
+    comando.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
+    comando
+}
+
+/// Mensagem de falha a partir do stderr do yt-dlp: o bloqueio anti-robô do YouTube ganha uma
+/// explicação com o que fazer; o resto vai com a última linha do yt-dlp.
+fn explicar_falha(stderr: &str, com_cookies: bool) -> String {
+    let ultima = stderr.lines().rev().find(|l| !l.trim().is_empty()).map(str::trim).unwrap_or("sem detalhe");
+    if stderr.contains(BLOQUEIO_YOUTUBE) && stderr.contains("not a bot") {
+        let dica = if com_cookies {
+            "Os cookies do navegador escolhido não bastaram: abra o YouTube nele, confirme que está logado e tente de novo (ou escolha outro navegador)."
+        } else {
+            "Escolha, acima da lista, o navegador em que você está logado no YouTube para o yt-dlp usar os cookies dele, e clique em Baixar de novo."
+        };
+        return format!("O YouTube bloqueou o download (pediu login para confirmar que não é um robô). {dica}");
+    }
+    format!("o yt-dlp falhou: {ultima}")
 }
 
 /// Onde o Lab guarda o yt-dlp que ele mesmo instala (dentro da pasta `validacao`).
@@ -116,7 +176,7 @@ pub async fn instalar(destino: &Path) -> Result<String, String> {
 }
 
 pub async fn versao(executavel: &Path) -> Result<String, String> {
-    let mut comando = Command::new(executavel);
+    let mut comando = comando(executavel);
     comando.arg("--version").stdin(Stdio::null()).kill_on_drop(true);
     sem_janela(&mut comando);
     let saida = tokio::time::timeout(Duration::from_secs(15), comando.output())
@@ -134,11 +194,11 @@ pub fn url_valida(url: &str) -> Option<String> {
 
 /// Título e duração (segundos) do vídeo, sem baixar. Cada campo vem numa linha em JSON
 /// (`%(campo)j`), o que protege contra títulos com caracteres especiais.
-pub async fn metadados(executavel: &Path, url: &str) -> Result<(Option<String>, Option<u64>), String> {
+pub async fn metadados(executavel: &Path, url: &str, cookies: Option<&OsString>) -> Result<(Option<String>, Option<u64>), String> {
     let url = url_valida(url).ok_or_else(|| "link inválido".to_string())?;
-    let mut comando = Command::new(executavel);
+    let mut comando = comando(executavel);
     comando.args(["--no-playlist", "--no-warnings", "--skip-download", "--print", "%(title)j", "--print", "%(duration)j"]);
-    if let Some(navegador) = std::env::var_os(VARIAVEL_COOKIES).filter(|v| !v.is_empty()) {
+    if let Some(navegador) = cookies {
         comando.arg("--cookies-from-browser").arg(navegador);
     }
     // Tudo depois de "--" é link: nada que venha da URL vira opção do yt-dlp.
@@ -190,6 +250,7 @@ pub async fn baixar(
     executavel: &Path,
     url: &str,
     pasta: &Path,
+    cookies: Option<&OsString>,
     progresso: watch::Sender<f32>,
     cancelar: watch::Receiver<bool>,
 ) -> Result<PathBuf, String> {
@@ -210,16 +271,16 @@ pub async fn baixar(
     .into_iter()
     .map(OsString::from)
     .collect();
-    if let Some(navegador) = std::env::var_os(VARIAVEL_COOKIES).filter(|v| !v.is_empty()) {
+    if let Some(navegador) = cookies {
         argumentos.push("--cookies-from-browser".into());
-        argumentos.push(navegador);
+        argumentos.push(navegador.clone());
     }
     argumentos.push("-o".into());
     argumentos.push(pasta.join("%(title)s.%(ext)s").into_os_string());
     argumentos.push("--".into());
     argumentos.push(url.into());
 
-    let mut comando = Command::new(executavel);
+    let mut comando = comando(executavel);
     comando
         .args(&argumentos)
         .stdin(Stdio::null())
@@ -257,9 +318,7 @@ pub async fn baixar(
     };
     let status = status.map_err(|e| format!("falha ao aguardar o yt-dlp: {e}"))?;
     if !status.success() {
-        let texto = String::from_utf8_lossy(&erro);
-        let ultima = texto.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("sem detalhe");
-        return Err(format!("o yt-dlp falhou: {}", ultima.trim()));
+        return Err(explicar_falha(&String::from_utf8_lossy(&erro), cookies.is_some()));
     }
     arquivo_baixado(pasta).ok_or_else(|| "o yt-dlp terminou, mas nenhum vídeo apareceu na pasta".to_string())
 }
@@ -315,6 +374,29 @@ mod tests {
         assert!(versao.starts_with("20"), "versão no formato AAAA.MM.DD: {versao}");
         assert_eq!(localizar(&destino).as_deref(), Some(destino.as_path()));
         let _ = std::fs::remove_dir_all(&pasta);
+    }
+
+    #[test]
+    fn bloqueio_do_youtube_vira_explicacao_com_o_que_fazer() {
+        let stderr = "ERROR: [youtube] abc: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies\n";
+        let sem = explicar_falha(stderr, false);
+        assert!(sem.starts_with("O YouTube bloqueou o download") && sem.contains("navegador"));
+        assert!(explicar_falha(stderr, true).contains("não bastaram"));
+        assert_eq!(explicar_falha("x\nERROR: Video unavailable\n\n", false), "o yt-dlp falhou: ERROR: Video unavailable");
+        assert_eq!(explicar_falha("", false), "o yt-dlp falhou: sem detalhe");
+    }
+
+    #[test]
+    fn escolha_do_navegador_fica_na_pasta_de_dados() {
+        let pasta = std::env::temp_dir().join(format!("shmupx-lab-ytdlp-config-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&pasta);
+        assert_eq!(navegador_salvo(&pasta), None);
+        salvar_navegador(&pasta, Some("firefox")).unwrap();
+        assert_eq!(navegador_salvo(&pasta).as_deref(), Some("firefox"));
+        assert_eq!(navegador_cookies(&pasta), Some(OsString::from("firefox")));
+        assert!(salvar_navegador(&pasta, Some("--exec calc")).is_err());
+        salvar_navegador(&pasta, None).unwrap();
+        assert_eq!(navegador_salvo(&pasta), None);
     }
 
     #[test]

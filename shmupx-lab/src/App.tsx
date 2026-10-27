@@ -7,6 +7,7 @@ import CatalogView from "./features/catalog/CatalogView";
 import { useAdminCatalog } from "./features/catalog/useAdminCatalog";
 import ValidationView from "./features/validation/ValidationView";
 import { useValidationEnvironment } from "./features/validation/useValidation";
+import { defaultScript, scriptsOf } from "./lib/validation";
 import { useAuth } from "./auth/useAuth";
 
 export default function App() {
@@ -24,7 +25,7 @@ export default function App() {
     return catalog.games.map((game) => ({
       id: game.id,
       title: game.title,
-      scriptVersion: scripts.find((script) => script.id === game.id)?.version ?? null,
+      scriptVersion: defaultScript(scriptsOf(scripts, game.id))?.version ?? null,
     }));
   }, [catalog.games, validation.environment]);
 
@@ -34,7 +35,7 @@ export default function App() {
   }
 
   const selectedGame = games.find((game) => game.id === selectedGameId) ?? games[0] ?? null;
-  const selectedScript = validation.environment?.scripts.find((script) => script.id === selectedGame?.id) ?? null;
+  const selectedScripts = selectedGame ? scriptsOf(validation.environment?.scripts ?? [], selectedGame.id) : [];
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 antialiased">
@@ -48,7 +49,7 @@ export default function App() {
           <ValidationView
             gameId={selectedGame.id}
             gameTitle={selectedGame.title}
-            script={selectedScript}
+            scripts={selectedScripts}
             environment={validation.environment}
             checkingEnvironment={validation.checking}
             onCheckEnvironment={() => void validation.check()}

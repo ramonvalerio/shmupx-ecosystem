@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+output/
+# Recortes brutos do make_digit_templates.py (só os dígitos renomeados entram no script).
+games/*/*/templates/raw_digits/
+.env
+.env.*
+!.env.example

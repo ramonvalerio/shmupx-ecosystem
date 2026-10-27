@@ -1,0 +1,7 @@
+{
+  "game": "aero-fighters-2",
+  "name": "Aero Fighters 2",
+  "version": "0.1.0",
+  "status": "draft",
+  "analyzer": "hud_score"
+}

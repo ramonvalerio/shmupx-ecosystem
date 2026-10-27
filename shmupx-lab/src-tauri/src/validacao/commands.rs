@@ -54,6 +54,8 @@ pub struct Ambiente {
     pub dependencias: Item,
     pub ytdlp: Item,
     pub scripts: Vec<ScriptInfo>,
+    /// Navegador escolhido para os cookies do YouTube (`None` = sem cookies).
+    pub cookies_navegador: Option<String>,
 }
 
 /// Pasta da validação dentro dos dados do Lab (bancos, vídeos baixados e o yt-dlp instalado).
@@ -157,11 +159,12 @@ fn estado_de_repouso(video: &Video) -> Estado {
 fn iniciar_download(app: &AppHandle, jogo: &str, id: &str, url: String, executavel: PathBuf) -> Result<(), String> {
     let repo = repositorio(app)?;
     let pasta = repo.pasta_videos(jogo, id);
+    let cookies = ytdlp::navegador_cookies(&pasta_validacao(app)?);
     let (app, jogo, id) = (app.clone(), jogo.to_string(), id.to_string());
     tauri::async_runtime::spawn(async move {
         let cancelar = registrar_cancelamento(&app, &id).await;
         // Título e duração primeiro (segundos), para a lista não mostrar só o link durante o download.
-        if let Ok((titulo, duracao)) = ytdlp::metadados(&executavel, &url).await {
+        if let Ok((titulo, duracao)) = ytdlp::metadados(&executavel, &url, cookies.as_ref()).await {
             let _ = alterar_video(&app, &jogo, &id, |v| {
                 if let Some(titulo) = titulo {
                     v.titulo = titulo;
@@ -172,7 +175,7 @@ fn iniciar_download(app: &AppHandle, jogo: &str, id: &str, url: String, executav
         }
         let (tx, rx) = watch::channel(0.0f32);
         let progresso = acompanhar(&app, &jogo, &id, rx, progresso_do_download);
-        let resultado = ytdlp::baixar(&executavel, &url, &pasta, tx, cancelar).await;
+        let resultado = ytdlp::baixar(&executavel, &url, &pasta, cookies.as_ref(), tx, cancelar).await;
         let _ = progresso.await;
         liberar_cancelamento(&app, &id).await;
         if resultado.is_err() && repo.e_pasta_propria(&pasta) {
@@ -198,6 +201,7 @@ fn iniciar_download(app: &AppHandle, jogo: &str, id: &str, url: String, executav
 /// O que a análise precisa e o que está faltando nesta máquina.
 #[tauri::command]
 pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
+    let cookies_navegador = pasta_validacao(&app).ok().and_then(|pasta| ytdlp::navegador_salvo(&pasta));
     let ytdlp = match localizar_ytdlp(&app) {
         Some(exe) => match ytdlp::versao(&exe).await {
             Ok(versao) => Item { ok: true, detalhe: format!("yt-dlp {versao}") },
@@ -205,11 +209,11 @@ pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
         },
         None => Item { ok: false, detalhe: "yt-dlp não encontrado (nem instalado pelo Lab, nem no PATH)".into() },
     };
-    let raiz = match script::raiz_offline() {
+    let raiz = match script::raiz_validadores() {
         Ok(raiz) => raiz,
         Err(e) => {
             let falta = Item { ok: false, detalhe: e.clone() };
-            return Ok(Ambiente { python: falta, dependencias: Item { ok: false, detalhe: e }, ytdlp, scripts: vec![] });
+            return Ok(Ambiente { python: falta, dependencias: Item { ok: false, detalhe: e }, ytdlp, scripts: vec![], cookies_navegador });
         }
     };
     let (python, scripts) = match script::listar_scripts(&raiz).await {
@@ -220,7 +224,7 @@ pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
         Ok(()) => Item { ok: true, detalhe: "OpenCV e NumPy instalados".into() },
         Err(e) => Item { ok: false, detalhe: format!("faltam bibliotecas do script ({e})") },
     };
-    Ok(Ambiente { python, dependencias, ytdlp, scripts })
+    Ok(Ambiente { python, dependencias, ytdlp, scripts, cookies_navegador })
 }
 
 #[tauri::command]
@@ -243,7 +247,7 @@ pub async fn validacao_listar(app: AppHandle, state: State<'_, ValidacaoState>, 
 /// Lê em segundo plano a duração de vídeos que ainda não a têm (ex.: cadastrados antes de a
 /// duração existir). Cada vídeo é medido uma vez por execução do Lab.
 async fn medir_duracoes(app: &AppHandle, jogo: &str, videos: Vec<(String, String)>) {
-    let Ok(raiz) = script::raiz_offline() else { return };
+    let Ok(raiz) = script::raiz_validadores() else { return };
     let pendentes: Vec<(String, String)> = {
         let estado = app.state::<ValidacaoState>();
         let mut medindo = estado.medindo.lock().await;
@@ -416,9 +420,12 @@ pub async fn validacao_remover(app: AppHandle, game_id: String, video_id: String
 /// Põe os vídeos na fila de análise e processa um por vez em segundo plano. Devolve quantos
 /// entraram (vídeos sem arquivo, baixando ou já na fila são ignorados).
 #[tauri::command]
-pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<String>) -> Result<usize, String> {
+pub async fn validacao_rodar(app: AppHandle, game_id: String, versao: String, video_ids: Vec<String>) -> Result<usize, String> {
     conferir_jogo(&game_id)?;
-    let raiz = script::raiz_offline()?;
+    if !gerador::versao_valida(&versao) {
+        return Err("versão de script inválida".into());
+    }
+    let raiz = script::raiz_validadores()?;
     let enfileirados = alterar(&app, &game_id, |dataset| {
         let mut ids = Vec::new();
         for video in dataset.videos.iter_mut().filter(|v| video_ids.contains(&v.id)) {
@@ -453,7 +460,7 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
             let _ = alterar_video(&app_tarefa, &jogo, &id, |v| v.estado = Estado::Analisando { progresso: 0.0, sessao: sessao() }).await;
             let (tx, rx) = watch::channel(0.0f32);
             let progresso = acompanhar(&app_tarefa, &jogo, &id, rx, progresso_da_analise);
-            let resultado = script::analisar(&raiz, &jogo, &PathBuf::from(caminho), tx, cancelar).await;
+            let resultado = script::analisar(&raiz, &jogo, &versao, &PathBuf::from(caminho), tx, cancelar).await;
             let _ = progresso.await;
             liberar_cancelamento(&app_tarefa, &id).await;
             let _ = alterar_video(&app_tarefa, &jogo, &id, |v| match resultado {
@@ -470,19 +477,32 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
     Ok(quantidade)
 }
 
-/// Arquivos do validador do jogo, só para leitura na tela (script, calibração e registro).
+/// Arquivos de uma versão do script do jogo, só para leitura na tela.
 #[tauri::command]
-pub async fn validacao_script_fonte(game_id: String) -> Result<Vec<ArquivoFonte>, String> {
+pub async fn validacao_script_fonte(game_id: String, versao: String) -> Result<Vec<ArquivoFonte>, String> {
     conferir_jogo(&game_id)?;
-    fonte::ler(&script::raiz_offline()?, &game_id)
+    fonte::ler(&script::raiz_validadores()?, &game_id, &versao)
 }
 
-/// Gera o rascunho do validador do jogo a partir do Earthion (lógica, calibração, pastas de
-/// imagens e registro em 0.1.0). Não sobrescreve nada que já exista.
+/// Cria o primeiro script do jogo (0.1.0, rascunho) a partir da calibração do Earthion.
+/// Não sobrescreve nada que já exista.
 #[tauri::command]
 pub async fn validacao_gerar_script(game_id: String, titulo: String) -> Result<ScriptGerado, String> {
     conferir_jogo(&game_id)?;
-    gerador::gerar(&script::raiz_offline()?, &game_id, &titulo)
+    gerador::gerar(&script::raiz_validadores()?, &game_id, &titulo)
+}
+
+/// Cria a próxima versão do script (rascunho) copiando calibração e imagens de `de_versao`.
+#[tauri::command]
+pub async fn validacao_nova_versao(game_id: String, de_versao: String) -> Result<ScriptGerado, String> {
+    conferir_jogo(&game_id)?;
+    gerador::nova_versao(&script::raiz_validadores()?, &game_id, &de_versao)
+}
+
+/// Escolhe o navegador de onde o yt-dlp lê os cookies do YouTube (`None` desliga).
+#[tauri::command]
+pub async fn validacao_definir_cookies(app: AppHandle, navegador: Option<String>) -> Result<(), String> {
+    ytdlp::salvar_navegador(&pasta_validacao(&app)?, navegador.as_deref())
 }
 
 /// Instala (ou atualiza) o yt-dlp oficial na pasta do Lab, conferindo o SHA-256 da release.

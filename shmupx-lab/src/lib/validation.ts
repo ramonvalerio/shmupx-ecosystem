@@ -71,10 +71,32 @@ export interface EnvironmentItem {
   detalhe: string;
 }
 
+/** Uma versão do script de um jogo (`validators/games/<id>/<version>/`). */
 export interface ScriptInfo {
   id: string;
   name: string;
   version: string;
+  status: "draft" | "approved";
+}
+
+function versionKey(version: string): number[] {
+  return version.split(".").map(Number);
+}
+
+function compareVersions(a: string, b: string): number {
+  const [x, y] = [versionKey(a), versionKey(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+
+/** Versões do script do jogo, da mais nova para a mais antiga. */
+export function scriptsOf(scripts: ScriptInfo[], gameId: string): ScriptInfo[] {
+  return scripts.filter((script) => script.id === gameId).sort((a, b) => compareVersions(b.version, a.version));
+}
+
+/** A versão que vale por padrão (a mesma regra do motor): a mais nova aprovada, senão a mais nova. */
+export function defaultScript(versions: ScriptInfo[]): ScriptInfo | null {
+  return versions.find((script) => script.status === "approved") ?? versions[0] ?? null;
 }
 
 export interface ValidationEnvironment {
@@ -82,6 +104,28 @@ export interface ValidationEnvironment {
   dependencias: EnvironmentItem;
   ytdlp: EnvironmentItem;
   scripts: ScriptInfo[];
+  /** Navegador de onde o yt-dlp lê os cookies do YouTube; `null` = sem cookies. */
+  cookies_navegador: string | null;
+}
+
+/** Navegadores que o `--cookies-from-browser` do yt-dlp conhece (mesma lista de `ytdlp.rs`). */
+export const COOKIE_BROWSERS: { id: string; label: string }[] = [
+  { id: "firefox", label: "Firefox" },
+  { id: "chrome", label: "Chrome" },
+  { id: "edge", label: "Edge" },
+  { id: "brave", label: "Brave" },
+  { id: "opera", label: "Opera" },
+  { id: "vivaldi", label: "Vivaldi" },
+  { id: "chromium", label: "Chromium" },
+  { id: "safari", label: "Safari" },
+];
+
+/** Escolhe o navegador dos cookies do YouTube (`null` desliga). Vale para os próximos downloads. */
+export const setCookiesBrowser = (navegador: string | null) => invoke<void>("validacao_definir_cookies", { navegador });
+
+/** O YouTube pediu login para confirmar que não é um robô (inclui mensagens antigas, cruas do yt-dlp). */
+export function isYoutubeBlock(error: string): boolean {
+  return error.startsWith("O YouTube bloqueou") || error.includes("not a bot");
 }
 
 export const getEnvironment = () => invoke<ValidationEnvironment>("validacao_ambiente");
@@ -93,23 +137,26 @@ export const installYtDlp = () => invoke<EnvironmentItem>("validacao_instalar_yt
 export interface ScriptSourceFile {
   nome: string;
   caminho: string;
-  linguagem: "python" | "json";
+  linguagem: "python" | "json" | "markdown";
   conteudo: string;
   truncado: boolean;
 }
 
-/** Script Python, calibração e registro do validador do jogo (só leitura). */
-export const getScriptSource = (gameId: string) => invoke<ScriptSourceFile[]>("validacao_script_fonte", { gameId });
+/** Manifesto, calibração, passo a passo e analisador de uma versão do script (só leitura). */
+export const getScriptSource = (gameId: string, versao: string) => invoke<ScriptSourceFile[]>("validacao_script_fonte", { gameId, versao });
 
-/** Resultado de "Gerar script": arquivos criados e recortes do HUD que faltam. */
+/** Resultado de "Gerar script" e "Nova versão": pasta criada e recortes do HUD que faltam. */
 export interface GeneratedScript {
   versao: string;
   criados: string[];
   imagens_pendentes: string[];
 }
 
-/** Gera o rascunho do validador do jogo a partir do Earthion. Não sobrescreve arquivos. */
+/** Cria o primeiro script do jogo (0.1.0, rascunho) a partir do Earthion. Não sobrescreve arquivos. */
 export const generateScript = (gameId: string, titulo: string) => invoke<GeneratedScript>("validacao_gerar_script", { gameId, titulo });
+
+/** Cria a próxima versão (rascunho) copiando calibração e imagens de `deVersao`. */
+export const newScriptVersion = (gameId: string, deVersao: string) => invoke<GeneratedScript>("validacao_nova_versao", { gameId, deVersao });
 
 export const listVideos = (gameId: string) => invoke<ValidationDataset>("validacao_listar", { gameId });
 
@@ -124,7 +171,8 @@ export const setExpected = (gameId: string, videoId: string, gabarito: Expected)
 
 export const removeVideo = (gameId: string, videoId: string) => invoke<void>("validacao_remover", { gameId, videoId });
 
-export const runVideos = (gameId: string, videoIds: string[]) => invoke<number>("validacao_rodar", { gameId, videoIds });
+/** Põe os vídeos na fila de análise com a versão `versao` do script. */
+export const runVideos = (gameId: string, versao: string, videoIds: string[]) => invoke<number>("validacao_rodar", { gameId, versao, videoIds });
 
 /** Tira da fila, ou interrompe o download/análise em andamento. */
 export const cancelProcessing = (gameId: string, videoId: string) => invoke<void>("validacao_cancelar", { gameId, videoId });

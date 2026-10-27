@@ -1,6 +1,6 @@
 import Badge from "../../components/ui/Badge";
 import ProgressBar from "../../components/ui/ProgressBar";
-import type { ValidationVideo } from "../../lib/validation";
+import { isYoutubeBlock, type ValidationVideo } from "../../lib/validation";
 
 /** Situação do vídeo: andamento (download/fila/análise) ou veredito e aceitação. */
 export default function VideoStatus({ video, remaining }: { video: ValidationVideo; remaining?: string }) {
@@ -22,8 +22,18 @@ export default function VideoStatus({ video, remaining }: { video: ValidationVid
       return <Badge>Aguardando análise</Badge>;
     case "na_fila":
       return <Badge>Na fila</Badge>;
-    case "falhou":
-      return <Badge tone="danger">{estado.erro === "Download cancelado." ? "Download cancelado" : "Falha no download"}</Badge>;
+    case "falhou": {
+      if (estado.erro === "Download cancelado.") return <Badge tone="danger">Download cancelado</Badge>;
+      const blocked = isYoutubeBlock(estado.erro);
+      return (
+        <span className="flex max-w-80 flex-col items-start gap-1">
+          <Badge tone="danger">{blocked ? "Bloqueado pelo YouTube" : "Falha no download"}</Badge>
+          <span title={estado.erro} className="line-clamp-2 text-[11px] leading-snug text-red-300/80">
+            {blocked ? "Escolha o navegador dos cookies do YouTube (acima) e clique em Baixar de novo." : estado.erro}
+          </span>
+        </span>
+      );
+    }
     case "concluido":
       if (!resultado) return <Badge>Aguardando análise</Badge>;
       if (resultado.erro) return <Badge tone="danger">Erro no script</Badge>;

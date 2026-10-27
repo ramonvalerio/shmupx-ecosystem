@@ -9,6 +9,11 @@ import {
   downloadAgain,
   addLocalVideos,
   addYoutubeVideo,
+  COOKIE_BROWSERS,
+  defaultScript,
+  isYoutubeBlock,
+  newScriptVersion,
+  setCookiesBrowser,
   percent,
   removeVideo,
   runVideos,
@@ -28,8 +33,8 @@ import VideoTable from "./VideoTable";
 interface ValidationViewProps {
   gameId: string;
   gameTitle: string;
-  /** Script registrado para o jogo; `null` = o jogo ainda não tem validador. */
-  script: ScriptInfo | null;
+  /** Versões do script do jogo, da mais nova para a mais antiga; vazio = o jogo ainda não tem script. */
+  scripts: ScriptInfo[];
   environment: ValidationEnvironment | null;
   checkingEnvironment: boolean;
   onCheckEnvironment: () => void;
@@ -75,7 +80,7 @@ function EnvironmentNotice({ environment, checking, onCheck }: { environment: Va
     issues.push({
       title: "Ambiente do script incompleto (OpenCV/NumPy)",
       detail: environment.dependencias.detalhe,
-      command: "cd shmupx_offline; py -3.12 -m venv .venv; .\\.venv\\Scripts\\pip install -r requirements.txt",
+      command: "cd shmupx-lab\\validators; py -3.12 -m venv .venv; .\\.venv\\Scripts\\pip install -r requirements.txt",
     });
   }
   if (!environment.ytdlp.ok) {
@@ -119,7 +124,7 @@ function EnvironmentNotice({ environment, checking, onCheck }: { environment: Va
 }
 
 /** Banco de testes do script do jogo: vídeos, gabarito, resultados e percentuais. */
-export default function ValidationView({ gameId, gameTitle, script, environment, checkingEnvironment, onCheckEnvironment }: ValidationViewProps) {
+export default function ValidationView({ gameId, gameTitle, scripts, environment, checkingEnvironment, onCheckEnvironment }: ValidationViewProps) {
   const { dataset, error } = useValidationDataset(gameId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [url, setUrl] = useState("");
@@ -128,10 +133,15 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   const [notice, setNotice] = useState<string | null>(null);
   const [showScript, setShowScript] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
+  // Versão escolhida; sem escolha (ou se ela sumir), vale a padrão: a mais nova aprovada.
+  const [version, setVersion] = useState<string | null>(null);
+  const script = scripts.find((item) => item.version === version) ?? defaultScript(scripts);
 
   useEffect(() => {
     setSelectedId(null);
     setActionError(null);
+    setVersion(null);
   }, [gameId]);
 
   useEffect(() => {
@@ -148,6 +158,17 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   const canRun = script !== null && ready;
   const pending = videos.filter((video) => video.estado.fase === "pronto" && video.caminho !== null);
   const rerunnable = videos.filter(runnable);
+  const blocked = videos.some((video) => video.estado.fase === "falhou" && isYoutubeBlock(video.estado.erro));
+  const [savingCookies, setSavingCookies] = useState(false);
+
+  async function changeCookies(browser: string | null) {
+    setSavingCookies(true);
+    await act(async () => {
+      await setCookiesBrowser(browser);
+      onCheckEnvironment();
+    }, browser ? "Cookies do YouTube ativados para os próximos downloads." : "Downloads sem cookies do YouTube.");
+    setSavingCookies(false);
+  }
 
   async function act(action: () => Promise<unknown>, success?: string) {
     setActionError(null);
@@ -178,10 +199,24 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   }
 
   async function run(list: ValidationVideo[]) {
+    if (!script) return;
+    const scriptVersion = script.version;
     await act(async () => {
-      const queued = await runVideos(gameId, list.map((video) => video.id));
+      const queued = await runVideos(gameId, scriptVersion, list.map((video) => video.id));
       setNotice(queued === 1 ? "1 vídeo na fila de análise." : `${queued} vídeos na fila de análise.`);
     });
+  }
+
+  async function createVersion() {
+    if (!script) return;
+    setCreatingVersion(true);
+    await act(async () => {
+      const created = await newScriptVersion(gameId, script.version);
+      setVersion(created.versao);
+      onCheckEnvironment();
+      setNotice(`Versão ${created.versao} criada a partir da ${script.version} (rascunho).`);
+    });
+    setCreatingVersion(false);
   }
 
   const saveExpected = (video: ValidationVideo, expected: Expected) => act(() => setExpected(gameId, video.id, expected));
@@ -196,12 +231,35 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
             <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">Validação do script</p>
             <h1 className="mt-0.5 flex flex-wrap items-center gap-3 text-xl font-semibold text-zinc-100">
               {gameTitle}
-              {script ? <Badge tone="info">script {script.id} {script.version}</Badge> : <Badge tone="warning">sem script</Badge>}
+              {script ? (
+                <>
+                  <select
+                    value={script.version}
+                    onChange={(event) => setVersion(event.target.value)}
+                    aria-label="Versão do script"
+                    title="Versão do script usada para rodar e ver"
+                    className="h-7 rounded-md border border-white/10 bg-zinc-950 px-2 font-mono text-xs font-normal text-zinc-200 outline-none focus:border-cyan-400/60"
+                  >
+                    {scripts.map((item) => (
+                      <option key={item.version} value={item.version}>
+                        {item.version}{item.status === "draft" ? " · rascunho" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {script.status === "draft" ? <Badge tone="warning">rascunho</Badge> : <Badge tone="info">aprovado</Badge>}
+                </>
+              ) : (
+                <Badge tone="warning">sem script</Badge>
+              )}
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {!script && (
-              <Button onClick={() => setShowGenerate(true)} title="Cria o rascunho do validador deste jogo a partir do Earthion">
+            {script ? (
+              <Button loading={creatingVersion} onClick={() => void createVersion()} title={`Cria a próxima versão (rascunho) copiando a ${script.version}`}>
+                Nova versão
+              </Button>
+            ) : (
+              <Button onClick={() => setShowGenerate(true)} title="Cria o primeiro script deste jogo a partir do Earthion">
                 Gerar script
               </Button>
             )}
@@ -220,7 +278,7 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
 
         {!script && (
           <p className="mx-8 mb-4 rounded-lg border border-white/5 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-400">
-            Este jogo ainda não tem script de validação registrado em <code className="font-mono text-zinc-300">shmupx_offline</code>. Dá para reunir os vídeos e o gabarito agora e rodar quando o script existir.
+            Este jogo ainda não tem script de validação em <code className="font-mono text-zinc-300">shmupx-lab/validators/games/{gameId}</code>. Dá para reunir os vídeos e o gabarito agora e rodar quando o script existir.
           </p>
         )}
         {environment && <EnvironmentNotice environment={environment} checking={checkingEnvironment} onCheck={onCheckEnvironment} />}
@@ -261,7 +319,31 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
           </Button>
           <Button onClick={() => void onAddFiles()}>Adicionar arquivos</Button>
         </form>
-        <p className="-mt-2 px-8 pb-3 text-[11px] text-zinc-600">Use gameplays suas ou de quem autorizou: os vídeos ficam só neste PC.</p>
+        <div className="-mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-8 pb-3 text-[11px]">
+          <p className="text-zinc-600">Use gameplays suas ou de quem autorizou: os vídeos ficam só neste PC.</p>
+          <label className="flex items-center gap-2 text-zinc-400" title="O yt-dlp usa os cookies deste navegador; escolha um em que você esteja logado no YouTube. Contorna o bloqueio “confirme que não é um robô”.">
+            Cookies do YouTube
+            <select
+              value={environment?.cookies_navegador ?? ""}
+              disabled={!environment || savingCookies}
+              onChange={(event) => void changeCookies(event.target.value || null)}
+              className={`h-7 rounded-md border bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-cyan-400/60 ${blocked && !environment?.cookies_navegador ? "border-amber-400/60" : "border-white/10"}`}
+            >
+              <option value="">nenhum</option>
+              {COOKIE_BROWSERS.map((browser) => (
+                <option key={browser.id} value={browser.id}>{browser.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {blocked && (
+          <p role="status" className="mx-8 mb-4 flex gap-2 rounded-md border border-amber-400/20 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-100">
+            <IconAlert className="mt-0.5 flex-shrink-0 text-amber-300" />
+            <span>
+              O YouTube bloqueou downloads deste PC (pediu login para confirmar que não é um robô). Em <strong>Cookies do YouTube</strong>, escolha um navegador em que você esteja logado no YouTube — no Windows, o Firefox costuma funcionar melhor que Chrome e Edge — e clique em <strong>Baixar de novo</strong>.
+            </span>
+          </p>
+        )}
 
         {(error || actionError) && (
           <p role="alert" className="mx-8 mb-4 flex gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -327,7 +409,10 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
           gameId={gameId}
           gameTitle={gameTitle}
           onClose={() => setShowGenerate(false)}
-          onGenerated={() => onCheckEnvironment()}
+          onGenerated={() => {
+            setVersion(null);
+            onCheckEnvironment();
+          }}
         />
       )}
 
