@@ -11,6 +11,8 @@ use tokio::process::Command;
 use tokio::sync::watch;
 
 pub const VARIAVEL_CAMINHO: &str = "SHMUPX_YTDLP_PATH";
+/// Mensagem (e marca) de um download cancelado pelo admin.
+pub const CANCELADO: &str = "Download cancelado.";
 /// Opcional: navegador de onde o yt-dlp lê os cookies do YouTube (ex.: `chrome`), o contorno que o
 /// próprio yt-dlp recomenda para o bloqueio "Sign in to confirm you're not a bot".
 pub const VARIAVEL_COOKIES: &str = "SHMUPX_YTDLP_COOKIES_FROM_BROWSER";
@@ -130,6 +132,44 @@ pub fn url_valida(url: &str) -> Option<String> {
     matches!(parsed.scheme(), "http" | "https").then(|| parsed.to_string())
 }
 
+/// Título e duração (segundos) do vídeo, sem baixar. Cada campo vem numa linha em JSON
+/// (`%(campo)j`), o que protege contra títulos com caracteres especiais.
+pub async fn metadados(executavel: &Path, url: &str) -> Result<(Option<String>, Option<u64>), String> {
+    let url = url_valida(url).ok_or_else(|| "link inválido".to_string())?;
+    let mut comando = Command::new(executavel);
+    comando.args(["--no-playlist", "--no-warnings", "--skip-download", "--print", "%(title)j", "--print", "%(duration)j"]);
+    if let Some(navegador) = std::env::var_os(VARIAVEL_COOKIES).filter(|v| !v.is_empty()) {
+        comando.arg("--cookies-from-browser").arg(navegador);
+    }
+    // Tudo depois de "--" é link: nada que venha da URL vira opção do yt-dlp.
+    comando.arg("--").arg(&url).stdin(Stdio::null()).kill_on_drop(true);
+    sem_janela(&mut comando);
+    let saida = tokio::time::timeout(Duration::from_secs(60), comando.output())
+        .await
+        .map_err(|_| "o yt-dlp demorou demais para ler os dados do vídeo".to_string())?
+        .map_err(|e| format!("falha ao executar o yt-dlp: {e}"))?;
+    if !saida.status.success() {
+        return Err("o yt-dlp não conseguiu ler os dados do vídeo".into());
+    }
+    Ok(interpretar_metadados(&String::from_utf8_lossy(&saida.stdout)))
+}
+
+/// Primeira linha: título em JSON; segunda: duração em segundos (número ou `null`/`NA`).
+fn interpretar_metadados(saida: &str) -> (Option<String>, Option<u64>) {
+    let mut linhas = saida.lines().filter(|l| !l.trim().is_empty());
+    let titulo = linhas
+        .next()
+        .and_then(|l| serde_json::from_str::<String>(l.trim()).ok())
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    let duracao = linhas
+        .next()
+        .and_then(|l| serde_json::from_str::<f64>(l.trim()).ok())
+        .filter(|d| d.is_finite() && *d >= 0.0)
+        .map(|d| d.round() as u64);
+    (titulo, duracao)
+}
+
 /// `[download]  42.3% of ...` -> 42.3
 pub fn progresso_da_linha(linha: &str) -> Option<f32> {
     let resto = linha.trim_start().strip_prefix("[download]")?;
@@ -146,7 +186,13 @@ fn sem_janela(comando: &mut Command) {
 
 /// Baixa o vídeo para `pasta` (criada se preciso) e devolve o arquivo produzido. O progresso
 /// (0 a 100) é publicado em `progresso`.
-pub async fn baixar(executavel: &Path, url: &str, pasta: &Path, progresso: watch::Sender<f32>) -> Result<PathBuf, String> {
+pub async fn baixar(
+    executavel: &Path,
+    url: &str,
+    pasta: &Path,
+    progresso: watch::Sender<f32>,
+    cancelar: watch::Receiver<bool>,
+) -> Result<PathBuf, String> {
     let url = url_valida(url).ok_or_else(|| "Isso não parece um link de vídeo (http/https).".to_string())?;
     std::fs::create_dir_all(pasta).map_err(|e| format!("falha ao criar a pasta do vídeo: {e}"))?;
 
@@ -202,9 +248,13 @@ pub async fn baixar(executavel: &Path, url: &str, pasta: &Path, progresso: watch
         let ((), erro, status) = tokio::join!(ler_progresso, ler_erro, filho.wait());
         (erro, status)
     };
-    let (erro, status) = tokio::time::timeout(TIMEOUT, processo)
-        .await
-        .map_err(|_| "o download passou de 1 hora e foi cancelado".to_string())?;
+    // Cancelar descarta o futuro; o processo do yt-dlp morre junto (kill_on_drop).
+    let (erro, status) = tokio::select! {
+        espera = tokio::time::timeout(TIMEOUT, processo) => {
+            espera.map_err(|_| "o download passou de 1 hora e foi cancelado".to_string())?
+        }
+        _ = super::esperar_cancelamento(cancelar) => return Err(CANCELADO.to_string()),
+    };
     let status = status.map_err(|e| format!("falha ao aguardar o yt-dlp: {e}"))?;
     if !status.success() {
         let texto = String::from_utf8_lossy(&erro);
@@ -270,6 +320,17 @@ mod tests {
     #[test]
     fn sha256_em_hexadecimal() {
         assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn le_titulo_e_duracao_dos_metadados() {
+        assert_eq!(
+            interpretar_metadados("\"EARTHION - No Death Clear (Normal)\"\n1834.0\n"),
+            (Some("EARTHION - No Death Clear (Normal)".into()), Some(1834))
+        );
+        assert_eq!(interpretar_metadados("\"T\\u00edtulo\"\nnull\n"), (Some("Título".into()), None));
+        assert_eq!(interpretar_metadados("\"x\"\nNA\n"), (Some("x".into()), None));
+        assert_eq!(interpretar_metadados(""), (None, None));
     }
 
     #[test]

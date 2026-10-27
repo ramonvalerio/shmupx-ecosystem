@@ -7,6 +7,7 @@ pub mod validacao;
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_opener::init())
     .manage(validacao::commands::ValidacaoState::default())
     .invoke_handler(tauri::generate_handler![
       ai::commands::sugerir_jogo,
@@ -15,6 +16,8 @@ pub fn run() {
       validacao::commands::validacao_instalar_ytdlp,
       validacao::commands::validacao_listar,
       validacao::commands::validacao_adicionar_youtube,
+      validacao::commands::validacao_baixar_de_novo,
+      validacao::commands::validacao_cancelar,
       validacao::commands::validacao_adicionar_arquivos,
       validacao::commands::validacao_definir_gabarito,
       validacao::commands::validacao_remover,

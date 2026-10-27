@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -18,6 +19,10 @@ const EVENTO: &str = "validacao://atualizado";
 pub struct ValidacaoState {
     gravacao: Mutex<()>,
     fila: Mutex<()>,
+    /// Vídeos com a duração sendo lida agora (evita repetir a leitura a cada atualização da lista).
+    medindo: Mutex<HashSet<String>>,
+    /// Sinal de cancelamento de cada download ou análise em andamento, por id do vídeo.
+    cancelamentos: Mutex<HashMap<String, watch::Sender<bool>>>,
 }
 
 /// Vídeo com o veredito contra o gabarito já calculado (a regra fica só aqui, não na tela).
@@ -98,6 +103,96 @@ async fn alterar_video(app: &AppHandle, jogo: &str, id: &str, mudanca: impl FnOn
     .await
 }
 
+/// Cria o sinal de cancelamento do vídeo e devolve o lado que a tarefa escuta.
+async fn registrar_cancelamento(app: &AppHandle, id: &str) -> watch::Receiver<bool> {
+    let (tx, rx) = watch::channel(false);
+    app.state::<ValidacaoState>().cancelamentos.lock().await.insert(id.to_string(), tx);
+    rx
+}
+
+async fn liberar_cancelamento(app: &AppHandle, id: &str) {
+    app.state::<ValidacaoState>().cancelamentos.lock().await.remove(id);
+}
+
+/// Publica no banco o progresso que a tarefa manda por `rx`, no máximo uma vez por segundo.
+/// Termina quando a tarefa larga o canal.
+fn acompanhar(
+    app: &AppHandle,
+    jogo: &str,
+    id: &str,
+    mut rx: watch::Receiver<f32>,
+    aplicar: fn(&mut Video, f32),
+) -> tauri::async_runtime::JoinHandle<()> {
+    let (app, jogo, id) = (app.clone(), jogo.to_string(), id.to_string());
+    tauri::async_runtime::spawn(async move {
+        while rx.changed().await.is_ok() {
+            let valor = *rx.borrow_and_update();
+            let _ = alterar_video(&app, &jogo, &id, |v| aplicar(v, valor)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+}
+
+fn progresso_do_download(video: &mut Video, valor: f32) {
+    if matches!(video.estado, Estado::Baixando { .. }) {
+        video.estado = Estado::Baixando { progresso: valor, sessao: sessao() };
+    }
+}
+
+fn progresso_da_analise(video: &mut Video, valor: f32) {
+    if matches!(video.estado, Estado::Analisando { .. }) {
+        video.estado = Estado::Analisando { progresso: valor, sessao: sessao() };
+    }
+}
+
+/// Estado de um vídeo que sai da fila ou da análise sem resultado novo.
+fn estado_de_repouso(video: &Video) -> Estado {
+    if video.resultado.is_some() { Estado::Concluido } else { Estado::Pronto }
+}
+
+/// Baixa o vídeo em segundo plano (metadados, progresso, cancelamento); a tela acompanha pelos
+/// eventos. O vídeo já deve estar no banco em `Baixando`.
+fn iniciar_download(app: &AppHandle, jogo: &str, id: &str, url: String, executavel: PathBuf) -> Result<(), String> {
+    let repo = repositorio(app)?;
+    let pasta = repo.pasta_videos(jogo, id);
+    let (app, jogo, id) = (app.clone(), jogo.to_string(), id.to_string());
+    tauri::async_runtime::spawn(async move {
+        let cancelar = registrar_cancelamento(&app, &id).await;
+        // Título e duração primeiro (segundos), para a lista não mostrar só o link durante o download.
+        if let Ok((titulo, duracao)) = ytdlp::metadados(&executavel, &url).await {
+            let _ = alterar_video(&app, &jogo, &id, |v| {
+                if let Some(titulo) = titulo {
+                    v.titulo = titulo;
+                }
+                v.duracao_segundos = duracao.or(v.duracao_segundos);
+            })
+            .await;
+        }
+        let (tx, rx) = watch::channel(0.0f32);
+        let progresso = acompanhar(&app, &jogo, &id, rx, progresso_do_download);
+        let resultado = ytdlp::baixar(&executavel, &url, &pasta, tx, cancelar).await;
+        let _ = progresso.await;
+        liberar_cancelamento(&app, &id).await;
+        if resultado.is_err() && repo.e_pasta_propria(&pasta) {
+            // Restos de um download que não terminou não servem para nada.
+            let _ = std::fs::remove_dir_all(&pasta);
+        }
+        let _ = alterar_video(&app, &jogo, &id, |v| match resultado {
+            Ok(arquivo) => {
+                // Sem metadados, o nome do arquivo (que o yt-dlp gera a partir do título) vira o título.
+                if matches!(&v.origem, Origem::Youtube { url } if *url == v.titulo) {
+                    v.titulo = arquivo.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| v.titulo.clone());
+                }
+                v.caminho = Some(arquivo.to_string_lossy().into_owned());
+                v.estado = Estado::Pronto;
+            }
+            Err(erro) => v.estado = Estado::Falhou { erro },
+        })
+        .await;
+    });
+    Ok(())
+}
+
 /// O que a análise precisa e o que está faltando nesta máquina.
 #[tauri::command]
 pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
@@ -132,8 +227,37 @@ pub async fn validacao_listar(app: AppHandle, state: State<'_, ValidacaoState>, 
     let _trava = state.gravacao.lock().await;
     let dataset = repositorio(&app)?.carregar(&game_id)?;
     let resumo = dados::resumo(&dataset);
+    let sem_duracao: Vec<(String, String)> = dataset
+        .videos
+        .iter()
+        .filter(|v| v.duracao_segundos.is_none() && !matches!(v.estado, Estado::Baixando { .. }))
+        .filter_map(|v| Some((v.id.clone(), v.caminho.clone()?)))
+        .collect();
     let videos = dataset.videos.into_iter().map(|video| VideoView { acertou: video.acertou(), video }).collect();
+    medir_duracoes(&app, &game_id, sem_duracao).await;
     Ok(DatasetView { videos, resumo })
+}
+
+/// Lê em segundo plano a duração de vídeos que ainda não a têm (ex.: cadastrados antes de a
+/// duração existir). Cada vídeo é medido uma vez por execução do Lab.
+async fn medir_duracoes(app: &AppHandle, jogo: &str, videos: Vec<(String, String)>) {
+    let Ok(raiz) = script::raiz_offline() else { return };
+    let pendentes: Vec<(String, String)> = {
+        let estado = app.state::<ValidacaoState>();
+        let mut medindo = estado.medindo.lock().await;
+        videos.into_iter().filter(|(id, _)| medindo.insert(id.clone())).collect()
+    };
+    if pendentes.is_empty() {
+        return;
+    }
+    let (app_tarefa, jogo) = (app.clone(), jogo.to_string());
+    tauri::async_runtime::spawn(async move {
+        for (id, caminho) in pendentes {
+            if let Some(duracao) = script::duracao_video(&raiz, &PathBuf::from(caminho)).await {
+                let _ = alterar_video(&app_tarefa, &jogo, &id, |v| v.duracao_segundos = Some(duracao)).await;
+            }
+        }
+    });
 }
 
 /// Cadastra o vídeo e baixa em segundo plano; a tela acompanha pelos eventos.
@@ -148,6 +272,7 @@ pub async fn validacao_adicionar_youtube(app: AppHandle, game_id: String, url: S
         origem: Origem::Youtube { url: url.clone() },
         caminho: None,
         adicionado_em: agora(),
+        duracao_segundos: None,
         gabarito: Gabarito::default(),
         estado: Estado::Baixando { progresso: 0.0, sessao: sessao() },
         resultado: None,
@@ -158,38 +283,54 @@ pub async fn validacao_adicionar_youtube(app: AppHandle, game_id: String, url: S
         Ok(())
     })
     .await?;
-
-    let pasta = repositorio(&app)?.pasta_videos(&game_id, &video.id);
-    let (app_tarefa, jogo, id) = (app.clone(), game_id.clone(), video.id.clone());
-    tauri::async_runtime::spawn(async move {
-        let (tx, mut rx) = watch::channel(0.0f32);
-        // Publica o progresso no banco no máximo uma vez por segundo.
-        let (app_progresso, jogo_progresso, id_progresso) = (app_tarefa.clone(), jogo.clone(), id.clone());
-        let progresso = tauri::async_runtime::spawn(async move {
-            while rx.changed().await.is_ok() {
-                let valor = *rx.borrow_and_update();
-                let _ = alterar_video(&app_progresso, &jogo_progresso, &id_progresso, |v| {
-                    if matches!(v.estado, Estado::Baixando { .. }) {
-                        v.estado = Estado::Baixando { progresso: valor, sessao: sessao() };
-                    }
-                })
-                .await;
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        });
-        let resultado = ytdlp::baixar(&executavel, &url, &pasta, tx).await;
-        let _ = progresso.await;
-        let _ = alterar_video(&app_tarefa, &jogo, &id, |v| match resultado {
-            Ok(arquivo) => {
-                v.titulo = arquivo.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| v.titulo.clone());
-                v.caminho = Some(arquivo.to_string_lossy().into_owned());
-                v.estado = Estado::Pronto;
-            }
-            Err(erro) => v.estado = Estado::Falhou { erro },
-        })
-        .await;
-    });
+    iniciar_download(&app, &game_id, &video.id, url, executavel)?;
     Ok(video)
+}
+
+/// Tenta de novo o download de um vídeo do YouTube que falhou ou foi cancelado.
+#[tauri::command]
+pub async fn validacao_baixar_de_novo(app: AppHandle, game_id: String, video_id: String) -> Result<(), String> {
+    conferir_jogo(&game_id)?;
+    let executavel = localizar_ytdlp(&app).ok_or_else(|| "yt-dlp não encontrado: instale pela tela de Validação".to_string())?;
+    let url = alterar(&app, &game_id, |dataset| {
+        let video = dataset.videos.iter_mut().find(|v| v.id == video_id).ok_or("vídeo não encontrado")?;
+        let Origem::Youtube { url } = &video.origem else {
+            return Err("só vídeos do YouTube podem ser baixados de novo".to_string());
+        };
+        if !matches!(video.estado, Estado::Falhou { .. }) {
+            return Err("este vídeo não está com falha no download".to_string());
+        }
+        let url = url.clone();
+        video.estado = Estado::Baixando { progresso: 0.0, sessao: sessao() };
+        Ok(url)
+    })
+    .await?;
+    iniciar_download(&app, &game_id, &video_id, url, executavel)
+}
+
+/// Cancela o que estiver em andamento no vídeo: tira da fila, ou interrompe o download ou a
+/// análise (o processo externo é encerrado).
+#[tauri::command]
+pub async fn validacao_cancelar(app: AppHandle, game_id: String, video_id: String) -> Result<(), String> {
+    conferir_jogo(&game_id)?;
+    let sinalizar = alterar(&app, &game_id, |dataset| {
+        let video = dataset.videos.iter_mut().find(|v| v.id == video_id).ok_or("vídeo não encontrado")?;
+        match video.estado {
+            Estado::NaFila { .. } => {
+                video.estado = estado_de_repouso(video);
+                Ok(false)
+            }
+            Estado::Baixando { .. } | Estado::Analisando { .. } => Ok(true),
+            _ => Err("nada em andamento neste vídeo".to_string()),
+        }
+    })
+    .await?;
+    if sinalizar {
+        if let Some(tx) = app.state::<ValidacaoState>().cancelamentos.lock().await.get(&video_id) {
+            let _ = tx.send(true);
+        }
+    }
+    Ok(())
 }
 
 /// Cadastra vídeos locais por referência (sem copiar o arquivo).
@@ -210,6 +351,7 @@ pub async fn validacao_adicionar_arquivos(app: AppHandle, game_id: String, camin
             origem: Origem::Arquivo,
             caminho: Some(arquivo.to_string_lossy().into_owned()),
             adicionado_em: agora(),
+            duracao_segundos: None,
             gabarito: Gabarito::default(),
             estado: Estado::Pronto,
             resultado: None,
@@ -218,9 +360,11 @@ pub async fn validacao_adicionar_arquivos(app: AppHandle, game_id: String, camin
     let quantidade = videos.len();
     alterar(&app, &game_id, |dataset| {
         dataset.videos.extend(videos);
-        Ok(quantidade)
+        Ok(())
     })
-    .await
+    .await?;
+    // A duração dos novos é lida em segundo plano quando a lista é relida (`medir_duracoes`).
+    Ok(quantidade)
 }
 
 #[tauri::command]
@@ -237,8 +381,8 @@ pub async fn validacao_definir_gabarito(app: AppHandle, game_id: String, video_i
     .await
 }
 
-/// Remove o vídeo do banco. Um vídeo baixado pelo Lab tem a pasta apagada; um arquivo local
-/// só deixa de ser referenciado (o original fica intacto).
+/// Remove o vídeo do banco. Um download em andamento é cancelado; um vídeo baixado pelo Lab tem
+/// a pasta apagada; um arquivo local só deixa de ser referenciado (o original fica intacto).
 #[tauri::command]
 pub async fn validacao_remover(app: AppHandle, game_id: String, video_id: String) -> Result<(), String> {
     conferir_jogo(&game_id)?;
@@ -246,11 +390,18 @@ pub async fn validacao_remover(app: AppHandle, game_id: String, video_id: String
     let removido = alterar(&app, &game_id, |dataset| {
         let posicao = dataset.videos.iter().position(|v| v.id == video_id).ok_or("vídeo não encontrado")?;
         if matches!(dataset.videos[posicao].estado, Estado::Analisando { .. }) {
-            return Err("aguarde a análise deste vídeo terminar".to_string());
+            return Err("cancele a análise deste vídeo antes de removê-lo".to_string());
         }
         Ok(dataset.videos.remove(posicao))
     })
     .await?;
+    if matches!(removido.estado, Estado::Baixando { .. }) {
+        // A tarefa de download apaga a própria pasta ao ser cancelada.
+        if let Some(tx) = app.state::<ValidacaoState>().cancelamentos.lock().await.get(&removido.id) {
+            let _ = tx.send(true);
+        }
+        return Ok(());
+    }
     if matches!(removido.origem, Origem::Youtube { .. }) {
         let pasta = repo.pasta_videos(&game_id, &removido.id);
         if repo.e_pasta_propria(&pasta) {
@@ -269,8 +420,7 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
     let enfileirados = alterar(&app, &game_id, |dataset| {
         let mut ids = Vec::new();
         for video in dataset.videos.iter_mut().filter(|v| video_ids.contains(&v.id)) {
-            let pode = video.caminho.is_some()
-                && matches!(video.estado, Estado::Pronto | Estado::Concluido);
+            let pode = video.caminho.is_some() && matches!(video.estado, Estado::Pronto | Estado::Concluido);
             if pode {
                 video.estado = Estado::NaFila { sessao: sessao() };
                 ids.push(video.id.clone());
@@ -286,7 +436,7 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
         let estado = app_tarefa.state::<ValidacaoState>();
         for id in enfileirados {
             let _vez = estado.fila.lock().await;
-            // Pode ter sido removido enquanto esperava na fila.
+            // Pode ter sido removido ou tirado da fila enquanto esperava.
             let caminho = {
                 let _trava = estado.gravacao.lock().await;
                 repositorio(&app_tarefa)
@@ -297,11 +447,20 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
                     .and_then(|v| v.caminho)
             };
             let Some(caminho) = caminho else { continue };
-            let _ = alterar_video(&app_tarefa, &jogo, &id, |v| v.estado = Estado::Analisando { sessao: sessao() }).await;
-            let resultado = script::analisar(&raiz, &jogo, &PathBuf::from(caminho)).await;
-            let _ = alterar_video(&app_tarefa, &jogo, &id, |v| {
-                v.resultado = Some(resultado);
-                v.estado = Estado::Concluido;
+            let cancelar = registrar_cancelamento(&app_tarefa, &id).await;
+            let _ = alterar_video(&app_tarefa, &jogo, &id, |v| v.estado = Estado::Analisando { progresso: 0.0, sessao: sessao() }).await;
+            let (tx, rx) = watch::channel(0.0f32);
+            let progresso = acompanhar(&app_tarefa, &jogo, &id, rx, progresso_da_analise);
+            let resultado = script::analisar(&raiz, &jogo, &PathBuf::from(caminho), tx, cancelar).await;
+            let _ = progresso.await;
+            liberar_cancelamento(&app_tarefa, &id).await;
+            let _ = alterar_video(&app_tarefa, &jogo, &id, |v| match resultado {
+                Some(resultado) => {
+                    v.resultado = Some(resultado);
+                    v.estado = Estado::Concluido;
+                }
+                // Cancelada: volta ao que era, mantendo o resultado anterior, se houver.
+                None => v.estado = estado_de_repouso(v),
             })
             .await;
         }

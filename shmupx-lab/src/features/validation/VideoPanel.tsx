@@ -1,16 +1,21 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Button from "../../components/ui/Button";
+import CopyButton from "../../components/ui/CopyButton";
 import { Field, TextInput } from "../../components/ui/Field";
 import { IconAlert, IconClose } from "../../components/ui/Icons";
-import { formatScore, type Expected, type ValidationVideo } from "../../lib/validation";
+import { formatDuration, formatScore, openInBrowser, type Expected, type ValidationVideo } from "../../lib/validation";
+import { PrimaryAction } from "./VideoActions";
 import VideoStatus from "./VideoStatus";
-import { runnable } from "./VideoTable";
 
 interface VideoPanelProps {
   video: ValidationVideo;
   canRun: boolean;
+  /** Tempo restante estimado do download/análise em andamento. */
+  remaining?: string;
   onClose: () => void;
   onRun: () => void;
+  onCancel: () => void;
+  onDownloadAgain: () => void;
   onRemove: () => Promise<void>;
   onSaveExpected: (expected: Expected) => Promise<void>;
 }
@@ -44,7 +49,7 @@ function parse(text: string): number | null | undefined {
 }
 
 /** Detalhes de um vídeo: gabarito completo, resultado do script e relatório bruto. */
-export default function VideoPanel({ video, canRun, onClose, onRun, onRemove, onSaveExpected }: VideoPanelProps) {
+export default function VideoPanel({ video, canRun, remaining, onClose, onRun, onCancel, onDownloadAgain, onRemove, onSaveExpected }: VideoPanelProps) {
   const [score, setScore] = useState(toText(video.gabarito.placar));
   const [lives, setLives] = useState(toText(video.gabarito.vidas));
   const [continues, setContinues] = useState(toText(video.gabarito.continues));
@@ -92,9 +97,11 @@ export default function VideoPanel({ video, canRun, onClose, onRun, onRemove, on
     >
       <header className="flex items-start justify-between gap-3 border-b border-white/5 px-6 py-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{video.origem.tipo === "youtube" ? "YouTube" : "Arquivo local"}</p>
+          <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
+            {[video.origem.tipo === "youtube" ? "YouTube" : "Arquivo local", formatDuration(video.duracao_segundos)].filter(Boolean).join(" · ")}
+          </p>
           <h2 className="mt-0.5 line-clamp-2 text-base font-semibold break-words text-zinc-100">{video.titulo}</h2>
-          <div className="mt-2"><VideoStatus video={video} /></div>
+          <div className="mt-2"><VideoStatus video={video} remaining={remaining} /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="Fechar" className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200">
           <IconClose />
@@ -166,7 +173,17 @@ export default function VideoPanel({ video, canRun, onClose, onRun, onRemove, on
             {video.origem.tipo === "youtube" && (
               <div>
                 <dt className="text-zinc-500">Link</dt>
-                <dd className="mt-0.5 break-all text-zinc-300 select-all">{video.origem.url}</dd>
+                <dd className="mt-0.5 flex items-start gap-1.5">
+                  <button
+                    type="button"
+                    title="Abrir no navegador"
+                    onClick={() => void openInBrowser(video.origem.tipo === "youtube" ? video.origem.url : "")}
+                    className="min-w-0 flex-1 text-left break-all text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
+                  >
+                    {video.origem.url}
+                  </button>
+                  <CopyButton value={video.origem.url} label="Copiar link" />
+                </dd>
               </div>
             )}
             <div>
@@ -195,9 +212,15 @@ export default function VideoPanel({ video, canRun, onClose, onRun, onRemove, on
             <Button variant="ghost" onClick={() => setConfirmRemove(true)} disabled={video.estado.fase === "analisando"} className="mr-auto">
               Remover
             </Button>
-            <Button variant="primary" onClick={onRun} disabled={!canRun || !runnable(video)}>
-              {video.estado.fase === "concluido" ? "Rodar de novo" : "Rodar script"}
-            </Button>
+            <PrimaryAction
+              video={video}
+              canRun={canRun}
+              onRun={onRun}
+              onCancel={onCancel}
+              onDownloadAgain={onDownloadAgain}
+              variant="primary"
+              size="md"
+            />
           </>
         )}
       </footer>

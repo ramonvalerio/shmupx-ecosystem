@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use std::collections::VecDeque;
+
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, BufReader};
+use tokio::sync::watch;
 use tokio::process::Command;
 
 use super::dados::{agora, Resultado};
@@ -124,9 +127,55 @@ pub async fn dependencias_ok(raiz: &Path) -> Result<(), String> {
     if ok { Ok(()) } else { Err(ultima_linha(&erro)) }
 }
 
-/// Analisa o vídeo com o script do jogo. Falhas do script viram um `Resultado` com `erro`
-/// (contam no percentual); só falhas para sequer iniciar o processo são `Err`.
-pub async fn analisar(raiz: &Path, jogo: &str, video: &Path) -> Resultado {
+/// Duração do vídeo em segundos, lida pelo OpenCV do ambiente do script. `None` se não der.
+pub async fn duracao_video(raiz: &Path, video: &Path) -> Option<u64> {
+    let codigo = "import cv2,sys\nc=cv2.VideoCapture(sys.argv[1])\nf=c.get(cv2.CAP_PROP_FPS)\nn=c.get(cv2.CAP_PROP_FRAME_COUNT)\nprint(n/f if f and n else 0)";
+    let argumentos = [OsString::from("-c"), OsString::from(codigo), video.as_os_str().to_owned()];
+    let (ok, saida, _) = executar(raiz, &argumentos, TIMEOUT_CONSULTA).await.ok()?;
+    if !ok {
+        return None;
+    }
+    String::from_utf8_lossy(&saida).trim().parse::<f64>().ok().filter(|d| d.is_finite() && *d > 0.0).map(|d| d.round() as u64)
+}
+
+/// `SHMUPX_PROGRESS 45` -> 45.0 (linha que o script publica no stderr com `--progress`).
+fn progresso_da_linha(linha: &str) -> Option<f32> {
+    linha
+        .trim()
+        .strip_prefix("SHMUPX_PROGRESS")?
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|p| (0.0..=100.0).contains(p))
+}
+
+/// Lê o stderr do script: as linhas de progresso vão para `progresso`; das demais, guarda as
+/// últimas (para explicar uma falha).
+async fn ler_stderr(leitor: impl AsyncRead + Unpin, progresso: &watch::Sender<f32>) -> Vec<u8> {
+    let mut linhas = BufReader::new(leitor).lines();
+    let mut ultimas: VecDeque<String> = VecDeque::new();
+    while let Ok(Some(linha)) = linhas.next_line().await {
+        if let Some(p) = progresso_da_linha(&linha) {
+            let _ = progresso.send(p);
+        } else {
+            if ultimas.len() == 50 {
+                ultimas.pop_front();
+            }
+            ultimas.push_back(linha.chars().take(500).collect());
+        }
+    }
+    ultimas.into_iter().collect::<Vec<_>>().join("\n").into_bytes()
+}
+
+/// Analisa o vídeo com o script do jogo, publicando o progresso (0 a 100). Falhas do script
+/// viram um `Resultado` com `erro` (contam no percentual). `None` = cancelado pelo admin.
+pub async fn analisar(
+    raiz: &Path,
+    jogo: &str,
+    video: &Path,
+    progresso: watch::Sender<f32>,
+    cancelar: watch::Receiver<bool>,
+) -> Option<Resultado> {
     let inicio = Instant::now();
     let argumentos: Vec<OsString> = vec![
         "analyze.py".into(),
@@ -138,14 +187,30 @@ pub async fn analisar(raiz: &Path, jogo: &str, video: &Path) -> Resultado {
         "--format".into(),
         "client-v1".into(),
         "--quiet".into(),
+        "--progress".into(),
     ];
-    let execucao = executar(raiz, &argumentos, TIMEOUT_ANALISE).await;
+    let mut filho = match comando(raiz).args(&argumentos).spawn() {
+        Ok(filho) => filho,
+        Err(e) => return Some(Resultado::falha(format!("não foi possível iniciar o Python: {e}"), 0)),
+    };
+    let (Some(stdout), Some(stderr)) = (filho.stdout.take(), filho.stderr.take()) else {
+        return Some(Resultado::falha("saídas do script indisponíveis".into(), 0));
+    };
+    let processo = async {
+        tokio::join!(filho.wait(), ler_limitado(stdout, 1_048_576), ler_stderr(stderr, &progresso))
+    };
+    // Cancelar descarta o futuro; o processo do Python morre junto (kill_on_drop).
+    let execucao = tokio::select! {
+        espera = tokio::time::timeout(TIMEOUT_ANALISE, processo) => espera,
+        _ = super::esperar_cancelamento(cancelar) => return None,
+    };
     let duracao = inicio.elapsed().as_secs();
-    match execucao {
-        Ok((true, saida, _)) => interpretar(&saida, jogo, duracao),
-        Ok((false, _, erro)) => Resultado::falha(format!("o script falhou: {}", ultima_linha(&erro)), duracao),
-        Err(erro) => Resultado::falha(erro, duracao),
-    }
+    Some(match execucao {
+        Ok((Ok(status), saida, _)) if status.success() => interpretar(&saida, jogo, duracao),
+        Ok((Ok(_), _, erro)) => Resultado::falha(format!("o script falhou: {}", ultima_linha(&erro)), duracao),
+        Ok((Err(e), _, _)) => Resultado::falha(format!("falha ao aguardar o Python: {e}"), duracao),
+        Err(_) => Resultado::falha(format!("o script passou de {} minutos e foi encerrado", TIMEOUT_ANALISE.as_secs() / 60), duracao),
+    })
 }
 
 #[derive(Deserialize)]
@@ -265,6 +330,23 @@ mod tests {
         let scripts = listar_scripts(&raiz).await.unwrap();
         let earthion = scripts.iter().find(|s| s.id == "earthion").expect("earthion registrado");
         assert_eq!(earthion.version, "1.0.0");
+    }
+
+    #[test]
+    fn le_o_progresso_publicado_pelo_script() {
+        assert_eq!(progresso_da_linha("SHMUPX_PROGRESS 45"), Some(45.0));
+        assert_eq!(progresso_da_linha("  SHMUPX_PROGRESS 100\r"), Some(100.0));
+        assert_eq!(progresso_da_linha("SHMUPX_PROGRESS 140"), None);
+        assert_eq!(progresso_da_linha("[calibração] variante=pc_pt"), None);
+    }
+
+    #[tokio::test]
+    async fn stderr_separa_progresso_do_texto() {
+        let (tx, rx) = watch::channel(0.0f32);
+        let entrada: &[u8] = b"SHMUPX_PROGRESS 10\nlog qualquer\nSHMUPX_PROGRESS 55\nValueError: ruim\n";
+        let resto = ler_stderr(entrada, &tx).await;
+        assert_eq!(*rx.borrow(), 55.0);
+        assert_eq!(String::from_utf8(resto).unwrap(), "log qualquer\nValueError: ruim");
     }
 
     #[test]

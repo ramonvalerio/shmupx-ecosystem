@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 /** Espelha `src-tauri/src/validacao/dados.rs`. */
 export type VideoOrigin = { tipo: "youtube"; url: string } | { tipo: "arquivo" };
@@ -8,7 +9,7 @@ export type VideoState =
   | { fase: "baixando"; progresso: number; sessao: number }
   | { fase: "pronto" }
   | { fase: "na_fila"; sessao: number }
-  | { fase: "analisando"; sessao: number }
+  | { fase: "analisando"; progresso: number; sessao: number }
   | { fase: "concluido" }
   | { fase: "falhou"; erro: string };
 
@@ -43,6 +44,8 @@ export interface ValidationVideo {
   origem: VideoOrigin;
   caminho: string | null;
   adicionado_em: number;
+  /** Duração em segundos, quando conhecida (metadados do YouTube ou leitura do arquivo). */
+  duracao_segundos: number | null;
   gabarito: Expected;
   estado: VideoState;
   resultado: ScriptResult | null;
@@ -101,6 +104,33 @@ export const removeVideo = (gameId: string, videoId: string) => invoke<void>("va
 
 export const runVideos = (gameId: string, videoIds: string[]) => invoke<number>("validacao_rodar", { gameId, videoIds });
 
+/** Tira da fila, ou interrompe o download/análise em andamento. */
+export const cancelProcessing = (gameId: string, videoId: string) => invoke<void>("validacao_cancelar", { gameId, videoId });
+
+/** Tenta de novo o download de um vídeo do YouTube que falhou ou foi cancelado. */
+export const downloadAgain = (gameId: string, videoId: string) => invoke<void>("validacao_baixar_de_novo", { gameId, videoId });
+
+/** Abre o link no navegador padrão do sistema. */
+export const openInBrowser = (url: string) => openUrl(url);
+
+/** Há algo em andamento no vídeo (download, fila ou análise). */
+export function isBusy(video: ValidationVideo): boolean {
+  return video.estado.fase === "baixando" || video.estado.fase === "na_fila" || video.estado.fase === "analisando";
+}
+
+/** Download que falhou e pode ser tentado de novo. */
+export function canDownloadAgain(video: ValidationVideo): boolean {
+  return video.estado.fase === "falhou" && video.origem.tipo === "youtube";
+}
+
+/** 45_000 -> "~1 min"; 3_900_000 -> "~1 h 05 min". */
+export function formatRemaining(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return "menos de 1 min";
+  if (minutes < 60) return `~${minutes} min`;
+  return `~${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
+}
+
 /** Avisa quando o banco de um jogo muda (download, fila, análise). */
 export function onDatasetChanged(callback: (gameId: string) => void): Promise<UnlistenFn> {
   return listen<{ game_id: string }>("validacao://atualizado", (event) => callback(event.payload.game_id));
@@ -109,6 +139,16 @@ export function onDatasetChanged(callback: (gameId: string) => void): Promise<Un
 /** Percentual com uma casa, ou `null` sem base. */
 export function percent(part: number, total: number): string | null {
   return total > 0 ? `${((part / total) * 100).toFixed(1).replace(".", ",")}%` : null;
+}
+
+/** 2518 -> "41:58"; 3725 -> "1:02:05". */
+export function formatDuration(seconds: number | null | undefined): string | null {
+  if (seconds === null || seconds === undefined) return null;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
 export function formatScore(value: number | null | undefined): string {

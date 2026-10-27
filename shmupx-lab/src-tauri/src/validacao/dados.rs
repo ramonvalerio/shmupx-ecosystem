@@ -41,7 +41,12 @@ pub enum Estado {
     /// Vídeo disponível, ainda sem análise.
     Pronto,
     NaFila { sessao: u64 },
-    Analisando { sessao: u64 },
+    /// `progresso` de 0 a 100, publicado pelo script (`--progress`).
+    Analisando {
+        #[serde(default)]
+        progresso: f32,
+        sessao: u64,
+    },
     /// Análise terminada: o resultado (ou o erro do script) está em `Video::resultado`.
     Concluido,
     /// O vídeo não ficou disponível (download falhou ou foi interrompido).
@@ -104,6 +109,9 @@ pub struct Video {
     /// Arquivo de vídeo no disco (baixado, ou o original quando veio de arquivo local).
     pub caminho: Option<String>,
     pub adicionado_em: u64,
+    /// Duração do vídeo, quando conhecida (metadados do YouTube ou leitura do arquivo).
+    #[serde(default)]
+    pub duracao_segundos: Option<u64>,
     #[serde(default)]
     pub gabarito: Gabarito,
     pub estado: Estado,
@@ -130,7 +138,7 @@ impl Video {
             Estado::Baixando { sessao, .. } if *sessao != sessao_atual => {
                 Estado::Falhou { erro: "download interrompido: o Lab foi fechado".into() }
             }
-            Estado::NaFila { sessao } | Estado::Analisando { sessao } if *sessao != sessao_atual => {
+            Estado::NaFila { sessao } | Estado::Analisando { sessao, .. } if *sessao != sessao_atual => {
                 if self.resultado.is_some() { Estado::Concluido } else { Estado::Pronto }
             }
             _ => return false,
@@ -253,6 +261,7 @@ mod tests {
             origem: Origem::Arquivo,
             caminho: Some("x.mp4".into()),
             adicionado_em: 0,
+            duracao_segundos: None,
             gabarito,
             estado: if resultado.is_some() { Estado::Concluido } else { Estado::Pronto },
             resultado,
@@ -298,7 +307,7 @@ mod tests {
         assert!(matches!(baixando.estado, Estado::Falhou { .. }));
 
         let mut analisando = video(Gabarito::default(), Some(resultado(Some(1), None, true)));
-        analisando.estado = Estado::Analisando { sessao: 1 };
+        analisando.estado = Estado::Analisando { progresso: 30.0, sessao: 1 };
         assert!(analisando.recuperar_interrompido(2));
         assert_eq!(analisando.estado, Estado::Concluido);
 

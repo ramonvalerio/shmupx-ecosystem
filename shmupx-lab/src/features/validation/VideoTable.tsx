@@ -1,22 +1,22 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import Button from "../../components/ui/Button";
-import { formatScore, type Expected, type ValidationVideo } from "../../lib/validation";
+import { formatDuration, formatScore, type Expected, type ValidationVideo } from "../../lib/validation";
+import { LinkActions, PrimaryAction } from "./VideoActions";
 import VideoStatus from "./VideoStatus";
 
 interface VideoTableProps {
   videos: ValidationVideo[];
   selectedId: string | null;
   canRun: boolean;
+  /** Tempo restante estimado por vídeo (download/análise em andamento). */
+  remaining: Map<string, string>;
   onOpen: (video: ValidationVideo) => void;
   onRun: (video: ValidationVideo) => void;
+  onCancel: (video: ValidationVideo) => void;
+  onDownloadAgain: (video: ValidationVideo) => void;
   onSaveExpected: (video: ValidationVideo, expected: Expected) => Promise<void>;
 }
 
 const HEAD = "px-4 py-2.5 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase whitespace-nowrap";
-
-export function runnable(video: ValidationVideo): boolean {
-  return video.caminho !== null && (video.estado.fase === "pronto" || video.estado.fase === "concluido");
-}
 
 /** Campo do placar esperado editável na própria linha: salva ao sair do campo ou no Enter. */
 function ExpectedScoreInput({ video, onSave }: { video: ValidationVideo; onSave: (expected: Expected) => Promise<void> }) {
@@ -62,7 +62,7 @@ function ExpectedScoreInput({ video, onSave }: { video: ValidationVideo; onSave:
   );
 }
 
-export default function VideoTable({ videos, selectedId, canRun, onOpen, onRun, onSaveExpected }: VideoTableProps) {
+export default function VideoTable({ videos, selectedId, canRun, remaining, onOpen, onRun, onCancel, onDownloadAgain, onSaveExpected }: VideoTableProps) {
   const onRowKey = (event: KeyboardEvent, video: ValidationVideo) => {
     if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
@@ -72,7 +72,16 @@ export default function VideoTable({ videos, selectedId, canRun, onOpen, onRun, 
   };
 
   return (
-    <table className="w-full text-left text-sm">
+    <table className="w-full table-fixed text-left text-sm">
+      {/* O vídeo fica com o espaço que sobra; as demais colunas têm largura fixa. */}
+      <colgroup>
+        <col />
+        <col className="w-40" />
+        <col className="w-32" />
+        <col className="w-28" />
+        <col className="w-60" />
+        <col className="w-32" />
+      </colgroup>
       <thead className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur">
         <tr className="border-b border-white/5">
           <th className={HEAD}>Vídeo</th>
@@ -97,9 +106,14 @@ export default function VideoTable({ videos, selectedId, canRun, onOpen, onRun, 
               onKeyDown={(event) => onRowKey(event, video)}
               className={`cursor-pointer border-b border-white/5 transition-colors outline-none focus-visible:bg-white/[0.05] ${selected ? "bg-cyan-400/[0.06]" : "hover:bg-white/[0.03]"}`}
             >
-              <td className="max-w-0 px-4 py-3">
+              <td className="px-4 py-3">
                 <p className="truncate font-medium text-zinc-100" title={video.titulo}>{video.titulo}</p>
-                <p className="truncate text-xs text-zinc-500">{video.origem.tipo === "youtube" ? "YouTube" : "Arquivo local"}</p>
+                <p className="flex items-center gap-1 text-xs text-zinc-500">
+                  <span className="truncate">
+                    {[video.origem.tipo === "youtube" ? "YouTube" : "Arquivo local", formatDuration(video.duracao_segundos)].filter(Boolean).join(" · ")}
+                  </span>
+                  {video.origem.tipo === "youtube" && <LinkActions url={video.origem.url} />}
+                </p>
               </td>
               <td className="px-4 py-2 text-right">
                 <ExpectedScoreInput video={video} onSave={(expected) => onSaveExpected(video, expected)} />
@@ -110,19 +124,15 @@ export default function VideoTable({ videos, selectedId, canRun, onOpen, onRun, 
               <td className="px-4 py-3 text-xs whitespace-nowrap text-zinc-400 tabular-nums">
                 {result && !result.erro ? `${result.vidas ?? "—"} · ${result.continues ?? "—"}` : "—"}
               </td>
-              <td className="px-4 py-3"><VideoStatus video={video} /></td>
+              <td className="px-4 py-3"><VideoStatus video={video} remaining={remaining.get(video.id)} /></td>
               <td className="px-4 py-2 text-right">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={!canRun || !runnable(video)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRun(video);
-                  }}
-                >
-                  {video.estado.fase === "concluido" ? "Rodar de novo" : "Rodar"}
-                </Button>
+                <PrimaryAction
+                  video={video}
+                  canRun={canRun}
+                  onRun={() => onRun(video)}
+                  onCancel={() => onCancel(video)}
+                  onDownloadAgain={() => onDownloadAgain(video)}
+                />
               </td>
             </tr>
           );

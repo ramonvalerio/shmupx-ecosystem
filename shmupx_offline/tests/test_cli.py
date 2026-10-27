@@ -46,6 +46,15 @@ class ValidatorTests(unittest.TestCase):
         for digits in config.digit_sets.values():
             self.assertEqual(set(digits), set("0123456789"))
 
+    def test_progress_printer_reports_each_new_percent_up_to_the_limit(self):
+        from shmupx.cli import progress_printer
+        stream = io.StringIO()
+        report = progress_printer(stream, limit=90)
+        for fraction in (0.0, 0.004, 0.5, 0.5, 0.3, 1.0, 1.7):
+            report(fraction)
+        self.assertEqual(stream.getvalue().splitlines(),
+                         ["SHMUPX_PROGRESS 0", "SHMUPX_PROGRESS 45", "SHMUPX_PROGRESS 90"])
+
     def test_external_audit_requires_explicit_opt_in(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
             main(["video.mp4", "--game", "earthion", "--player", "P", "--grok-always"])

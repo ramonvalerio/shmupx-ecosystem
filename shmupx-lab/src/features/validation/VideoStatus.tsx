@@ -1,25 +1,29 @@
 import Badge from "../../components/ui/Badge";
+import ProgressBar from "../../components/ui/ProgressBar";
 import type { ValidationVideo } from "../../lib/validation";
 
 /** Situação do vídeo: andamento (download/fila/análise) ou veredito e aceitação. */
-export default function VideoStatus({ video }: { video: ValidationVideo }) {
+export default function VideoStatus({ video, remaining }: { video: ValidationVideo; remaining?: string }) {
   const { estado, resultado } = video;
   switch (estado.fase) {
     case "baixando":
-      return <Badge tone="info">Baixando {Math.round(estado.progresso)}%</Badge>;
+      return estado.progresso > 0 ? (
+        <ProgressBar value={estado.progresso} label={`Baixando ${Math.round(estado.progresso)}%`} detail={remaining} />
+      ) : (
+        <ProgressBar value={0} indeterminate label="Preparando download…" />
+      );
+    case "analisando":
+      return estado.progresso > 0 ? (
+        <ProgressBar value={estado.progresso} label={`Analisando ${Math.round(estado.progresso)}%`} detail={remaining} />
+      ) : (
+        <ProgressBar value={0} indeterminate label="Preparando análise…" />
+      );
     case "pronto":
       return <Badge>Aguardando análise</Badge>;
     case "na_fila":
       return <Badge>Na fila</Badge>;
-    case "analisando":
-      return (
-        <Badge tone="info">
-          <span aria-hidden className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          Analisando
-        </Badge>
-      );
     case "falhou":
-      return <Badge tone="danger">Falha no download</Badge>;
+      return <Badge tone="danger">{estado.erro === "Download cancelado." ? "Download cancelado" : "Falha no download"}</Badge>;
     case "concluido":
       if (!resultado) return <Badge>Aguardando análise</Badge>;
       if (resultado.erro) return <Badge tone="danger">Erro no script</Badge>;

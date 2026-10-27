@@ -5,6 +5,8 @@ import Button from "../../components/ui/Button";
 import { IconAlert, IconCheck, IconPlus, IconRefresh } from "../../components/ui/Icons";
 import {
   installYtDlp,
+  cancelProcessing,
+  downloadAgain,
   addLocalVideos,
   addYoutubeVideo,
   percent,
@@ -16,9 +18,10 @@ import {
   type ValidationEnvironment,
   type ValidationVideo,
 } from "../../lib/validation";
-import { useValidationDataset } from "./useValidation";
+import { useRemainingTimes, useValidationDataset } from "./useValidation";
+import { runnable } from "./VideoActions";
 import VideoPanel from "./VideoPanel";
-import VideoTable, { runnable } from "./VideoTable";
+import VideoTable from "./VideoTable";
 
 interface ValidationViewProps {
   gameId: string;
@@ -134,6 +137,7 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   }, [notice]);
 
   const videos = dataset?.videos ?? [];
+  const remaining = useRemainingTimes(videos);
   const summary = dataset?.resumo;
   const selected = videos.find((video) => video.id === selectedId) ?? null;
   const ready = Boolean(environment?.python.ok && environment.dependencias.ok);
@@ -177,6 +181,8 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   }
 
   const saveExpected = (video: ValidationVideo, expected: Expected) => act(() => setExpected(gameId, video.id, expected));
+  const cancel = (video: ValidationVideo) => void act(() => cancelProcessing(gameId, video.id), "Cancelado.");
+  const retry = (video: ValidationVideo) => void act(() => downloadAgain(gameId, video.id), "Download reiniciado.");
 
   return (
     <div className="relative flex min-w-0 flex-1 overflow-hidden">
@@ -274,8 +280,11 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
               videos={videos}
               selectedId={selectedId}
               canRun={canRun}
+              remaining={remaining}
               onOpen={(video) => setSelectedId(video.id)}
               onRun={(video) => void run([video])}
+              onCancel={cancel}
+              onDownloadAgain={retry}
               onSaveExpected={saveExpected}
             />
           )}
@@ -287,8 +296,11 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
           key={selected.id}
           video={selected}
           canRun={canRun}
+          remaining={remaining.get(selected.id)}
           onClose={() => setSelectedId(null)}
           onRun={() => void run([selected])}
+          onCancel={() => cancel(selected)}
+          onDownloadAgain={() => retry(selected)}
           onSaveExpected={(expected) => saveExpected(selected, expected)}
           onRemove={async () => {
             await act(() => removeVideo(gameId, selected.id), "Vídeo removido.");

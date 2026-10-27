@@ -38,6 +38,8 @@ def main(argv=None):
     ap.add_argument("--price-in", type=float, default=2.00, help="US$ por 1M tokens de entrada")
     ap.add_argument("--price-out", type=float, default=6.00, help="US$ por 1M tokens de saída")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--progress", action="store_true",
+                    help="publica o andamento no stderr, em linhas 'SHMUPX_PROGRESS <0-100>'")
     a = ap.parse_args(argv)
     if a.list_games:
         print(json.dumps([{"id": s.game_id, "name": s.name, "version": s.version}
@@ -60,14 +62,33 @@ def main(argv=None):
     if a.grok:  # valida a chave antes de gastar minutos analisando
         from shmupx.grok import Grok
         gk = Grok(model=a.grok_model)
+    if a.progress:
+        from . import video
+        video.progress_hook = progress_printer(sys.stderr)
     an = spec.create(a.video, debug_dir=a.debug_dir, quiet=a.quiet)
     try:
         # stdout é reservado ao JSON; inclusive logs de scripts futuros vão para stderr.
         with redirect_stdout(sys.stderr):
             txt = _analyze(a, an, gk, t0)
+        if a.progress:
+            print("SHMUPX_PROGRESS 100", file=sys.stderr, flush=True)
         print(txt)
     finally:
         an.v.cap.release()
+
+
+def progress_printer(stream, limit=90):
+    """Imprime 'SHMUPX_PROGRESS n' a cada ponto percentual novo. A passada sequencial vai até
+    `limit`; o restante da análise (trechos densos, vidas, resultado) completa os 100%."""
+    last = [-1]
+
+    def report(fraction):
+        pct = int(max(0.0, min(1.0, fraction)) * limit)
+        if pct > last[0]:
+            last[0] = pct
+            print(f"SHMUPX_PROGRESS {pct}", file=stream, flush=True)
+
+    return report
 
 
 def _analyze(a, an, gk, t0):

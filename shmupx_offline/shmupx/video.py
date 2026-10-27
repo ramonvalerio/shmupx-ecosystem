@@ -1,6 +1,9 @@
 """Leitura de vídeo só com OpenCV (sem ffmpeg externo)."""
 import cv2
 
+# Opcional (--progress): chamado com a fração do vídeo (0 a 1) já percorrida na passada sequencial.
+progress_hook = None
+
 
 class Video:
     def __init__(self, path):
@@ -43,6 +46,8 @@ class Video:
                 if ok:
                     self.frames_read += 1
                     yield idx / self.fps, frame
+                    if progress_hook is not None and self.nframes:
+                        progress_hook(idx / self.nframes)
             last_idx = idx
             idx += 1
         # corrige duração quando o contêiner informa contagem errada

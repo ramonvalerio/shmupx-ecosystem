@@ -47,6 +47,12 @@ export const IconGlobe = (p: SVGProps<SVGSVGElement>) => (
 export const IconCheck = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M20 6 9 17l-5-5" /></Icon>
 );
+export const IconCopy = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Icon>
+);
+export const IconExternal = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></Icon>
+);
 export const IconLogout = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></Icon>
 );
