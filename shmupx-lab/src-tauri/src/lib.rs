@@ -14,6 +14,8 @@ pub fn run() {
       auth::commands::login_google_desktop,
       validacao::commands::validacao_ambiente,
       validacao::commands::validacao_instalar_ytdlp,
+      validacao::commands::validacao_script_fonte,
+      validacao::commands::validacao_gerar_script,
       validacao::commands::validacao_listar,
       validacao::commands::validacao_adicionar_youtube,
       validacao::commands::validacao_baixar_de_novo,

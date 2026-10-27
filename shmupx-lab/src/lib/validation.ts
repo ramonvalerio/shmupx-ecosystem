@@ -89,6 +89,28 @@ export const getEnvironment = () => invoke<ValidationEnvironment>("validacao_amb
 /** Instala (ou atualiza) o yt-dlp oficial na pasta do Lab, conferindo o SHA-256 da release. */
 export const installYtDlp = () => invoke<EnvironmentItem>("validacao_instalar_ytdlp");
 
+/** Arquivo do validador de um jogo, para leitura na tela. */
+export interface ScriptSourceFile {
+  nome: string;
+  caminho: string;
+  linguagem: "python" | "json";
+  conteudo: string;
+  truncado: boolean;
+}
+
+/** Script Python, calibração e registro do validador do jogo (só leitura). */
+export const getScriptSource = (gameId: string) => invoke<ScriptSourceFile[]>("validacao_script_fonte", { gameId });
+
+/** Resultado de "Gerar script": arquivos criados e recortes do HUD que faltam. */
+export interface GeneratedScript {
+  versao: string;
+  criados: string[];
+  imagens_pendentes: string[];
+}
+
+/** Gera o rascunho do validador do jogo a partir do Earthion. Não sobrescreve arquivos. */
+export const generateScript = (gameId: string, titulo: string) => invoke<GeneratedScript>("validacao_gerar_script", { gameId, titulo });
+
 export const listVideos = (gameId: string) => invoke<ValidationDataset>("validacao_listar", { gameId });
 
 export const addYoutubeVideo = (gameId: string, url: string) =>

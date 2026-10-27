@@ -8,6 +8,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{watch, Mutex};
 
 use super::dados::{self, agora, sessao, Dataset, Estado, Gabarito, Origem, Repositorio, Resumo, Video};
+use super::fonte::{self, ArquivoFonte};
+use super::gerador::{self, ScriptGerado};
 use super::script::{self, ScriptInfo};
 use super::ytdlp;
 
@@ -466,6 +468,21 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
         }
     });
     Ok(quantidade)
+}
+
+/// Arquivos do validador do jogo, só para leitura na tela (script, calibração e registro).
+#[tauri::command]
+pub async fn validacao_script_fonte(game_id: String) -> Result<Vec<ArquivoFonte>, String> {
+    conferir_jogo(&game_id)?;
+    fonte::ler(&script::raiz_offline()?, &game_id)
+}
+
+/// Gera o rascunho do validador do jogo a partir do Earthion (lógica, calibração, pastas de
+/// imagens e registro em 0.1.0). Não sobrescreve nada que já exista.
+#[tauri::command]
+pub async fn validacao_gerar_script(game_id: String, titulo: String) -> Result<ScriptGerado, String> {
+    conferir_jogo(&game_id)?;
+    gerador::gerar(&script::raiz_offline()?, &game_id, &titulo)
 }
 
 /// Instala (ou atualiza) o yt-dlp oficial na pasta do Lab, conferindo o SHA-256 da release.

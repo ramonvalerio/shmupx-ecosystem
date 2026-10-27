@@ -20,6 +20,8 @@ import {
 } from "../../lib/validation";
 import { useRemainingTimes, useValidationDataset } from "./useValidation";
 import { runnable } from "./VideoActions";
+import GenerateScriptDialog from "./GenerateScriptDialog";
+import ScriptViewer from "./ScriptViewer";
 import VideoPanel from "./VideoPanel";
 import VideoTable from "./VideoTable";
 
@@ -124,6 +126,8 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
   const [adding, setAdding] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showScript, setShowScript] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
 
   useEffect(() => {
     setSelectedId(null);
@@ -196,6 +200,14 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {!script && (
+              <Button onClick={() => setShowGenerate(true)} title="Cria o rascunho do validador deste jogo a partir do Earthion">
+                Gerar script
+              </Button>
+            )}
+            <Button variant="ghost" disabled={!script} onClick={() => setShowScript(true)} title={script ? "Ver o script Python que valida este jogo" : "Este jogo ainda não tem script"}>
+              Ver script
+            </Button>
             <Button disabled={!canRun || rerunnable.length === 0} onClick={() => void run(rerunnable)}>
               <IconRefresh />
               Rodar todos
@@ -306,6 +318,16 @@ export default function ValidationView({ gameId, gameTitle, script, environment,
             await act(() => removeVideo(gameId, selected.id), "Vídeo removido.");
             setSelectedId(null);
           }}
+        />
+      )}
+
+      {showScript && script && <ScriptViewer gameId={gameId} script={script} onClose={() => setShowScript(false)} />}
+      {showGenerate && (
+        <GenerateScriptDialog
+          gameId={gameId}
+          gameTitle={gameTitle}
+          onClose={() => setShowGenerate(false)}
+          onGenerated={() => onCheckEnvironment()}
         />
       )}
 

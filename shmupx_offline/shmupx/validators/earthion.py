@@ -282,6 +282,10 @@ class Analyzer:
                 cv2.imwrite(os.path.join(self.debug_dir, "final_score_crop.png"), self.hud.score_crop(fr))
 
 
-def create_analyzer(root, video_path, *, debug_dir=None, quiet=False):
-    """Cria o validador Earthion com seus próprios recursos e regras."""
-    return Analyzer(GameConfig(root, "earthion"), video_path, debug_dir=debug_dir, quiet=quiet)
+def create_analyzer(root, video_path, *, debug_dir=None, quiet=False, game="earthion"):
+    """Cria o analisador por HUD com a calibração e os templates do jogo.
+
+    A lógica é genérica (vídeo, HUD, dígitos, vidas, continues, attempts); o que é de cada jogo
+    fica em games/<game>.json e templates/<game>/. Nasceu com o Earthion, que é o padrão.
+    """
+    return Analyzer(GameConfig(root, game), video_path, debug_dir=debug_dir, quiet=quiet)

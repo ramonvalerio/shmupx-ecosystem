@@ -16,8 +16,9 @@ class ValidatorSpec:
     def create(self, video_path, *, debug_dir=None, quiet=False):
         # Import tardio: listar jogos e consultar ajuda não requer OpenCV.
         module = import_module(self.module)
+        # O id do jogo escolhe a calibração e os templates: vários jogos podem usar o mesmo analisador.
         return module.create_analyzer(
-            ROOT, video_path, debug_dir=debug_dir, quiet=quiet,
+            ROOT, video_path, debug_dir=debug_dir, quiet=quiet, game=self.game_id,
         )
 
 

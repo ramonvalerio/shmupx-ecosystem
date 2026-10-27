@@ -7,6 +7,8 @@ use tokio::sync::watch;
 
 pub mod commands;
 mod dados;
+mod fonte;
+mod gerador;
 mod script;
 mod ytdlp;
 
