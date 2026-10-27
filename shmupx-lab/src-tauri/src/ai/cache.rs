@@ -15,6 +15,9 @@ const MAX_ENTRADAS: usize = 200;
 struct Entrada {
     /// Veio de uma pesquisa na web (mais confiável que só o conhecimento do modelo).
     web: bool,
+    /// A consulta à Steam foi feita (dados da loja entraram no prompt). Arquivos antigos: `false`.
+    #[serde(default)]
+    steam: bool,
     /// Segundos desde 1970; serve para descartar as mais antigas.
     em: u64,
     sugestoes: Vec<Sugestao>,
@@ -58,22 +61,22 @@ impl Cache {
             .unwrap_or_default()
     }
 
-    /// Resposta guardada. Um pedido com busca na web só aceita entradas que vieram da web; um
-    /// pedido sem ela aceita qualquer uma (a da web é melhor).
-    pub fn buscar(&self, titulo: &str, web: bool) -> Option<Vec<Sugestao>> {
+    /// Resposta guardada. Um pedido com busca na web (ou com a Steam) só aceita entradas que
+    /// tiveram a mesma fonte; um pedido sem elas aceita qualquer uma (a com fonte é melhor).
+    pub fn buscar(&self, titulo: &str, web: bool, steam: bool) -> Option<Vec<Sugestao>> {
         let mut arquivo = self.ler();
         let entrada = arquivo.entradas.remove(&chave(titulo))?;
-        (entrada.web || !web).then_some(entrada.sugestoes)
+        ((entrada.web || !web) && (entrada.steam || !steam)).then_some(entrada.sugestoes)
     }
 
     /// Guarda o resultado. Respostas vazias não entram: o jogo pode ser encontrado depois.
-    pub fn guardar(&self, titulo: &str, web: bool, sugestoes: &[Sugestao]) -> Result<(), String> {
+    pub fn guardar(&self, titulo: &str, web: bool, steam: bool, sugestoes: &[Sugestao]) -> Result<(), String> {
         let chave = chave(titulo);
         if chave.is_empty() || sugestoes.is_empty() {
             return Ok(());
         }
         let mut arquivo = self.ler();
-        arquivo.entradas.insert(chave, Entrada { web, em: agora(), sugestoes: sugestoes.to_vec() });
+        arquivo.entradas.insert(chave, Entrada { web, steam, em: agora(), sugestoes: sugestoes.to_vec() });
 
         while arquivo.entradas.len() > MAX_ENTRADAS {
             let Some(mais_antiga) = arquivo.entradas.iter().min_by_key(|(_, e)| e.em).map(|(k, _)| k.clone()) else {
@@ -126,26 +129,36 @@ mod tests {
     #[test]
     fn guarda_e_recupera() {
         let cache = cache("basico");
-        assert!(cache.buscar("Earthion", false).is_none());
-        cache.guardar("Earthion", false, &[sugestao("Earthion")]).unwrap();
-        assert_eq!(cache.buscar("earthion!", false).unwrap()[0].name, "Earthion");
+        assert!(cache.buscar("Earthion", false, false).is_none());
+        cache.guardar("Earthion", false, false, &[sugestao("Earthion")]).unwrap();
+        assert_eq!(cache.buscar("earthion!", false, false).unwrap()[0].name, "Earthion");
     }
 
     #[test]
     fn busca_na_web_nao_aceita_entrada_sem_web() {
         let cache = cache("web");
-        cache.guardar("Ibara", false, &[sugestao("Ibara")]).unwrap();
-        assert!(cache.buscar("Ibara", true).is_none());
-        cache.guardar("Ibara", true, &[sugestao("Ibara (web)")]).unwrap();
-        assert!(cache.buscar("Ibara", true).is_some());
-        assert!(cache.buscar("Ibara", false).is_some(), "sem web aceita a da web");
+        cache.guardar("Ibara", false, false, &[sugestao("Ibara")]).unwrap();
+        assert!(cache.buscar("Ibara", true, false).is_none());
+        cache.guardar("Ibara", true, false, &[sugestao("Ibara (web)")]).unwrap();
+        assert!(cache.buscar("Ibara", true, false).is_some());
+        assert!(cache.buscar("Ibara", false, false).is_some(), "sem web aceita a da web");
+    }
+
+    #[test]
+    fn consulta_com_steam_nao_aceita_entrada_sem_steam() {
+        let cache = cache("steam");
+        cache.guardar("Earthion", false, false, &[sugestao("sem steam")]).unwrap();
+        assert!(cache.buscar("Earthion", false, true).is_none());
+        cache.guardar("Earthion", false, true, &[sugestao("com steam")]).unwrap();
+        assert_eq!(cache.buscar("Earthion", false, true).unwrap()[0].name, "com steam");
+        assert!(cache.buscar("Earthion", false, false).is_some(), "sem steam aceita a com steam");
     }
 
     #[test]
     fn resposta_vazia_nao_e_guardada() {
         let cache = cache("vazio");
-        cache.guardar("Nada", false, &[]).unwrap();
-        assert!(cache.buscar("Nada", false).is_none());
+        cache.guardar("Nada", false, false, &[]).unwrap();
+        assert!(cache.buscar("Nada", false, false).is_none());
         assert!(!cache.caminho.exists());
     }
 
@@ -154,16 +167,16 @@ mod tests {
         let cache = cache("corrompido");
         std::fs::create_dir_all(cache.caminho.parent().unwrap()).unwrap();
         std::fs::write(&cache.caminho, b"{ isto nao e json").unwrap();
-        assert!(cache.buscar("Qualquer", false).is_none());
-        cache.guardar("Qualquer", false, &[sugestao("Qualquer")]).unwrap();
-        assert!(cache.buscar("Qualquer", false).is_some());
+        assert!(cache.buscar("Qualquer", false, false).is_none());
+        cache.guardar("Qualquer", false, false, &[sugestao("Qualquer")]).unwrap();
+        assert!(cache.buscar("Qualquer", false, false).is_some());
     }
 
     #[test]
     fn descarta_as_entradas_mais_antigas_acima_do_limite() {
         let cache = cache("limite");
         for i in 0..(MAX_ENTRADAS + 5) {
-            cache.guardar(&format!("jogo {i}"), false, &[sugestao("x")]).unwrap();
+            cache.guardar(&format!("jogo {i}"), false, false, &[sugestao("x")]).unwrap();
         }
         assert!(cache.ler().entradas.len() <= MAX_ENTRADAS);
     }

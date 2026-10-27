@@ -6,4 +6,5 @@
 mod anthropic;
 mod cache;
 pub mod commands;
+mod steam;
 mod sugestao;

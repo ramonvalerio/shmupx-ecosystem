@@ -10,13 +10,17 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 
 ## 1. Gerenciador de datasets (`features/datasets`)
 - [x] 1.1 Cadastro de jogo: tela **Catálogo** (`features/catalog`) com título, ID curto, `steam_app_id`, duração máxima da run e publicar/despublicar, gravando em `games/{gameId}` pelo backend (`/api/admin/games`). Login Google igual ao do Client; admin definido no servidor por `ADMIN_EMAILS`. Pendente: notas.
-  - **Preenchimento por IA** (migrado do Lab antigo, `src-tauri/src/ai`): botão "Preencher com IA" e "Buscar na internet" (pesquisa na web como reserva). O Rust chama a Messages API da Anthropic com a chave de `ANTHROPIC_API_KEY` do PC do admin (nunca vai à tela, ao backend ou ao Firestore). Modelo padrão `claude-sonnet-5-5`, trocável por `SHMUPX_LAB_AI_MODEL`. Resposta em JSON estruturado, normalizada e só uma proposta: o admin revisa e salva. O `steam_app_id` sugerido é um palpite e a tela pede conferência na loja. Cache local `ai_cache.json` (200 entradas) evita pagar duas vezes pelo mesmo título. Campos opcionais gravados em `games/{id}`: developer, publisher, genre, year, platform, modes. Fora do escopo desta migração: geração de logo/imagem, busca de capa, análise de perfil por IA.
+  - **Preenchimento por IA** (migrado do Lab antigo, `src-tauri/src/ai`): botão "Preencher com IA" e "Buscar na internet" (pesquisa na web como reserva). O Rust chama a Messages API da Anthropic com a chave de `ANTHROPIC_API_KEY` do PC do admin (nunca vai à tela, ao backend ou ao Firestore). Modelo padrão `claude-sonnet-5-5`, trocável por `SHMUPX_LAB_AI_MODEL`. Resposta em JSON estruturado, normalizada e só uma proposta: o admin revisa e salva. O `steam_app_id` sugerido é um palpite e a tela pede conferência na loja. Cache local `ai_cache_v2.json` (200 entradas; a versão no nome invalida respostas antigas) evita pagar duas vezes pelo mesmo título. Campos opcionais gravados em `games/{id}`: developer, publisher, genre, year, platform, modes. **Consulta à Steam** (opção ligada por padrão, `ai/steam.rs`): antes da IA, o Rust busca o título na API pública da loja (sem chave, sem custo) e entrega app_id, desenvolvedoras, publicadora e data como dados confiáveis. Depois da IA, a Steam confere o resultado e garante a versão da Steam na lista (todo jogo da loja com o mesmo nome do título entra no topo, mesmo que a IA não o devolva): um `steam_app_id` que ela não confirmou é descartado, e na versão da Steam os dados da loja prevalecem sobre os da IA. Se a Steam falhar, a IA segue sozinha com um aviso. Teste ao vivo: `cargo test -- --ignored loja_real`. Fora do escopo desta migração: geração de logo/imagem, busca de capa, análise de perfil por IA.
 - [ ] 1.2 Importar pastas de vídeos/screenshots por referência (sem copiar gigabytes), com indexação no SQLite.
 - [ ] 1.3 Geração de miniaturas e extração de frames de referência via FFmpeg (comando Rust, em background).
 - [ ] 1.4 Grid virtualizado de mídia, filtros por jogo/tipo/tela (LCD/CRT) e marcação de frames-chave.
 - [ ] 1.5 Rotular frames (placar, vidas, game over) para alimentar o treino.
 
-## 2. Canvas de mapeamento (`features/mapping`, `components/canvas`)
+## 2. Canvas de mapeamento (removido)
+> Substituído pela tela **Validação** (seção 6). O desenho de regiões e o comando `exportar_perfil_jogo` pertenciam ao motor único da ADR 002; com um script por jogo (ADR 004) o perfil exportado não era usado. O código fica no histórico do git.
+
+<details><summary>Histórico do canvas</summary>
+
 - [x] 2.1a Upload de screenshot de referência (`MappingCanvas.tsx`) com leitura das dimensões naturais (`naturalWidth`/`naturalHeight`) e exibição escalada (sem distorcer as coordenadas reais).
 - [ ] 2.1b Zoom/pan sobre o frame de referência (hoje só escala para caber em `MAX_DISPLAY_WIDTH`).
 - [x] 2.2a Desenho/edição de retângulos: mover (arrastar) e redimensionar (alça no canto) via mouse, implementado sem dependência externa (`window.mousemove`/`mouseup`), com coordenadas armazenadas em **pixels exatos** da imagem (`MappingBox` em `types/mapping.ts`) — a conversão para 0..1 (`Region`) fica para a exportação do perfil.
@@ -27,6 +31,8 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 2.5 Undo/redo e atalhos de teclado.
 - [x] 2.6 Comando Tauri `exportar_perfil_jogo` (`src-tauri/src/profiles/commands.rs`): recebe `game_id`, `variant` ("LCD"/"CRT"), as `MappingBox` em pixels e `img_width`/`img_height`; normaliza cada região dividindo x/largura por `img_width` e y/altura por `img_height` (clamp 0..1), monta o `AnalysisProfile` (versão com auto-incremento de PATCH a partir do arquivo existente, ou `v0.1.0` na primeira exportação) e salva em `app_data_dir()/exports/profile_<game_id>_<variant>.json`. Botão "Exportar Perfil" em `GameWorkspace.tsx` chama o comando via `invoke` e mostra um banner de sucesso/erro inline.
   - **Pendências:** `sha256`/`modelRef` ficam de fora (só entram na publicação real, TASKS 5.2); não há persistência das `MappingBox` entre sessões (perdidas ao recarregar, ver 2.2b); `continues` ainda não é desenhável no canvas (2.3b), só aceito pelo Rust se vier do frontend no futuro.
+
+</details>
 
 ## 3. Treinamento local (`features/training`)
 - [ ] 3.1 Comando Rust para gerar dataset de recortes a partir das regiões + rótulos.
@@ -48,3 +54,13 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [ ] 5.2 Empacotar `profile.json` + `model.onnx`, calcular SHA-256 e enviar ao Storage (`profiles/{gameId}/{version}/{variant}/`).
 - [ ] 5.3 Registrar release em `profile_releases` (canal `draft` → `stable`); releases imutáveis.
 - [ ] 5.4 Fluxo de promoção/rollback de release.
+
+## 6. Validação dos scripts (`features/validation`, `src-tauri/src/validacao`)
+- [x] 6.1 Tela **Validação** por jogo do catálogo, com o status do script (registrado em `shmupx_offline`, versão via `analyze.py --list-games`).
+- [x] 6.2 Vídeos do YouTube (download pelo **yt-dlp**, com progresso; `SHMUPX_YTDLP_PATH` e `SHMUPX_YTDLP_COOKIES_FROM_BROWSER` opcionais) e arquivos locais (por referência, sem cópia).
+- [x] 6.3 Gabarito por vídeo: placar real e, opcionais, vidas e continues (edição na linha e no painel).
+- [x] 6.4 Fila de análise (um vídeo por vez) rodando o script com o contrato `client-v1`; relatório completo guardado.
+- [x] 6.5 Métricas: **acerto** (placar lido = gabarito, entre os analisados com gabarito) e **aceitação automática** (o Client aceitaria sem revisão, mesma regra de `analysis/offline.rs`).
+- [x] 6.6 Verificação do ambiente (Python, OpenCV/NumPy, yt-dlp) com o comando de instalação de cada item.
+- Dados locais em `app_data_dir/validacao` (banco por jogo em `datasets/<id>.json`, vídeos baixados em `videos/<id>/`); nada vai ao Firestore.
+- [ ] 6.7 Separar calibração/teste e travar uma versão do script contra os casos antes de publicar (fase 3, publicação assinada).
