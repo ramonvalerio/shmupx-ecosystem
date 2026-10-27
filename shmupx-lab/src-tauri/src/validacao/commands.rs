@@ -49,12 +49,20 @@ pub struct Ambiente {
     pub scripts: Vec<ScriptInfo>,
 }
 
-fn repositorio(app: &AppHandle) -> Result<Repositorio, String> {
-    let pasta = app
-        .path()
+/// Pasta da validação dentro dos dados do Lab (bancos, vídeos baixados e o yt-dlp instalado).
+fn pasta_validacao(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
         .app_data_dir()
-        .map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))?;
-    Ok(Repositorio::new(pasta.join("validacao")))
+        .map(|pasta| pasta.join("validacao"))
+        .map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))
+}
+
+fn repositorio(app: &AppHandle) -> Result<Repositorio, String> {
+    pasta_validacao(app).map(Repositorio::new)
+}
+
+fn localizar_ytdlp(app: &AppHandle) -> Option<PathBuf> {
+    ytdlp::localizar(&ytdlp::caminho_gerenciado(&pasta_validacao(app).ok()?))
 }
 
 fn conferir_jogo(jogo: &str) -> Result<(), String> {
@@ -92,13 +100,13 @@ async fn alterar_video(app: &AppHandle, jogo: &str, id: &str, mudanca: impl FnOn
 
 /// O que a análise precisa e o que está faltando nesta máquina.
 #[tauri::command]
-pub async fn validacao_ambiente() -> Result<Ambiente, String> {
-    let ytdlp = match ytdlp::localizar() {
+pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
+    let ytdlp = match localizar_ytdlp(&app) {
         Some(exe) => match ytdlp::versao(&exe).await {
             Ok(versao) => Item { ok: true, detalhe: format!("yt-dlp {versao}") },
             Err(e) => Item { ok: false, detalhe: e },
         },
-        None => Item { ok: false, detalhe: "yt-dlp não encontrado no PATH (winget install yt-dlp)".into() },
+        None => Item { ok: false, detalhe: "yt-dlp não encontrado (nem instalado pelo Lab, nem no PATH)".into() },
     };
     let raiz = match script::raiz_offline() {
         Ok(raiz) => raiz,
@@ -133,7 +141,7 @@ pub async fn validacao_listar(app: AppHandle, state: State<'_, ValidacaoState>, 
 pub async fn validacao_adicionar_youtube(app: AppHandle, game_id: String, url: String) -> Result<Video, String> {
     conferir_jogo(&game_id)?;
     let url = ytdlp::url_valida(&url).ok_or_else(|| "Isso não parece um link de vídeo (http/https).".to_string())?;
-    let executavel = ytdlp::localizar().ok_or_else(|| "yt-dlp não encontrado. Instale com: winget install yt-dlp".to_string())?;
+    let executavel = localizar_ytdlp(&app).ok_or_else(|| "yt-dlp não encontrado: instale pela tela de Validação".to_string())?;
     let video = Video {
         id: novo_id()?,
         titulo: url.clone(),
@@ -299,4 +307,12 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, video_ids: Vec<Str
         }
     });
     Ok(quantidade)
+}
+
+/// Instala (ou atualiza) o yt-dlp oficial na pasta do Lab, conferindo o SHA-256 da release.
+#[tauri::command]
+pub async fn validacao_instalar_ytdlp(app: AppHandle) -> Result<Item, String> {
+    let destino = ytdlp::caminho_gerenciado(&pasta_validacao(&app)?);
+    let versao = ytdlp::instalar(&destino).await?;
+    Ok(Item { ok: true, detalhe: format!("yt-dlp {versao}") })
 }

@@ -83,6 +83,9 @@ export interface ValidationEnvironment {
 
 export const getEnvironment = () => invoke<ValidationEnvironment>("validacao_ambiente");
 
+/** Instala (ou atualiza) o yt-dlp oficial na pasta do Lab, conferindo o SHA-256 da release. */
+export const installYtDlp = () => invoke<EnvironmentItem>("validacao_instalar_ytdlp");
+
 export const listVideos = (gameId: string) => invoke<ValidationDataset>("validacao_listar", { gameId });
 
 export const addYoutubeVideo = (gameId: string, url: string) =>

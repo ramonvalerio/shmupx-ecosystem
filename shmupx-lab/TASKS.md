@@ -61,6 +61,6 @@ Ordem sequencial. Contexto: `docs/adr/002` e `docs/specs/001`.
 - [x] 6.3 Gabarito por vídeo: placar real e, opcionais, vidas e continues (edição na linha e no painel).
 - [x] 6.4 Fila de análise (um vídeo por vez) rodando o script com o contrato `client-v1`; relatório completo guardado.
 - [x] 6.5 Métricas: **acerto** (placar lido = gabarito, entre os analisados com gabarito) e **aceitação automática** (o Client aceitaria sem revisão, mesma regra de `analysis/offline.rs`).
-- [x] 6.6 Verificação do ambiente (Python, OpenCV/NumPy, yt-dlp) com o comando de instalação de cada item.
+- [x] 6.6 Verificação do ambiente (Python, OpenCV/NumPy, yt-dlp) com o comando de instalação de cada item. O yt-dlp tem instalação automática: o Lab baixa o executável oficial da última release no GitHub, confere o SHA-256 contra o `SHA2-256SUMS` da mesma release e guarda em `app_data_dir/validacao/tools` (procurado antes do PATH). Teste ao vivo: `cargo test -- --ignored instala_o_yt_dlp_real`.
 - Dados locais em `app_data_dir/validacao` (banco por jogo em `datasets/<id>.json`, vídeos baixados em `videos/<id>/`); nada vai ao Firestore.
 - [ ] 6.7 Separar calibração/teste e travar uma versão do script contra os casos antes de publicar (fase 3, publicação assinada).

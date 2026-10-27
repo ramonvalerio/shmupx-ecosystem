@@ -12,6 +12,7 @@ pub fn run() {
       ai::commands::sugerir_jogo,
       auth::commands::login_google_desktop,
       validacao::commands::validacao_ambiente,
+      validacao::commands::validacao_instalar_ytdlp,
       validacao::commands::validacao_listar,
       validacao::commands::validacao_adicionar_youtube,
       validacao::commands::validacao_adicionar_arquivos,

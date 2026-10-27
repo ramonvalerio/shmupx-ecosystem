@@ -17,15 +17,100 @@ pub const VARIAVEL_COOKIES: &str = "SHMUPX_YTDLP_COOKIES_FROM_BROWSER";
 const TIMEOUT: Duration = Duration::from_secs(3600);
 const EXTENSOES_VIDEO: [&str; 5] = ["mp4", "mkv", "webm", "mov", "avi"];
 
-/// Caminho do yt-dlp: a variável de ambiente, senão o primeiro no PATH.
-pub fn localizar() -> Option<PathBuf> {
+/// Release oficial do yt-dlp: o executável e a lista de SHA-256 publicada junto.
+const RELEASE: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+const TIMEOUT_INSTALACAO: Duration = Duration::from_secs(300);
+
+/// Nome do executável standalone de cada sistema na release do yt-dlp.
+fn arquivo_da_release() -> &'static str {
+    if cfg!(windows) {
+        "yt-dlp.exe"
+    } else if cfg!(target_os = "macos") {
+        "yt-dlp_macos"
+    } else {
+        "yt-dlp_linux"
+    }
+}
+
+/// Onde o Lab guarda o yt-dlp que ele mesmo instala (dentro da pasta `validacao`).
+pub fn caminho_gerenciado(raiz_validacao: &Path) -> PathBuf {
+    raiz_validacao.join("tools").join(if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" })
+}
+
+/// Caminho do yt-dlp: a variável de ambiente, o instalado pelo Lab ou o primeiro no PATH.
+pub fn localizar(gerenciado: &Path) -> Option<PathBuf> {
     if let Some(caminho) = std::env::var_os(VARIAVEL_CAMINHO).map(PathBuf::from) {
         return caminho.is_file().then_some(caminho);
+    }
+    if gerenciado.is_file() {
+        return Some(gerenciado.to_path_buf());
     }
     let nome = if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" };
     std::env::split_paths(&std::env::var_os("PATH")?)
         .map(|pasta| pasta.join(nome))
         .find(|caminho| caminho.is_file())
+}
+
+/// Hash esperado de `arquivo` na lista `SHA2-256SUMS` da release (`<hash>  <arquivo>` por linha).
+fn hash_esperado(lista: &str, arquivo: &str) -> Option<String> {
+    lista.lines().find_map(|linha| {
+        let mut partes = linha.split_whitespace();
+        let hash = partes.next()?;
+        let nome = partes.next()?.trim_start_matches('*');
+        (nome == arquivo && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Baixa o yt-dlp oficial da última release para `destino`, conferindo o SHA-256 contra a lista
+/// publicada na mesma release. Devolve a versão instalada.
+pub async fn instalar(destino: &Path) -> Result<String, String> {
+    let http = reqwest::Client::builder()
+        .timeout(TIMEOUT_INSTALACAO)
+        .user_agent("shmupx-lab")
+        .build()
+        .map_err(|e| format!("falha ao construir cliente HTTP: {e}"))?;
+    let baixar = |url: String| {
+        let http = http.clone();
+        async move {
+            http.get(&url)
+                .send()
+                .await
+                .and_then(|r| r.error_for_status())
+                .map_err(|e| format!("falha ao baixar {url}: {e}"))?
+                .bytes()
+                .await
+                .map_err(|e| format!("falha ao baixar {url}: {e}"))
+        }
+    };
+
+    let arquivo = arquivo_da_release();
+    let lista = baixar(format!("{RELEASE}/SHA2-256SUMS")).await?;
+    let esperado = hash_esperado(&String::from_utf8_lossy(&lista), arquivo)
+        .ok_or_else(|| format!("a release do yt-dlp não lista o hash de {arquivo}"))?;
+    let executavel = baixar(format!("{RELEASE}/{arquivo}")).await?;
+    if sha256_hex(&executavel) != esperado {
+        return Err("o arquivo baixado não confere com o SHA-256 publicado; tente de novo".into());
+    }
+
+    if let Some(pasta) = destino.parent() {
+        std::fs::create_dir_all(pasta).map_err(|e| format!("falha ao criar a pasta do yt-dlp: {e}"))?;
+    }
+    let temporario = destino.with_extension("download");
+    std::fs::write(&temporario, &executavel).map_err(|e| format!("falha ao gravar o yt-dlp: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temporario, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("falha ao tornar o yt-dlp executável: {e}"))?;
+    }
+    std::fs::rename(&temporario, destino).map_err(|e| format!("falha ao instalar o yt-dlp: {e}"))?;
+    versao(destino).await
 }
 
 pub async fn versao(executavel: &Path) -> Result<String, String> {
@@ -155,6 +240,36 @@ mod tests {
         assert_eq!(progresso_da_linha("[download] Destination: x.mp4"), None);
         assert_eq!(progresso_da_linha("[youtube] abc: Downloading webpage"), None);
         assert_eq!(progresso_da_linha("[download] 140% of x"), None);
+    }
+
+    #[test]
+    fn le_o_hash_do_arquivo_na_lista_da_release() {
+        let hash = "a".repeat(64);
+        let lista = format!("{}  yt-dlp\n{hash}  yt-dlp.exe\n{}  yt-dlp_macos\n", "b".repeat(64), "c".repeat(64));
+        assert_eq!(hash_esperado(&lista, "yt-dlp.exe"), Some(hash));
+        assert_eq!(hash_esperado(&lista, "yt-dlp_x86.exe"), None);
+        assert_eq!(hash_esperado("curto  yt-dlp.exe", "yt-dlp.exe"), None, "hash inválido é ignorado");
+        assert_eq!(hash_esperado(&format!("{}  *yt-dlp.exe", "D".repeat(64)), "yt-dlp.exe"), Some("d".repeat(64)));
+    }
+
+    /// Contra a release real (rede, ~17 MB, sem custo): baixa, confere o hash e executa.
+    /// `cargo test -- --ignored instala_o_yt_dlp_real`
+    #[tokio::test]
+    #[ignore = "exige acesso à rede"]
+    async fn instala_o_yt_dlp_real() {
+        let pasta = std::env::temp_dir().join(format!("shmupx-lab-ytdlp-instalacao-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&pasta);
+        let destino = caminho_gerenciado(&pasta);
+        let versao = instalar(&destino).await.unwrap();
+        assert!(destino.is_file());
+        assert!(versao.starts_with("20"), "versão no formato AAAA.MM.DD: {versao}");
+        assert_eq!(localizar(&destino).as_deref(), Some(destino.as_path()));
+        let _ = std::fs::remove_dir_all(&pasta);
+    }
+
+    #[test]
+    fn sha256_em_hexadecimal() {
+        assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     }
 
     #[test]

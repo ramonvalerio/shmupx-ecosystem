@@ -4,6 +4,7 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { IconAlert, IconCheck, IconPlus, IconRefresh } from "../../components/ui/Icons";
 import {
+  installYtDlp,
   addLocalVideos,
   addYoutubeVideo,
   percent,
@@ -44,9 +45,25 @@ function Metric({ label, value, detail, hint }: { label: string; value: ReactNod
   );
 }
 
-/** O que falta instalar, com o comando de cada item. */
+/** O que falta instalar, com o comando de cada item (e instalação automática do yt-dlp). */
 function EnvironmentNotice({ environment, checking, onCheck }: { environment: ValidationEnvironment; checking: boolean; onCheck: () => void }) {
-  const issues: { title: string; detail: string; command: string }[] = [];
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+
+  async function install() {
+    setInstalling(true);
+    setInstallError(null);
+    try {
+      await installYtDlp();
+      onCheck();
+    } catch (e) {
+      setInstallError(describe(e));
+    } finally {
+      setInstalling(false);
+    }
+  }
+
+  const issues: { title: string; detail: string; command: string; action?: ReactNode }[] = [];
   if (!environment.python.ok) {
     issues.push({ title: "Python não disponível para o script", detail: environment.python.detalhe, command: "winget install Python.Python.3.12" });
   } else if (!environment.dependencias.ok) {
@@ -57,7 +74,19 @@ function EnvironmentNotice({ environment, checking, onCheck }: { environment: Va
     });
   }
   if (!environment.ytdlp.ok) {
-    issues.push({ title: "yt-dlp não instalado (necessário só para vídeos do YouTube)", detail: environment.ytdlp.detalhe, command: "winget install yt-dlp" });
+    issues.push({
+      title: "yt-dlp não instalado (necessário só para vídeos do YouTube)",
+      detail: "O Lab baixa o yt-dlp oficial do GitHub, confere o SHA-256 publicado e guarda na pasta dele. Alternativa manual:",
+      command: "winget install yt-dlp",
+      action: (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <Button size="sm" variant="primary" loading={installing} onClick={() => void install()}>
+            {installing ? "Instalando…" : "Instalar automaticamente"}
+          </Button>
+          {installError && <span role="alert" className="text-red-300">{installError}</span>}
+        </div>
+      ),
+    });
   }
   if (issues.length === 0) return null;
   return (
@@ -74,6 +103,7 @@ function EnvironmentNotice({ environment, checking, onCheck }: { environment: Va
           <li key={issue.title} className="text-xs">
             <p className="text-zinc-200">{issue.title}</p>
             <p className="mt-0.5 break-words text-zinc-500">{issue.detail}</p>
+            {issue.action}
             <code className="mt-1.5 block rounded border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[11px] break-all text-zinc-300 select-all">{issue.command}</code>
           </li>
         ))}
