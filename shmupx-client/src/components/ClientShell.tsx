@@ -6,6 +6,8 @@ import { ProfilePage, SubmissionsPage, SubscriptionPage } from "./AccountPages";
 import { useBigPicture } from "./useBigPicture";
 import type { SessionRun } from "../types/submission";
 import CollectionPane from "./CollectionPane";
+import RoomRankingView from "./RoomRankingView";
+import RoomTabs from "./RoomTabs";
 import SettingsPage from "./SettingsPage";
 import { readPreferences, PREFERENCES_KEY } from "./settingsState";
 import type { PlayerProfile } from "../auth/firebase";
@@ -16,7 +18,6 @@ const NAVIGATION: { id: Section; icon: string; label: string }[] = [
   { id: "events", icon: "◇", label: "Eventos" },
   { id: "ranking", icon: "☆", label: "Ranking" },
   { id: "submissions", icon: "↑", label: "Submissões" },
-  { id: "rooms", icon: "☷", label: "Salas" },
   { id: "settings", icon: "⚙", label: "Configurações" },
   { id: "help", icon: "?", label: "Ajuda" },
 ];
@@ -25,14 +26,15 @@ interface ClientShellProps {
   selectedRoomId: string | null;
   recordingRoomId: string | null;
   onSelectRoom: (id: string) => void;
-  children: ReactNode;
+  /** Conteúdo da sala de um jogo; `openRanking` troca a aba para o ranking do jogo. */
+  renderRoom: (room: GameRoom, actions: { openRanking: () => void }) => ReactNode;
   runs: SessionRun[];
   profile: PlayerProfile;
   onProfile: (profile: PlayerProfile) => void;
   onSignOut: () => void;
 }
 
-export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, onSelectRoom, children, runs, profile, onProfile, onSignOut }: ClientShellProps) {
+export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, onSelectRoom, renderRoom, runs, profile, onProfile, onSignOut }: ClientShellProps) {
   const { t, setLanguage } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
   const [section, setSection] = useState<Section>(() => preferences.startup);
@@ -46,8 +48,41 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     catch { setStorageError(true); }
   }, [preferences]);
 
-  function openGame(id: string) { onSelectRoom(id); setSection("collection"); }
-  const isLibrary = section === "collection" || section === "rooms";
+  // Salas abertas em abas; `activeRoomId` null mostra a grade da coleção.
+  const [openRoomIds, setOpenRoomIds] = useState<string[]>([]);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [rankingRoomIds, setRankingRoomIds] = useState<string[]>([]);
+  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
+
+  // Um jogo despublicado sai do catálogo: a aba dele fecha.
+  useEffect(() => {
+    const valid = (id: string) => rooms.some((room) => room.id === id);
+    setOpenRoomIds((current) => (current.every(valid) ? current : current.filter(valid)));
+    setActiveRoomId((current) => (current === null || valid(current) ? current : null));
+  }, [rooms]);
+
+  function openGame(id: string) {
+    setOpenRoomIds((current) => (current.includes(id) ? current : [...current, id]));
+    setActiveRoomId(id);
+    onSelectRoom(id);
+    setSection("collection");
+  }
+  function activateRoom(id: string) { setActiveRoomId(id); onSelectRoom(id); }
+  function closeRoom(id: string) {
+    const index = openRoomIds.indexOf(id);
+    const remaining = openRoomIds.filter((roomId) => roomId !== id);
+    setOpenRoomIds(remaining);
+    setRankingRoomIds((current) => current.filter((roomId) => roomId !== id));
+    if (activeRoomId === id) {
+      const next = remaining[Math.min(index, remaining.length - 1)] ?? null;
+      setActiveRoomId(next);
+      if (next) onSelectRoom(next);
+    }
+  }
+  function setRanking(id: string, open: boolean) {
+    setRankingRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
+  }
+  const isLibrary = section === "collection";
 
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
@@ -74,8 +109,16 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "settings" && <SettingsPage preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
       {section === "help" && <HelpPage />}
       <div className="client-workspace" hidden={!isLibrary}>
-        <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} compact={section === "rooms"} bigPicture={bigPicture.active} />
-        <div className="game-details">{children}</div>
+        <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} />
+        <div className="room-stage">
+          {activeRoom === null ? (
+            <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} compact={false} bigPicture={bigPicture.active} />
+          ) : rankingRoomIds.includes(activeRoom.id) ? (
+            <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} onBack={() => setRanking(activeRoom.id, false)} />
+          ) : (
+            renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true) })
+          )}
+        </div>
       </div>
       </div>
       <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active ? bigPicture.controller : t("ShmupX Client")} <span className="footer-demo">{t("· dados de demonstração")}</span></span></footer>

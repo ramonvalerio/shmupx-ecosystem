@@ -5,7 +5,7 @@ import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { updateDisplayName, type PlayerProfile } from "../auth/firebase";
 
-const RUN_LABELS: Record<SessionRun["status"], string> = {
+export const RUN_LABELS: Record<SessionRun["status"], string> = {
   recording: "Gravando",
   analyzing: "Analisando",
   failed: "Não enviada",
@@ -13,7 +13,7 @@ const RUN_LABELS: Record<SessionRun["status"], string> = {
   expired: "Tempo encerrado",
 };
 
-function runDate(timestamp: number, locale: string) {
+export function runDate(timestamp: number, locale: string) {
   return new Date(timestamp).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
 }
 

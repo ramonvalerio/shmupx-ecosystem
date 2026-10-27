@@ -42,8 +42,6 @@ export default function App() {
   const roomsRef = useRef(rooms);
   roomsRef.current = rooms;
 
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? null;
-  const messages = selectedRoomId ? messagesByRoom[selectedRoomId] ?? [] : [];
 
   useEffect(() => {
     if (!isTauri() || !selectedRoomId) return;
@@ -84,9 +82,7 @@ export default function App() {
     };
   }, []);
 
-  function handleSendMessage(text: string) {
-    if (!selectedRoomId) return;
-
+  function handleSendMessage(roomId: string, text: string) {
     const newMessage: ChatMessage = {
       id: crypto.randomUUID(),
       author: "Você",
@@ -96,7 +92,7 @@ export default function App() {
 
     setMessagesByRoom((prev) => ({
       ...prev,
-      [selectedRoomId]: [...(prev[selectedRoomId] ?? []), newMessage],
+      [roomId]: [...(prev[roomId] ?? []), newMessage],
     }));
   }
 
@@ -104,18 +100,30 @@ export default function App() {
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
   if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} />;
+  const profileName = auth.state.profile.displayName;
 
   return (
     <>
-    <ClientShell profile={auth.state.profile} onProfile={auth.setProfile} onSignOut={auth.signOut} rooms={rooms} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={setSelectedRoomId} runs={runs}>
-      <RoomView
-        room={selectedRoom}
-        messages={messages}
-        isRecording={selectedRoomId !== null && recordingRoomId === selectedRoomId}
-        onSendMessage={handleSendMessage}
-
-      />
-    </ClientShell>
+    <ClientShell
+      profile={auth.state.profile}
+      onProfile={auth.setProfile}
+      onSignOut={auth.signOut}
+      rooms={rooms}
+      selectedRoomId={selectedRoomId}
+      recordingRoomId={recordingRoomId}
+      onSelectRoom={setSelectedRoomId}
+      runs={runs}
+      renderRoom={(room, actions) => (
+        <RoomView
+          room={room}
+          messages={messagesByRoom[room.id] ?? []}
+          isRecording={recordingRoomId === room.id}
+          playerName={profileName}
+          onSendMessage={(text) => handleSendMessage(room.id, text)}
+          onOpenRanking={actions.openRanking}
+        />
+      )}
+    />
 
       {expiredRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">

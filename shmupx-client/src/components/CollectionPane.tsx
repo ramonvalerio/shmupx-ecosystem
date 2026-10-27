@@ -8,9 +8,12 @@ import ImportGamesDialog from "./ImportGamesDialog";
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }
 
-export default function CollectionPane({ rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, compact, bigPicture }: {
+export default function CollectionPane({ rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, onOpenRoom, compact, bigPicture }: {
   rooms: GameRoom[]; runs: SessionRun[]; selectedRoomId: string | null; recordingRoomId: string | null;
-  onSelectRoom: (id: string) => void; compact: boolean; bigPicture: boolean;
+  onSelectRoom: (id: string) => void;
+  /** Abre a sala do jogo numa aba (duplo clique ou Enter no card). */
+  onOpenRoom: (id: string) => void;
+  compact: boolean; bigPicture: boolean;
 }) {
   const { t } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
@@ -41,7 +44,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         const favorite = preferences.favorites.includes(room.id);
         const count = runs.filter((run) => run.gameId === room.id).length;
         return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
-          <button type="button" className="game-card" aria-label={t("Selecionar {game}", {game:room.title})} aria-pressed={selectedRoomId === room.id} onClick={() => onSelectRoom(room.id)}>
+          <button type="button" className="game-card" aria-label={t("Selecionar {game}", {game:room.title})} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
             <div className={`game-art art-${room.id}`}>{room.id === "dodonpachi" ? <img src="/img/dodonpachi.png" alt="" /> : <span>{room.title}</span>}<span className="platform-tag">{t("STEAM")}</span></div>
             <div className="game-card-info"><strong>{room.title}</strong><span><i className="status-dot" />{room.playersOnline} {t(" na sala · demo")}</span>{count > 0 && <small>{count} {count === 1 ? t("run nesta sessão") : t("runs nesta sessão")}</small>}{recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}</div>
           </button>
@@ -51,6 +54,6 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
     </div>
     {visible.length === 0 && <div className="collection-empty"><p>{filter === "favorites" && !query ? t("Você ainda não tem jogos favoritos. Marque uma estrela para começar.") : filter === "recorded" && !query ? t("Nenhum jogo tem runs observadas nesta sessão.") : t("Nenhum jogo corresponde aos filtros.")}</p><button className="text-action" onClick={resetFilters}>{t("Mostrar todos os jogos")}</button></div>}
     {storageError && <p role="status" className="muted">{t("Alterações aplicadas nesta sessão; não foi possível salvar as preferências da coleção.")}</p>}
-    <p className="collection-note">{t("Selecione um jogo para abrir sua sala, jogar e consultar o ranking. A estrela marca seus favoritos neste dispositivo.")}</p>
+    <p className="collection-note">{t("Clique duas vezes num jogo (ou Enter) para abrir a sala: cada sala abre numa aba, e o botão Coleção volta para cá. A estrela marca seus favoritos neste dispositivo.")}</p>
   </section>;
 }

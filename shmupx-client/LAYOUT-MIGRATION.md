@@ -90,3 +90,12 @@ Validação: `npm run build` (TypeScript e Vite) e navegação na prévia local.
 - A tela de submissões acompanha eventos correlacionados pelo processo de captura: analisando, enviada ou não enviada, com motivo. O retorno do comando de parada sozinho não confirma envio.
 - Vídeos usam o ID da run. Timers são associados à run, e uma nova captura é bloqueada durante o processamento para evitar associação ao envio errado no backend atual.
 - Ainda não homologado com captura/Steam/backend reais. Catálogo e autenticação continuam demonstrativos; o UUID do Earthion no backend precisa ser associado ao slug do script.
+
+## Décima etapa
+
+- Salas em abas, como no cliente WinUI: na Coleção, um clique seleciona o card e **duplo clique** (ou Enter, ou A no Big Picture) abre a sala do jogo numa aba. A barra mostra o botão **← Coleção** (volta para a grade) e uma aba por sala aberta, com × para fechar e um ponto vermelho quando o jogo está gravando. A entrada Salas saiu da navegação lateral: as salas vivem nas abas.
+- Sala dedicada (`RoomView.tsx`): cabeçalho com capa, título e ações (Ranking, iniciar pela Steam ou parar), chat no centro com a aba Detalhes e, à direita, os jogadores na sala (o jogador conectado e o RobotX). A presença em tempo real ainda não existe e está rotulada assim; o botão da Steam fica desativado quando o catálogo não tem `steam_app_id`.
+- Ranking da sala (`RoomRankingView.tsx`): abre na mesma aba pelo botão Ranking e volta por ← Voltar para a sala. Escopo Local (runs deste jogo nesta sessão, sem placar até o backend publicar o resultado aprovado) e Online (dados de demonstração), modos Hi-score/1CC/Caravan, busca e painel de detalhes do registro. Substitui a gaveta `RoomRankingDrawer`.
+- A aba ativa permanece montada ao trocar de seção, preservando chat, rascunho e controles de gravação; um jogo despublicado no Lab fecha a aba.
+
+Validação: build e dezessete testes aprovados (incluindo a cobertura das traduções em inglês). Visual e fluxo com login, Steam e gravação ainda precisam de conferência no Tauri.
