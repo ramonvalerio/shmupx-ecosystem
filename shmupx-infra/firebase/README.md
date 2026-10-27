@@ -83,6 +83,6 @@ O método escolhido pelo usuário é **Google**, considerando que as gameplays s
 
 O registro Web permite usar os SDKs JavaScript no React, mas não implementa por si só o login desktop. No Tauri, a autenticação Google deve abrir o navegador do sistema e retornar por um fluxo de autorização protegido; não usar formulário de senha nem OAuth dentro da WebView embutida. Nenhum segredo OAuth deve ser distribuído dentro do cliente.
 
-Próxima implementação: fluxo Google no navegador, sessão Firebase no cliente, criação/leitura transacional de `users/{uid}` conforme as regras e migração da validação de identidade no backend. O token demonstrativo atual não foi substituído nesta etapa.
+Implementado em 2026-10-26: login Google no navegador do sistema (loopback + PKCE no Rust do cliente), sessão Firebase no cliente e criação transacional de `users/{uid}`. O token demonstrativo foi removido. O backend valida o ID token do Firebase e escreve `wallets` e `gameplays` com conta de serviço; ver `shmupx-backend/TASKS.md`.
 
 A autorização para publicar no YouTube é separada do login no ShmupX. Permissões de upload devem ser pedidas na conexão do canal, com escolha e confirmação do canal de destino. Não solicitar acesso de upload ao registrar o perfil no Firestore.

@@ -309,11 +309,12 @@ adicionada) para gerar um token HS256 válido com um `sub` escolhido, subi o ser
       gerado por `capture/audio.rs` hoje só fica salvo localmente, nada o envia.
 - [ ] 5.4 Sem teste automatizado (unitário/integração) para o pipeline da Edge Function.
 
-## Identidade Firebase (ADR 005, etapa 1 — ponte no Postgres)
-- [x] `middleware/firebase.rs`: valida ID token do Firebase (RS256, chaves JWK do Google em cache, `aud`/`iss` do projeto, `exp`/`iat`/`auth_time`, `sub`). Exige `FIREBASE_PROJECT_ID=shmupx-project-id`. Revogação não é checada (exigiria Admin SDK).
-- [x] `middleware/jogador.rs`: resolve/cria `perfis_jogadores` pelo `firebase_uid` e injeta `Extension<Uuid>`; novos jogadores começam com 50 fichas (`FICHAS_INICIAIS`).
-- [x] `/api/runs/start` e `/api/runs` usam o Firebase; validação HS256 do Supabase removida. `GET /api/me` devolve a identidade do token.
-- [x] Migration `20261026120000_perfis_firebase.sql`: remove FK de `auth.users`, adiciona `firebase_uid` único, default de fichas 50.
-- [ ] Aplicar a migration e homologar contra Postgres real (não executada: Docker indisponível).
-- [ ] Edge Function `robotx-voice` ainda valida JWT do Supabase: voz do RobotX recusa o token Firebase até migrar.
-- [ ] Etapa 2: mover fichas e runs para o Firestore (`wallets`, `gameplays`) e aposentar a ponte.
+## Firestore (ADR 005) — fichas e gameplays
+- [x] `middleware/firebase.rs`: valida ID token do Firebase (RS256, JWKS do Google em cache, `aud`/`iss` do projeto, `exp`/`iat`/`auth_time`, `sub`). Revogação não é checada (exigiria Admin SDK).
+- [x] `firestore/`: cliente REST com conta de serviço (`GOOGLE_APPLICATION_CREDENTIALS`, fluxo JWT bearer) ou emulador (`FIRESTORE_EMULATOR_HOST`). Leituras transacionais via `:batchGet` (o `GET ?transaction=` trava no emulador).
+- [x] `services/gameplays.rs`: `POST /api/runs/start` debita 1 ficha em `wallets/{uid}` (carteira nasce com 50, lançamentos em `entries`) e abre `gameplays/{runId}` em `recording`; `POST /api/runs` recebe `run_id`, valida dono, jogo e janela, grava `result` e muda para `needs_review` (reenvio idêntico é idempotente).
+- [x] Postgres opcional: `/api/jogos` e `/api/rankings` só sobem com `DATABASE_URL`. Ponte `firebase_uid` no Postgres descartada antes de ser aplicada.
+- [x] Testes de integração no emulador: `npx firebase-tools emulators:exec --only firestore --project demo-shmupx "cd ../../shmupx-backend && cargo test -- --ignored --test-threads=1"` (rodar em `shmupx-infra/firebase`).
+- [ ] Publicar `games/earthion` (`published: true`, `maxDurationSeconds`) em produção — sem ele nenhuma run inicia.
+- [ ] Aprovação de `needs_review`, nota normalizada e publicação dos rankings no Firestore (preservar a regra dos 5 jogos mais jogados).
+- [ ] Edge Function `robotx-voice` ainda valida JWT do Supabase.

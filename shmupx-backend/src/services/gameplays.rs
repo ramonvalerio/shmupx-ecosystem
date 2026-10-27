@@ -1,0 +1,343 @@
+//! Fichas e gameplays no Firestore (Spec 002, ADR 005).
+//!
+//! - `iniciar`: numa transação, valida o jogo publicado e o saldo, debita 1 ficha em
+//!   `wallets/{uid}` com lançamento imutável em `wallets/{uid}/entries`, e abre
+//!   `gameplays/{runId}` em `recording`. Carteira inexistente nasce com `FICHAS_INICIAIS`.
+//! - `submeter`: grava o resultado do validador offline na gameplay do próprio jogador, dentro
+//!   da janela `serverStartedAt + maxDurationSeconds + tolerância`. O estado vai para
+//!   `needs_review`: completar a análise não aprova a gameplay (README do Firebase); aprovação e
+//!   publicação de ranking são etapas posteriores do backend.
+
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use serde::Serialize;
+use serde_json::{json, Value};
+use uuid::Uuid;
+
+use crate::error::AppError;
+use crate::firestore::valor::{data, inteiro, ler_booleano, ler_data, ler_inteiro, ler_mapa, ler_texto, mapa, texto};
+use crate::firestore::{Campos, Firestore};
+
+/// Saldo de uma carteira criada no primeiro início de run.
+pub const FICHAS_INICIAIS: i64 = 50;
+
+/// Duração usada quando o jogo não define `maxDurationSeconds` (Spec 002: 45 a 60 min).
+const DURACAO_PADRAO_SEGUNDOS: i64 = 3600;
+
+/// Margem sobre a duração máxima para a latência entre o fim do timer e o envio (Spec 002).
+pub const TOLERANCIA_ENVIO_SEGUNDOS: i64 = 120;
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RunIniciada {
+    pub run_id: String,
+    pub server_started_at: DateTime<Utc>,
+    pub max_duration_segundos: i32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Resultado {
+    pub score_bruto: i64,
+    pub vidas_perdidas: i32,
+    pub continues_usados: i32,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct RunSubmetida {
+    pub run_id: String,
+    pub status: &'static str,
+}
+
+/// IDs de documento vêm do cliente; só aceitamos o formato que nós mesmos geramos/publicamos.
+fn id_valido(id: &str) -> bool {
+    (1..=128).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+pub async fn iniciar(fs: &Firestore, uid: &str, game_id: &str) -> Result<RunIniciada, AppError> {
+    if !id_valido(game_id) {
+        return Err(AppError::bad_request("jogo_id inválido"));
+    }
+    let tx = fs.iniciar_transacao().await?;
+    let resultado = iniciar_na_transacao(fs, &tx, uid, game_id).await;
+    if resultado.is_err() {
+        fs.desfazer(&tx).await;
+    }
+    resultado
+}
+
+async fn iniciar_na_transacao(fs: &Firestore, tx: &str, uid: &str, game_id: &str) -> Result<RunIniciada, AppError> {
+    let jogo = fs
+        .ler(&format!("games/{game_id}"), tx)
+        .await?
+        .filter(|jogo| ler_booleano(jogo, "published") == Some(true))
+        .ok_or_else(|| AppError::not_found("jogo não encontrado"))?;
+    let max_duracao = ler_inteiro(&jogo, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS).clamp(1, 7200);
+
+    let caminho_carteira = format!("wallets/{uid}");
+    let carteira = fs.ler(&caminho_carteira, tx).await?;
+    let nova = carteira.is_none();
+    let saldo = carteira.as_ref().and_then(|c| ler_inteiro(c, "balance")).unwrap_or(FICHAS_INICIAIS);
+    let versao = carteira.as_ref().and_then(|c| ler_inteiro(c, "version")).unwrap_or(0);
+    if saldo <= 0 {
+        return Err(AppError::bad_request("saldo de fichas insuficiente"));
+    }
+
+    let agora = Utc::now();
+    let run_id = Uuid::new_v4().to_string();
+    let saldo_final = saldo - 1;
+
+    let mut escritas = Vec::new();
+    let mut campos_carteira = campos(&[
+        ("balance", inteiro(saldo_final)),
+        ("version", inteiro(versao + 1)),
+        ("updatedAt", data(agora)),
+    ]);
+    if nova {
+        campos_carteira.insert("createdAt".into(), data(agora));
+        escritas.push(criar(fs, &format!("{caminho_carteira}/entries/{}", Uuid::new_v4()), campos(&[
+            ("type", texto("grant")),
+            ("amount", inteiro(FICHAS_INICIAIS)),
+            ("reason", texto("initial_grant")),
+            ("balanceAfter", inteiro(FICHAS_INICIAIS)),
+            ("createdAt", data(agora)),
+        ])));
+    }
+    escritas.push(atualizar(fs, &caminho_carteira, campos_carteira, None));
+    escritas.push(criar(fs, &format!("{caminho_carteira}/entries/{}", Uuid::new_v4()), campos(&[
+        ("type", texto("debit")),
+        ("amount", inteiro(-1)),
+        ("reason", texto("run_start")),
+        ("runId", texto(&run_id)),
+        ("balanceAfter", inteiro(saldo_final)),
+        ("createdAt", data(agora)),
+    ])));
+    escritas.push(criar(fs, &format!("gameplays/{run_id}"), campos(&[
+        ("ownerId", texto(uid)),
+        ("gameId", texto(game_id)),
+        ("status", texto("recording")),
+        ("createdAt", data(agora)),
+        ("updatedAt", data(agora)),
+        ("capture", mapa(campos(&[
+            ("serverStartedAt", data(agora)),
+            ("maxDurationSeconds", inteiro(max_duracao)),
+        ]))),
+    ])));
+
+    fs.confirmar(tx, escritas).await?;
+    Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32 })
+}
+
+pub async fn submeter(
+    fs: &Firestore,
+    uid: &str,
+    run_id: &str,
+    game_id: &str,
+    resultado: Resultado,
+) -> Result<RunSubmetida, AppError> {
+    if resultado.score_bruto < 0 || resultado.vidas_perdidas < 0 || resultado.continues_usados < 0 {
+        return Err(AppError::bad_request("score_bruto, vidas_perdidas e continues_usados não podem ser negativos"));
+    }
+    if !id_valido(run_id) {
+        return Err(AppError::bad_request("run_id inválido"));
+    }
+    let tx = fs.iniciar_transacao().await?;
+    let saida = submeter_na_transacao(fs, &tx, uid, run_id, game_id, &resultado).await;
+    // Só desfaz o que não chegou a ser confirmado.
+    if matches!(saida, Err(_) | Ok(Saida::JaRegistrado(_))) {
+        fs.desfazer(&tx).await;
+    }
+    match saida? {
+        Saida::Gravado(run) | Saida::JaRegistrado(run) => Ok(run),
+        Saida::Expirada => Err(AppError::conflict("janela de envio expirada para esta run; a ficha não é devolvida")),
+    }
+}
+
+enum Saida {
+    Gravado(RunSubmetida),
+    /// Reenvio idêntico (ex.: a resposta anterior se perdeu na rede): sucesso sem nova escrita.
+    JaRegistrado(RunSubmetida),
+    Expirada,
+}
+
+async fn submeter_na_transacao(
+    fs: &Firestore,
+    tx: &str,
+    uid: &str,
+    run_id: &str,
+    game_id: &str,
+    resultado: &Resultado,
+) -> Result<Saida, AppError> {
+    let caminho = format!("gameplays/{run_id}");
+    // Gameplay de outro jogador responde como inexistente: não revela IDs alheios.
+    let gameplay = fs
+        .ler(&caminho, tx)
+        .await?
+        .filter(|g| ler_texto(g, "ownerId").as_deref() == Some(uid))
+        .ok_or_else(|| AppError::not_found("run não encontrada"))?;
+    if ler_texto(&gameplay, "gameId").as_deref() != Some(game_id) {
+        return Err(AppError::bad_request("a run pertence a outro jogo"));
+    }
+
+    let submetida = RunSubmetida { run_id: run_id.to_string(), status: "needs_review" };
+    match ler_texto(&gameplay, "status").as_deref() {
+        Some("recording") => {}
+        Some("needs_review") if ler_mapa(&gameplay, "result").as_ref().map(ler_resultado) == Some(Some(resultado.clone())) => {
+            return Ok(Saida::JaRegistrado(submetida));
+        }
+        _ => return Err(AppError::conflict("esta run já foi encerrada")),
+    }
+
+    let captura = ler_mapa(&gameplay, "capture").unwrap_or_default();
+    let inicio = ler_data(&captura, "serverStartedAt").ok_or_else(|| AppError::internal("gameplay sem serverStartedAt"))?;
+    let max_duracao = ler_inteiro(&captura, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS);
+    let agora = Utc::now();
+
+    if agora - inicio > ChronoDuration::seconds(max_duracao + TOLERANCIA_ENVIO_SEGUNDOS) {
+        let escrita = atualizar(fs, &caminho, campos(&[("status", texto("expired")), ("updatedAt", data(agora))]), Some(&["status", "updatedAt"]));
+        fs.confirmar(tx, vec![escrita]).await?;
+        return Ok(Saida::Expirada);
+    }
+
+    let campos_resultado = campos(&[
+        ("score", inteiro(resultado.score_bruto)),
+        ("livesLost", inteiro(resultado.vidas_perdidas.into())),
+        ("continuesUsed", inteiro(resultado.continues_usados.into())),
+        ("submittedAt", data(agora)),
+    ]);
+    let escrita = atualizar(
+        fs,
+        &caminho,
+        campos(&[("status", texto("needs_review")), ("updatedAt", data(agora)), ("result", mapa(campos_resultado))]),
+        Some(&["status", "updatedAt", "result"]),
+    );
+    fs.confirmar(tx, vec![escrita]).await?;
+    Ok(Saida::Gravado(submetida))
+}
+
+fn ler_resultado(campos: &Campos) -> Option<Resultado> {
+    Some(Resultado {
+        score_bruto: ler_inteiro(campos, "score")?,
+        vidas_perdidas: ler_inteiro(campos, "livesLost")?.try_into().ok()?,
+        continues_usados: ler_inteiro(campos, "continuesUsed")?.try_into().ok()?,
+    })
+}
+
+fn campos(pares: &[(&str, Value)]) -> Campos {
+    pares.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+}
+
+/// Cria o documento; falha se ele já existir (IDs novos nunca colidem com dados anteriores).
+fn criar(fs: &Firestore, caminho: &str, campos: Campos) -> Value {
+    json!({ "update": { "name": fs.nome(caminho), "fields": campos }, "currentDocument": { "exists": false } })
+}
+
+/// Sem máscara, substitui o documento inteiro; com máscara, altera só os campos listados.
+fn atualizar(fs: &Firestore, caminho: &str, campos: Campos, mascara: Option<&[&str]>) -> Value {
+    let mut escrita = json!({ "update": { "name": fs.nome(caminho), "fields": campos } });
+    if let Some(mascara) = mascara {
+        escrita["updateMask"] = json!({ "fieldPaths": mascara });
+    }
+    escrita
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ids_aceitos_sao_os_gerados_pelo_sistema() {
+        assert!(id_valido("earthion"));
+        assert!(id_valido(&Uuid::new_v4().to_string()));
+        assert!(!id_valido(""));
+        assert!(!id_valido("../wallets/outro"));
+        assert!(!id_valido("a/b"));
+        assert!(!id_valido(&"x".repeat(129)));
+    }
+
+    /// Fluxo completo contra o emulador (nunca contra produção). Rodar a partir de
+    /// `shmupx-infra/firebase`:
+    /// `npx firebase-tools emulators:exec --only firestore --project demo-shmupx "cd ../../shmupx-backend && cargo test -- --ignored"`
+    #[tokio::test]
+    #[ignore = "exige o emulador do Firestore"]
+    async fn fluxo_de_fichas_e_gameplay_no_emulador() {
+        let Ok(host) = std::env::var("FIRESTORE_EMULATOR_HOST") else {
+            panic!("FIRESTORE_EMULATOR_HOST ausente: este teste só roda no emulador");
+        };
+        // SAFETY: teste isolado com --ignored; nenhuma outra thread lê estas variáveis agora.
+        unsafe { std::env::set_var("FIREBASE_PROJECT_ID", "demo-shmupx") };
+        let fs = Firestore::do_ambiente().unwrap();
+        assert!(fs.nome("x").starts_with("projects/demo-shmupx/"), "emulador em {host}");
+
+        let jogo = format!("jogo-{}", Uuid::new_v4());
+        let oculto = format!("oculto-{}", Uuid::new_v4());
+        let tx = fs.iniciar_transacao().await.unwrap();
+        fs.confirmar(&tx, vec![
+            criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(3600))])),
+            criar(&fs, &format!("games/{oculto}"), campos(&[("published", json!({ "booleanValue": false }))])),
+        ]).await.unwrap();
+
+        let uid = format!("uid-{}", Uuid::new_v4());
+
+        // Jogo não publicado não abre run nem cria carteira.
+        assert!(iniciar(&fs, &uid, &oculto).await.is_err());
+
+        let run = iniciar(&fs, &uid, &jogo).await.unwrap();
+        assert_eq!(run.max_duration_segundos, 3600);
+        let leitura = fs.iniciar_transacao().await.unwrap();
+        let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_inteiro(&carteira, "balance"), Some(FICHAS_INICIAIS - 1));
+        let gameplay = fs.ler(&format!("gameplays/{}", run.run_id), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_texto(&gameplay, "ownerId").as_deref(), Some(uid.as_str()));
+        assert_eq!(ler_texto(&gameplay, "status").as_deref(), Some("recording"));
+        fs.desfazer(&leitura).await;
+
+        // Segunda run debita de novo, sem recriar o bônus inicial.
+        let segunda = iniciar(&fs, &uid, &jogo).await.unwrap();
+        let leitura = fs.iniciar_transacao().await.unwrap();
+        let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_inteiro(&carteira, "balance"), Some(FICHAS_INICIAIS - 2));
+        assert_eq!(ler_inteiro(&carteira, "version"), Some(2));
+        fs.desfazer(&leitura).await;
+
+        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: 2, continues_usados: 0 };
+
+        // Outro jogador não enxerga nem submete a run.
+        assert!(submeter(&fs, "uid-intruso", &run.run_id, &jogo, resultado.clone()).await.is_err());
+        // Jogo divergente é recusado.
+        assert!(submeter(&fs, &uid, &run.run_id, &oculto, resultado.clone()).await.is_err());
+
+        let enviada = submeter(&fs, &uid, &run.run_id, &jogo, resultado.clone()).await.unwrap();
+        assert_eq!(enviada.status, "needs_review");
+        // Reenvio idêntico é idempotente; resultado diferente é recusado.
+        assert!(submeter(&fs, &uid, &run.run_id, &jogo, resultado.clone()).await.is_ok());
+        let alterado = Resultado { score_bruto: 999_999_999, ..resultado.clone() };
+        assert!(submeter(&fs, &uid, &run.run_id, &jogo, alterado).await.is_err());
+
+        let leitura = fs.iniciar_transacao().await.unwrap();
+        let gameplay = fs.ler(&format!("gameplays/{}", run.run_id), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_mapa(&gameplay, "result").as_ref().and_then(ler_resultado), Some(resultado));
+        let intacta = fs.ler(&format!("gameplays/{}", segunda.run_id), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_texto(&intacta, "status").as_deref(), Some("recording"));
+        fs.desfazer(&leitura).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "exige o emulador do Firestore"]
+    async fn saldo_zerado_recusa_nova_run_no_emulador() {
+        // SAFETY: ver o teste acima.
+        unsafe { std::env::set_var("FIREBASE_PROJECT_ID", "demo-shmupx") };
+        let fs = Firestore::do_ambiente().unwrap();
+        let jogo = format!("jogo-{}", Uuid::new_v4());
+        let uid = format!("uid-{}", Uuid::new_v4());
+        let tx = fs.iniciar_transacao().await.unwrap();
+        fs.confirmar(&tx, vec![
+            criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true }))])),
+            criar(&fs, &format!("wallets/{uid}"), campos(&[("balance", inteiro(0)), ("version", inteiro(7))])),
+        ]).await.unwrap();
+
+        assert!(iniciar(&fs, &uid, &jogo).await.is_err());
+        let leitura = fs.iniciar_transacao().await.unwrap();
+        let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
+        assert_eq!(ler_inteiro(&carteira, "balance"), Some(0));
+        assert_eq!(ler_inteiro(&carteira, "version"), Some(7));
+        fs.desfazer(&leitura).await;
+    }
+}

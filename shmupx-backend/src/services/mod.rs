@@ -1,4 +1,5 @@
-//! Lógica de negócio pura (sem I/O, sem axum, sem sqlx) — a camada que `routes/` chama depois
-//! de buscar/gravar dados.
+//! Regras de negócio chamadas por `routes/`. `ranking` é puro (sem I/O); `gameplays` lê e grava
+//! no Firestore dentro de transações.
 
+pub mod gameplays;
 pub mod ranking;

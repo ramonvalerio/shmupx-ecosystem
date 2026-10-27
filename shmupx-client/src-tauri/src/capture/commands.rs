@@ -102,7 +102,7 @@ pub async fn finalizar_corrida_manual(
     let mut handle = guard
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
-    // Mantém exclusão até o envio: o backend ainda associa submissões à última run ativa.
+    // Mantém exclusão até o envio: gravação e processamento continuam mutuamente exclusivos.
     if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
         emit_analysis(
             &app,
@@ -143,6 +143,7 @@ async fn process_run(app: &AppHandle, handle: &RunHandle) {
         let result = analysis::analisar_run(app, &handle.video_path, &handle.jogo_id).await?;
         backend::submeter_run(
             &handle.token,
+            &handle.run_id,
             &handle.jogo_id,
             result.score_bruto,
             result.vidas_perdidas,

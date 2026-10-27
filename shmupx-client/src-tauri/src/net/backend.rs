@@ -47,24 +47,28 @@ pub async fn iniciar_run(token: &str, jogo_id: &str) -> Result<IniciarRunRespons
 
 #[derive(Debug, Serialize)]
 struct SubmeterRunPayload<'a> {
+    run_id: &'a str,
     jogo_id: &'a str,
     score_bruto: i64,
     vidas_perdidas: i32,
     continues_usados: i32,
 }
 
+/// `status` é `needs_review`: o backend registra o resultado, mas a aprovação é posterior.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmeterRunResponse {
     pub run_id: String,
     pub status: String,
-    pub nota_normalizada: f64,
 }
 
 /// `POST /api/runs`: submete o resultado da run (fim do timer seguro ou parada manual).
 ///
 /// Recebe somente métricas medidas pelo validador offline e aprovadas pelo contrato local.
+/// O `run_id` identifica a gameplay aberta em `/api/runs/start`; reenviar o mesmo resultado
+/// é idempotente no backend.
 pub async fn submeter_run(
     token: &str,
+    run_id: &str,
     jogo_id: &str,
     score_bruto: i64,
     vidas_perdidas: i32,
@@ -74,6 +78,7 @@ pub async fn submeter_run(
         .post(format!("{BACKEND_BASE_URL}/api/runs"))
         .bearer_auth(token)
         .json(&SubmeterRunPayload {
+            run_id,
             jogo_id,
             score_bruto,
             vidas_perdidas,

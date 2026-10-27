@@ -2,4 +2,3 @@
 
 pub mod auth;
 pub mod firebase;
-pub mod jogador;

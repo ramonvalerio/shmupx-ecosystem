@@ -10,7 +10,7 @@ O contrato aceito é `client-v1`, Earthion `1.0.0`. `needs_review`, confiança d
 
 Somente a confirmação HTTP do backend gera o estado `submitted`. Falhas geram `failed` com motivo; nenhum placar substituto é enviado. O vídeo fica na pasta de dados do app, em `shmupx_run_<run-id>.mp4`. O histórico exibido pela interface ainda é apenas da sessão.
 
-A gravação e o processamento são mutuamente exclusivos. O backend atual escolhe a última run ativa por jogador/jogo, sem receber `run_id` na submissão; liberar outra captura antes do envio poderia associar os pontos à run errada. Timers usam o ID da run, evitando cortar uma partida posterior do mesmo jogo.
+A gravação e o processamento são mutuamente exclusivos. A submissão envia o `run_id` devolvido no início, e o backend grava o resultado nessa gameplay do Firestore. Timers usam o ID da run, evitando cortar uma partida posterior do mesmo jogo.
 
 ## Ambiente de desenvolvimento
 
@@ -33,7 +33,7 @@ $env:SHMUPX_PYTHON = "$env:SHMUPX_OFFLINE_ROOT\.venv\Scripts\python.exe"
 
 ## Pendências para uso real
 
-- O catálogo da interface ainda contém jogos de demonstração. O backend exige UUID; o script usa `earthion`. É necessário carregar o catálogo real e associar seu UUID ao script. Não inventar um UUID nem reutilizar um jogo diferente.
+- O catálogo da interface ainda contém jogos de demonstração. O backend usa `games/{gameId}` do Firestore com o mesmo ID do script (`earthion`); o documento ainda precisa ser publicado. Não reutilizar um jogo diferente.
 - Autenticação, ficha real e captura dependem das integrações existentes; não foram exercitadas nesta etapa.
 - Instalação de produção: o adaptador procura `shmupx_offline` na pasta de recursos, ou no caminho explícito acima. O instalador ainda não inclui scripts/runtime Python/OpenCV. Não considerar o pacote desktop autossuficiente.
 - Revisão/reenvio de falhas e encerramento da ficha no backend após falha de análise ainda precisam de fluxo próprio. Não reabrir uma run somente para reenviar o vídeo.
