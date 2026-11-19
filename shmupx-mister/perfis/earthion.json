@@ -1,0 +1,14 @@
+{
+  "jogo": "earthion",
+  "nome": "Earthion",
+  "sistema": "megadrive",
+  "jogo_id": "earthion",
+  "versao": "4.0.0",
+  "modos": ["hi-score"],
+  "placar": {
+    "endereco": "0xFF1C48",
+    "bytes": 16,
+    "codificacao": "digito_por_palavra",
+    "multiplicador": 1
+  }
+}

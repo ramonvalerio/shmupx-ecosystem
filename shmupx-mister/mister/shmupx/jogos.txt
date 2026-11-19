@@ -1,0 +1,14 @@
+# Jogos do menu ShmupX, um por linha:
+#   <nome no menu>.<mgl|mra> | <modos> | <origem>
+#
+# Modos: hiscore  1cc  sprint (Caravan 2 min)  classic (Caravan 5 min)
+# Origem:
+#   .mra: o arquivo em /media/fat/_Arcade
+#   .mgl: <core>;<delay>;<index>;<busca da ROM em /media/fat/games>
+#         <core> = @megadrive-ra usa o core MegaDrive com leitura de placar (shmupx/cores)
+#
+# Depois de editar, abra Scripts > shmupx para atualizar o menu.
+Earthion.mgl|hiscore|@megadrive-ra;1;1;*earthion*
+Darius Gaiden.mra|hiscore 1cc sprint|Darius Gaiden.mra
+Ketsui.mra|hiscore 1cc classic|Ketsui - Kizuna Jigoku Tachi (2003.01.01. Master Ver.).mra
+Aero Fighters 2.mgl|hiscore 1cc sprint classic|_Console/NeoGeo;1;1;*sonicwi2*.neo

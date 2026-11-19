@@ -1,0 +1,5 @@
+# O MiSTer (DE10-Nano) tem um Cortex-A9: ARMv7 com ponto flutuante em hardware.
+# musl gera um binário estático, sem depender da glibc da imagem do MiSTer, e o
+# rust-lld que vem com o Rust faz o link sem toolchain C de ARM instalada.
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
