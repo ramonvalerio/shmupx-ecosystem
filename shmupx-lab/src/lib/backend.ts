@@ -76,12 +76,60 @@ export interface ClientRelease {
   lead?: ReleaseLead;
   scheduled_at?: string;
   release_at?: string;
-  /** `not_configured`, `sending`, `sent` ou `failed: ...`. */
+  /** `not_configured`, `sending`, `sent`, `skipped` ou `failed: ...`. */
   email_status?: string;
   emails_sent?: number;
+  /** Itens gerados pelas alterações no Lab (só em rascunho); juntam-se ao texto ao agendar. */
+  auto: ReleaseAutoItem[];
+  installer?: ReleaseInstaller;
+  /** Liberada, o Client baixa e instala sozinho. */
+  auto_update: boolean;
+  /** Sem instalador: só notas (mudanças de catálogo), não pede atualização do Client. */
+  notes_only: boolean;
+}
+
+export type ReleaseSection = "features" | "fixes" | "rules" | "scripts";
+
+export interface ReleaseAutoItem {
+  /** Origem estável (ex.: `game:earthion:sala`): repetir a alteração atualiza o item. */
+  key: string;
+  section: ReleaseSection;
+  text: string;
+}
+
+export interface ReleaseInstaller {
+  url: string;
+  signature: string;
+  size?: number;
 }
 
 export type ClientReleaseInput = Pick<ClientRelease, "title" | "features" | "fixes" | "rules" | "scripts" | "mandatory">;
+
+/** Rascunho aberto da próxima versão (o backend cria um se não houver). */
+export function getOpenDraft(): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>("/api/admin/releases/draft");
+}
+
+/** Registra no rascunho aberto uma alteração feita no Lab; `text: null` retira o item. */
+export function recordReleaseChange(key: string, section: ReleaseSection, text: string | null): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>("/api/admin/releases/draft/changes", {
+    method: "POST",
+    body: JSON.stringify({ key, section, text }),
+  });
+}
+
+/** Tira um item automático do rascunho. */
+export function removeAutoItem(version: string, key: string): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/auto/${encodeURIComponent(key)}`, { method: "DELETE" });
+}
+
+/** Liga o instalador já publicado no S3 ao rascunho. */
+export function setReleaseInstaller(version: string, installer: ReleaseInstaller): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/installer`, {
+    method: "PUT",
+    body: JSON.stringify(installer),
+  });
+}
 
 export function listReleases(): Promise<ClientRelease[]> {
   return adminRequest<ClientRelease[]>("/api/admin/releases");
@@ -95,11 +143,18 @@ export function saveRelease(version: string, input: ClientReleaseInput): Promise
   });
 }
 
-/** Agenda a versão: publica o aviso no Client, manda os e-mails e libera após a antecedência. */
-export function scheduleRelease(version: string, lead: ReleaseLead): Promise<ClientRelease> {
+export interface ScheduleOptions {
+  /** Clients baixam e instalam sozinhos ao liberar (exige instalador). */
+  autoUpdate: boolean;
+  /** E-mail aos jogadores que aceitam avisos. */
+  sendEmail: boolean;
+}
+
+/** Agenda a versão: publica o aviso no Client, manda os e-mails (se pedido) e libera após a antecedência. */
+export function scheduleRelease(version: string, lead: ReleaseLead, options: ScheduleOptions): Promise<ClientRelease> {
   return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/schedule`, {
     method: "POST",
-    body: JSON.stringify({ lead }),
+    body: JSON.stringify({ lead, auto_update: options.autoUpdate, send_email: options.sendEmail }),
   });
 }
 

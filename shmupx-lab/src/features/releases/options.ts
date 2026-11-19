@@ -48,6 +48,7 @@ export function emailLabel(release: ClientRelease): string | null {
   const status = release.email_status;
   if (!status) return null;
   if (status === "not_configured") return "E-mail não configurado no backend (RESEND_API_KEY/EMAIL_FROM): só o aviso no Client.";
+  if (status === "skipped") return "Sem e-mail (desligado ao agendar): só o aviso no Client.";
   if (status === "sending") return "Enviando e-mails…";
   if (status === "sent") return `${release.emails_sent ?? 0} e-mail(s) enviado(s).`;
   return `Falha no envio de e-mails: ${status.replace(/^failed: /, "")}`;

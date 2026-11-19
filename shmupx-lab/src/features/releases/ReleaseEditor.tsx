@@ -1,10 +1,20 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { Field, TextInput } from "../../components/ui/Field";
 import { IconAlert, IconBell, IconClose } from "../../components/ui/Icons";
 import Switch from "../../components/ui/Switch";
-import { cancelRelease, saveRelease, scheduleRelease, type ClientRelease, type ReleaseLead } from "../../lib/backend";
+import {
+  cancelRelease,
+  removeAutoItem,
+  saveRelease,
+  scheduleRelease,
+  setReleaseInstaller,
+  type ClientRelease,
+  type ReleaseLead,
+  type ReleaseSection,
+} from "../../lib/backend";
+import { formatSize, getLocalInstaller, publishInstaller, type LocalInstaller } from "../../lib/installer";
 import type { ScriptInfo } from "../../lib/validation";
 import { getAmbiente } from "../../auth/firebase";
 import { emailLabel, formatDateTime, fromLines, LEADS, noticePreview, STATUS_LABEL, STATUS_TONE, toLines } from "./options";
@@ -17,7 +27,14 @@ interface ReleaseEditorProps {
   scripts: ScriptInfo[];
   onClose: () => void;
   onSaved: (release: ClientRelease, notice: string) => void;
+  /** Gravação silenciosa (salvamento automático, item retirado): só atualiza a lista. */
+  onChanged: (release: ClientRelease) => void;
 }
+
+const SECTION_LABEL: Record<ReleaseSection, string> = { features: "Novidade", fixes: "Correção", rules: "Regra", scripts: "Script" };
+
+/** Espera depois da última tecla antes de salvar o rascunho sozinho. */
+const AUTOSAVE_MS = 1200;
 
 const VERSION_PATTERN = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$/;
 
@@ -45,9 +62,15 @@ function Lines({ label, hint, value, onChange, disabled }: { label: string; hint
 }
 
 /** Painel lateral: rascunho da versão, agendamento com antecedência e cancelamento. */
-export default function ReleaseEditor({ release, suggestedVersion, scripts, onClose, onSaved }: ReleaseEditorProps) {
+export default function ReleaseEditor({ release, suggestedVersion, scripts, onClose, onSaved, onChanged }: ReleaseEditorProps) {
   const isNew = release === null;
   const editable = isNew || release.status === "draft";
+  const autoItems = release?.auto ?? [];
+  const [autoUpdate, setAutoUpdate] = useState(Boolean(release?.installer));
+  const [sendEmail, setSendEmail] = useState(true);
+  const [local, setLocal] = useState<LocalInstaller | null>(null);
+  const [autosave, setAutosave] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [version, setVersion] = useState(release?.version ?? suggestedVersion);
   const [title, setTitle] = useState(release?.title ?? "");
   const [features, setFeatures] = useState(toLines(release?.features ?? []));
@@ -69,8 +92,12 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
   }, [onClose, busy]);
 
   // Scripts que podem entrar: os aprovados de cada jogo, mais os que a versão já lista.
-  const options = [...new Set([...scripts.filter((s) => s.status === "approved").map((s) => `${s.id}@${s.version}`), ...included])].sort();
+  const autoScripts = autoItems.filter((i) => i.section === "scripts").map((i) => i.text);
+  const options = [...new Set([...scripts.filter((s) => s.status === "approved").map((s) => `${s.id}@${s.version}`), ...included])]
+    .filter((s) => !autoScripts.includes(s))
+    .sort();
   const preview = noticePreview(version, title.trim(), mandatory, lead);
+  const hasScripts = included.length > 0 || autoScripts.length > 0;
 
   function input() {
     return { title: title.trim(), features: fromLines(features), fixes: fromLines(fixes), rules: fromLines(rules), scripts: included, mandatory };
@@ -80,8 +107,51 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
     if (!VERSION_PATTERN.test(version.trim())) return "Versão no formato 1.2.3.";
     if (!title.trim()) return "Informe o título da versão.";
     const data = input();
-    if (!data.features.length && !data.fixes.length && !data.rules.length && !data.scripts.length) return "Inclua ao menos uma novidade, correção, regra ou script.";
+    if (!data.features.length && !data.fixes.length && !data.rules.length && !data.scripts.length && autoItems.length === 0) return "Inclua ao menos uma novidade, correção, regra ou script.";
     return null;
+  }
+
+  // Rascunho existente: o texto manual se salva sozinho, sem botão.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (isNew || !editable || !title.trim()) return;
+    setAutosave("saving");
+    const timer = window.setTimeout(() => {
+      saveRelease(version.trim(), input())
+        .then((saved) => {
+          onChanged(saved);
+          setAutosave("saved");
+          setSavedAt(new Date());
+        })
+        .catch(() => setAutosave("error"));
+    }, AUTOSAVE_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- salva quando o conteúdo muda
+  }, [title, features, fixes, rules, included, mandatory]);
+
+  // Build local do Client para esta versão (o que "Enviar instalador" vai publicar).
+  useEffect(() => {
+    if (isNew || !editable) return;
+    getLocalInstaller(version.trim()).then(setLocal).catch(() => setLocal(null));
+  }, [isNew, editable, version]);
+
+  function onRemoveAuto(key: string) {
+    if (!release) return;
+    void run(async () => onChanged(await removeAutoItem(release.version, key)));
+  }
+
+  function onPublishInstaller() {
+    if (!release) return;
+    void run(async () => {
+      const published = await publishInstaller(release.version);
+      const saved = await setReleaseInstaller(release.version, published);
+      setAutoUpdate(true);
+      onSaved(saved, `Instalador da versão ${saved.version} publicado (${formatSize(published.size)}).`);
+    });
   }
 
   async function run(action: () => Promise<void>) {
@@ -112,7 +182,7 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
     void run(async () => {
       // Grava o texto atual antes de agendar: o aviso sai exatamente com o que está na tela.
       await saveRelease(version.trim(), input());
-      const scheduled = await scheduleRelease(version.trim(), lead);
+      const scheduled = await scheduleRelease(version.trim(), lead, { autoUpdate: autoUpdate && Boolean(release?.installer), sendEmail });
       onSaved(scheduled, lead === "urgent" ? `Versão ${scheduled.version} liberada e avisada.` : `Versão ${scheduled.version} agendada para ${formatDateTime(scheduled.release_at)}.`);
     });
   }
@@ -164,7 +234,37 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
             </div>
           </Section>
 
-          <Section title="O que muda">
+          {editable && !isNew && (
+            <Section title="Gerado pelas alterações no Lab">
+              {autoItems.length === 0 ? (
+                <p className="text-xs text-zinc-500">
+                  Nada ainda. Ao publicar ou alterar um jogo no Catálogo, ou aprovar um script de validação, a linha correspondente aparece aqui sozinha.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {autoItems.map((item) => (
+                    <li key={item.key} className="flex items-start gap-2 rounded-md border border-white/5 bg-zinc-950/60 px-3 py-2">
+                      <span className="mt-0.5 w-20 flex-shrink-0 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{SECTION_LABEL[item.section]}</span>
+                      <span className={`min-w-0 flex-1 text-sm text-zinc-200 ${item.section === "scripts" ? "font-mono" : ""}`}>{item.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAuto(item.key)}
+                        disabled={busy}
+                        aria-label={`Tirar "${item.text}" da versão`}
+                        title="Tirar da versão"
+                        className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400/50 focus-visible:outline-none"
+                      >
+                        <IconClose width={14} height={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-[11px] text-zinc-500">Entram na versão ao agendar, junto com o que você escrever abaixo. Repetir a mesma alteração atualiza a linha em vez de duplicar.</p>
+            </Section>
+          )}
+
+          <Section title={editable && !isNew ? "O que muda (escrito por você)" : "O que muda"}>
             <div className="space-y-4">
               <Lines label="Novidades" hint="Uma por linha." value={features} onChange={setFeatures} disabled={!editable} />
               <Lines label="Correções" hint="Uma por linha." value={fixes} onChange={setFixes} disabled={!editable} />
@@ -206,6 +306,33 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
             description="Depois da liberação, Clients mais antigos não abrem novas runs até atualizar (use para scripts de validação e regras novas)."
           />
 
+          {editable && !isNew && (
+            <Section title="Instalador">
+              <div className="space-y-2 rounded-lg border border-white/5 bg-zinc-950/60 p-3 text-xs">
+                {release?.installer ? (
+                  <p className="text-emerald-300">
+                    Publicado: <span className="font-mono break-all">{release.installer.url}</span> ({formatSize(release.installer.size)})
+                  </p>
+                ) : (
+                  <p className="text-zinc-400">Ainda sem instalador. {hasScripts ? "Esta versão leva scripts de validação, então precisa de um." : "Sem instalador, a versão só traz notas e não atualiza o Client."}</p>
+                )}
+                {local?.found ? (
+                  <p className="text-zinc-500">
+                    Build local: {formatSize(local.size)} · gerado em {formatDateTime(local.built_at_ms ? new Date(local.built_at_ms) : undefined)}
+                    {local.signed ? " · assinado" : " · sem assinatura do updater (gere com TAURI_SIGNING_PRIVATE_KEY)"}
+                  </p>
+                ) : (
+                  <p className="text-zinc-500">
+                    Nenhum build local da versão {version}. Gere o Client com essa versão (ShmupX_{version}_x64-setup.exe) para enviar.
+                  </p>
+                )}
+                <Button size="sm" variant="info" onClick={onPublishInstaller} disabled={busy || !local?.found || !local.signed} loading={busy}>
+                  {release?.installer ? "Enviar de novo" : "Enviar instalador"}
+                </Button>
+              </div>
+            </Section>
+          )}
+
           {editable && (
             <Section title="Aviso e liberação">
               <div className="space-y-3">
@@ -228,15 +355,29 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase"><IconBell width={12} height={12} /> Prévia do aviso</p>
                   <p className="mt-1.5 text-sm font-medium text-zinc-100">{preview.title}</p>
                   <p className="text-xs text-zinc-400">{preview.summary}</p>
-                  <p className="mt-2 text-[11px] text-zinc-500">Vai para o sininho do Client e, por e-mail, para os jogadores que aceitam avisos.</p>
+                  <p className="mt-2 text-[11px] text-zinc-500">Vai para o sininho do Client{sendEmail ? " e, por e-mail, para os jogadores que aceitam avisos" : ""}.</p>
                 </div>
+                <Switch
+                  checked={autoUpdate && Boolean(release?.installer)}
+                  onChange={setAutoUpdate}
+                  disabled={!release?.installer}
+                  label="Atualizar os Clients automaticamente"
+                  description={release?.installer ? "Na liberação, o Client baixa a versão sozinho e pede para reiniciar." : "Envie o instalador para liberar esta opção."}
+                />
+                <Switch
+                  checked={sendEmail}
+                  onChange={setSendEmail}
+                  label="Enviar e-mail aos jogadores"
+                  description="Só para quem aceita avisos por e-mail. Desligado, o aviso fica só no sininho do Client."
+                />
                 {confirming ? (
                   <div className="flex items-center gap-2 rounded-md border border-amber-400/20 bg-amber-500/5 p-3">
                     <IconAlert className="flex-shrink-0 text-amber-300" />
                     <p className="flex-1 text-xs text-amber-100">
                       {getAmbiente() === "prd" ? <strong>PRODUÇÃO: </strong> : "Desenvolvimento (emulador): "}
-                      {getAmbiente() === "prd" ? "os jogadores reais serão avisados agora, no Client e por e-mail" : "só o ambiente local recebe o aviso"}
-                      {lead === "urgent" ? " e a versão é liberada já" : ""}. Confirmar?
+                      {getAmbiente() === "prd" ? `os jogadores reais serão avisados agora, no Client${sendEmail ? " e por e-mail" : ""}` : "só o ambiente local recebe o aviso"}
+                      {lead === "urgent" ? " e a versão é liberada já" : ""}
+                      {autoUpdate && release?.installer ? "; os Clients se atualizam sozinhos na liberação" : ""}. Confirmar?
                     </p>
                     <Button size="sm" variant="info" onClick={() => setConfirming(false)} disabled={busy}>Cancelar</Button>
                     <Button size="sm" variant="primary" loading={busy} onClick={onSchedule}>Agendar e avisar</Button>
@@ -252,12 +393,18 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
         </div>
 
         <footer className="flex items-center gap-3 border-t border-white/5 bg-[#0e0e11] px-6 py-3">
-          <p role={error ? "alert" : undefined} className="min-w-0 flex-1 text-xs text-red-300">{error}</p>
+          {error ? (
+            <p role="alert" className="min-w-0 flex-1 text-xs text-red-300">{error}</p>
+          ) : (
+            <p role="status" className="min-w-0 flex-1 text-xs text-zinc-500">
+              {autosave === "saving" ? "Salvando…" : autosave === "error" ? "Não foi possível salvar sozinho; tente de novo." : savedAt ? `Salvo automaticamente às ${savedAt.toLocaleTimeString("pt-BR", { timeStyle: "short" })}.` : ""}
+            </p>
+          )}
           {release?.status === "scheduled" && (
             <Button variant="danger" onClick={onCancelSchedule} loading={busy}>Cancelar agendamento</Button>
           )}
-          <Button variant="info" onClick={onClose} disabled={busy}>{editable ? "Cancelar" : "Fechar"}</Button>
-          {editable && <Button variant="success" type="submit" loading={busy}>Salvar rascunho</Button>}
+          <Button variant="info" onClick={onClose} disabled={busy}>{editable && isNew ? "Cancelar" : "Fechar"}</Button>
+          {editable && isNew && <Button variant="success" type="submit" loading={busy}>Salvar rascunho</Button>}
         </footer>
       </form>
     </aside>

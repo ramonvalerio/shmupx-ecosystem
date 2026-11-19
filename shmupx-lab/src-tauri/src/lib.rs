@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod auth;
+pub mod instalador;
 pub mod net;
 pub mod validacao;
 
@@ -12,6 +13,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       ai::commands::sugerir_jogo,
       auth::commands::login_google_desktop,
+      instalador::instalador_local,
+      instalador::publicar_instalador,
       validacao::commands::validacao_ambiente,
       validacao::commands::validacao_instalar_ytdlp,
       validacao::commands::validacao_definir_cookies,

@@ -114,6 +114,7 @@ export default function ReleasesView({ releases, loading, error, scripts, onRelo
           suggestedVersion={suggestNextVersion(releases)}
           scripts={scripts}
           onClose={() => setEditing(null)}
+          onChanged={onSaved}
           onSaved={(saved, message) => {
             onSaved(saved);
             setEditing(saved.status === "draft" ? saved.version : null);

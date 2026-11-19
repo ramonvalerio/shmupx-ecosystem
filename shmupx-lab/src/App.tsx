@@ -51,7 +51,7 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
   // Python, yt-dlp e scripts: verificado na primeira vez que a Validação (ou Versões, que lista
   // os scripts aprovados) abre.
   const validation = useValidationEnvironment(signedIn && (view === "validation" || view === "releases"));
-  const releases = useReleases(signedIn && view === "releases");
+  const releases = useReleases(signedIn && view === "releases", validation.environment?.scripts);
 
   const games = useMemo<SidebarGame[]>(() => {
     const scripts = validation.environment?.scripts ?? [];
