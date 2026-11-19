@@ -3,6 +3,7 @@ mod firestore;
 mod middleware;
 mod models;
 mod routes;
+mod segredos_aws;
 mod services;
 
 use std::env;
@@ -17,9 +18,48 @@ use tower_http::trace::TraceLayer;
 
 use crate::firestore::Firestore;
 use crate::routes::auth::GoogleOAuth;
+use crate::services::email::Ses;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    // Segredos de produção (AWS Secrets Manager) entram no ambiente antes de qualquer outra thread
+    // existir: `set_var` só é seguro com um único thread, por isso o runtime principal vem depois.
+    if let Some(cfg) = segredos_aws::Configuracao::do_ambiente() {
+        let valores = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime para ler os segredos")
+            .block_on(segredos_aws::carregar(&cfg))
+            .unwrap_or_else(|erro| {
+                eprintln!("\nFalha ao ler os segredos na AWS: {erro}\n");
+                exit(1);
+            });
+        let mut aplicados = Vec::new();
+        for (nome, valor) in valores {
+            if env::var_os(&nome).is_none() && !valor.is_empty() {
+                // SAFETY: ainda não há outras threads; o runtime acima já terminou.
+                unsafe { env::set_var(&nome, valor) };
+                aplicados.push(nome);
+            }
+        }
+        println!("segredos carregados da AWS: {}", aplicados.join(", "));
+    }
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("runtime do tokio")
+        .block_on(servidor());
+}
+
+async fn servidor() {
+    // Emulador de login (tokens sem assinatura) só em desenvolvimento local: ver middleware/firebase.rs.
+    if let Err(erro) = middleware::firebase::conferir_ambiente_do_emulador() {
+        eprintln!("\nConfiguração recusada: {erro}\n");
+        exit(1);
+    }
+    if middleware::firebase::emulador_de_login_ativo() {
+        println!("AMBIENTE DE DESENVOLVIMENTO: Firestore e login no emulador local (projeto {}).", env::var("FIREBASE_PROJECT_ID").unwrap_or_default());
+    }
     // Firestore é o banco da plataforma (ADR 005): fichas e gameplays.
     let firestore = Arc::new(Firestore::do_ambiente().unwrap_or_else(|erro| {
         eprintln!(
@@ -46,11 +86,19 @@ async fn main() {
         );
     }
 
+    // Avisos de versão por e-mail (Amazon SES): opcional; sem configuração, só o aviso no Client.
+    let email = Ses::do_ambiente().map(Arc::new);
+    if email.is_none() {
+        eprintln!("aviso: EMAIL_FROM/AWS_SECRETS_ROLE_ARN ausentes (SES não configurado); os avisos de versão não serão enviados por e-mail");
+    }
+
     let mut app = Router::new()
         .merge(routes::health::router())
         .merge(routes::auth::router(google))
         .merge(routes::me::router())
-        .merge(routes::admin::router(firestore.clone()))
+        .merge(routes::admin::router(firestore.clone(), email.clone()))
+        .merge(routes::mister::router(firestore.clone(), email))
+        .merge(routes::notificacoes::router(firestore.clone()))
         .merge(routes::runs::router(firestore));
 
     // Legado: catálogo e ranking do portal ainda leem o PostgreSQL/Supabase. Só são montados

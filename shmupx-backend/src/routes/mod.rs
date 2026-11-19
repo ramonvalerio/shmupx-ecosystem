@@ -6,5 +6,7 @@ pub mod auth;
 pub mod health;
 pub mod jogos;
 pub mod me;
+pub mod mister;
+pub mod notificacoes;
 pub mod rankings;
 pub mod runs;

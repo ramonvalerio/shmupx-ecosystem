@@ -321,16 +321,16 @@ mod tests {
         salvar(&fs, &id, JogoEntrada { published: false, ..entrada() }).await.unwrap();
         let listado = listar(&fs).await.unwrap().into_iter().find(|j| j.id == id).unwrap();
         assert_eq!((listado.title.as_str(), listado.published, listado.max_duration_segundos), ("Earthion", false, 1800));
-        assert!(gameplays::iniciar(&fs, &uid, &id).await.is_err());
+        assert!(gameplays::iniciar(&fs, &uid, &id, &gameplays::Detalhes::default()).await.is_err());
 
         // Publicado: abre run com a duração do catálogo.
         salvar(&fs, &id, entrada()).await.unwrap();
-        let run = gameplays::iniciar(&fs, &uid, &id).await.unwrap();
+        let run = gameplays::iniciar(&fs, &uid, &id, &gameplays::Detalhes::default()).await.unwrap();
         assert_eq!(run.max_duration_segundos, 1800);
 
         // Despublicar fecha novas runs de novo.
         salvar(&fs, &id, JogoEntrada { published: false, ..entrada() }).await.unwrap();
-        assert!(gameplays::iniciar(&fs, &uid, &id).await.is_err());
+        assert!(gameplays::iniciar(&fs, &uid, &id, &gameplays::Detalhes::default()).await.is_err());
     }
 
     /// Metadados gravados voltam na listagem e são apagados quando saem da entrada.

@@ -1,0 +1,8 @@
+# Arquivos que o gcloud não envia ao Cloud Build
+.git
+target
+supabase
+.env*
+*.env
+/*.json
+

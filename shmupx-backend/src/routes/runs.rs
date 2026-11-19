@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware;
 use axum::routing::post;
 use axum::{Extension, Json, Router};
@@ -8,10 +8,14 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::firestore::Firestore;
-use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
-use crate::services::gameplays::{self, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
+use crate::middleware::firebase::FirebaseUser;
+use crate::middleware::jogador::{exigir_jogador, Origem};
+use crate::routes::notificacoes::versao_do_client;
+use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
+use crate::services::versoes;
 
-/// O jogador vem sempre do ID token do Firebase (`Extension<FirebaseUser>`), nunca do payload.
+/// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
+/// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
 /// `route_layer` escopa a exigência só a estas rotas, sem afetar `/health` após o `.merge()`.
 pub fn router<S>(firestore: Arc<Firestore>) -> Router<S>
 where
@@ -21,22 +25,36 @@ where
         .route("/api/runs/start", post(iniciar_run))
         .route("/api/runs/end", post(encerrar_run))
         .route("/api/runs", post(submeter_run))
-        .route_layer(middleware::from_fn(exigir_usuario_firebase))
+        .route_layer(middleware::from_fn(exigir_jogador))
         .layer(Extension(firestore))
 }
 
 #[derive(Debug, Deserialize)]
 struct IniciarRunPayload {
     jogo_id: String,
+    /// `highscore`, `1cc`, `caravan-sprint`, `caravan-classic`. Opcional (Client antigo).
+    #[serde(default)]
+    modo: Option<String>,
+    /// Versão do jogo; o ranking separa versões diferentes do mesmo jogo.
+    #[serde(default)]
+    versao: Option<String>,
 }
 
-/// `POST /api/runs/start`: debita 1 ficha e abre a gameplay (ver `services::gameplays`).
+/// `POST /api/runs/start`: debita 1 ficha e abre a gameplay (ver `services::gameplays`). Antes,
+/// recusa Clients abaixo de uma versão obrigatória já liberada (sem debitar a ficha).
 async fn iniciar_run(
     Extension(firestore): Extension<Arc<Firestore>>,
     Extension(usuario): Extension<FirebaseUser>,
+    Extension(Origem(origem)): Extension<Origem>,
+    headers: HeaderMap,
     Json(payload): Json<IniciarRunPayload>,
 ) -> Result<(StatusCode, Json<RunIniciada>), AppError> {
-    let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id).await?;
+    // A versão obrigatória vale para o Client de PC; o MiSTer não manda versão de Client.
+    if origem == "pc" {
+        versoes::exigir_versao_em_dia(&firestore, versao_do_client(&headers).as_deref()).await?;
+    }
+    let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem };
+    let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
     Ok((StatusCode::CREATED, Json(run)))
 }
 
@@ -60,8 +78,11 @@ struct SubmeterRunPayload {
     run_id: String,
     jogo_id: String,
     score_bruto: i64,
-    vidas_perdidas: i32,
-    continues_usados: i32,
+    /// Opcionais: o MiSTer só lê o placar.
+    #[serde(default)]
+    vidas_perdidas: Option<i32>,
+    #[serde(default)]
+    continues_usados: Option<i32>,
 }
 
 /// `POST /api/runs`: registra o resultado do validador offline na run indicada. Reenvio do mesmo

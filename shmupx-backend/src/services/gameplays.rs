@@ -19,7 +19,9 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::firestore::valor::{data, inteiro, ler_booleano, ler_data, ler_inteiro, ler_mapa, ler_texto, mapa, texto};
+use crate::firestore::valor::{
+    data, inteiro, ler_booleano, ler_data, ler_inteiro, ler_lista_de_textos, ler_mapa, ler_texto, mapa, texto,
+};
 use crate::firestore::{Campos, Firestore};
 
 /// Saldo de uma carteira criada no primeiro início de run.
@@ -39,11 +41,33 @@ pub struct RunIniciada {
     pub max_duration_segundos: i32,
 }
 
+/// Vidas e continues são opcionais: o MiSTer só lê o placar (ADR 008).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resultado {
     pub score_bruto: i64,
-    pub vidas_perdidas: i32,
-    pub continues_usados: i32,
+    pub vidas_perdidas: Option<i32>,
+    pub continues_usados: Option<i32>,
+}
+
+/// Como a partida foi jogada. Ranking: mesmo jogo e mesma versão, venha de PC, emulador,
+/// Steam, MiSTer ou placa original.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Detalhes {
+    /// `highscore`, `1cc`, `caravan-sprint` (2 min) ou `caravan-classic` (5 min).
+    pub modo: Option<String>,
+    /// Versão do jogo (ex.: `megadrive-4.0.0`); partidas de versões diferentes não se misturam.
+    pub versao: Option<String>,
+    /// `pc` ou `mister`, pela credencial usada (`middleware::jogador`).
+    pub origem: &'static str,
+}
+
+/// Modos de partida e o modo do catálogo (`games.modes`) a que pertencem. No 1CC a partida usa
+/// uma ficha só: não há continue com outra ficha.
+const MODOS_DE_PARTIDA: [(&str, &str); 4] =
+    [("highscore", "highscore"), ("1cc", "1cc"), ("caravan-sprint", "caravan"), ("caravan-classic", "caravan")];
+
+fn versao_valida(versao: &str) -> bool {
+    (1..=40).contains(&versao.len()) && versao.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -64,24 +88,46 @@ pub(crate) fn id_valido(id: &str) -> bool {
     (1..=128).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-pub async fn iniciar(fs: &Firestore, uid: &str, game_id: &str) -> Result<RunIniciada, AppError> {
+pub async fn iniciar(fs: &Firestore, uid: &str, game_id: &str, detalhes: &Detalhes) -> Result<RunIniciada, AppError> {
     if !id_valido(game_id) {
         return Err(AppError::bad_request("jogo_id inválido"));
     }
+    if let Some(modo) = &detalhes.modo
+        && !MODOS_DE_PARTIDA.iter().any(|(m, _)| m == modo)
+    {
+        return Err(AppError::bad_request("modo inválido: use highscore, 1cc, caravan-sprint ou caravan-classic"));
+    }
+    if detalhes.versao.as_deref().is_some_and(|v| !versao_valida(v)) {
+        return Err(AppError::bad_request("versão do jogo inválida"));
+    }
     let tx = fs.iniciar_transacao().await?;
-    let resultado = iniciar_na_transacao(fs, &tx, uid, game_id).await;
+    let resultado = iniciar_na_transacao(fs, &tx, uid, game_id, detalhes).await;
     if resultado.is_err() {
         fs.desfazer(&tx).await;
     }
     resultado
 }
 
-async fn iniciar_na_transacao(fs: &Firestore, tx: &str, uid: &str, game_id: &str) -> Result<RunIniciada, AppError> {
+async fn iniciar_na_transacao(
+    fs: &Firestore,
+    tx: &str,
+    uid: &str,
+    game_id: &str,
+    detalhes: &Detalhes,
+) -> Result<RunIniciada, AppError> {
     let jogo = fs
         .ler(&format!("games/{game_id}"), tx)
         .await?
         .filter(|jogo| ler_booleano(jogo, "published") == Some(true))
         .ok_or_else(|| AppError::not_found("jogo não encontrado"))?;
+    // Jogo com modos no catálogo só aceita partidas desses modos.
+    let modos_do_jogo = ler_lista_de_textos(&jogo, "modes");
+    if let Some(modo) = &detalhes.modo {
+        let categoria = MODOS_DE_PARTIDA.iter().find(|(m, _)| m == modo).map(|(_, c)| *c).unwrap_or_default();
+        if !modos_do_jogo.is_empty() && !modos_do_jogo.iter().any(|m| m == categoria) {
+            return Err(AppError::bad_request(format!("este jogo não tem o modo {categoria}")));
+        }
+    }
     let max_duracao = ler_inteiro(&jogo, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS).clamp(1, 7200);
 
     let caminho_carteira = format!("wallets/{uid}");
@@ -122,9 +168,10 @@ async fn iniciar_na_transacao(fs: &Firestore, tx: &str, uid: &str, game_id: &str
         ("balanceAfter", inteiro(saldo_final)),
         ("createdAt", data(agora)),
     ])));
-    escritas.push(criar(fs, &format!("gameplays/{run_id}"), campos(&[
+    let mut campos_gameplay = campos(&[
         ("ownerId", texto(uid)),
         ("gameId", texto(game_id)),
+        ("source", texto(detalhes.origem)),
         ("status", texto("recording")),
         ("createdAt", data(agora)),
         ("updatedAt", data(agora)),
@@ -132,7 +179,14 @@ async fn iniciar_na_transacao(fs: &Firestore, tx: &str, uid: &str, game_id: &str
             ("serverStartedAt", data(agora)),
             ("maxDurationSeconds", inteiro(max_duracao)),
         ]))),
-    ])));
+    ]);
+    if let Some(modo) = &detalhes.modo {
+        campos_gameplay.insert("mode".into(), texto(modo));
+    }
+    if let Some(versao) = &detalhes.versao {
+        campos_gameplay.insert("gameVersion".into(), texto(versao));
+    }
+    escritas.push(criar(fs, &format!("gameplays/{run_id}"), campos_gameplay));
 
     fs.confirmar(tx, escritas).await?;
     Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32 })
@@ -214,7 +268,10 @@ pub async fn submeter(
     game_id: &str,
     resultado: Resultado,
 ) -> Result<RunSubmetida, AppError> {
-    if resultado.score_bruto < 0 || resultado.vidas_perdidas < 0 || resultado.continues_usados < 0 {
+    if resultado.score_bruto < 0
+        || resultado.vidas_perdidas.is_some_and(|v| v < 0)
+        || resultado.continues_usados.is_some_and(|c| c < 0)
+    {
         return Err(AppError::bad_request("score_bruto, vidas_perdidas e continues_usados não podem ser negativos"));
     }
     if !id_valido(run_id) {
@@ -278,12 +335,13 @@ async fn submeter_na_transacao(
         _ => return Err(AppError::conflict("esta run já foi encerrada")),
     }
 
-    let campos_resultado = campos(&[
-        ("score", inteiro(resultado.score_bruto)),
-        ("livesLost", inteiro(resultado.vidas_perdidas.into())),
-        ("continuesUsed", inteiro(resultado.continues_usados.into())),
-        ("submittedAt", data(agora)),
-    ]);
+    let mut campos_resultado = campos(&[("score", inteiro(resultado.score_bruto)), ("submittedAt", data(agora))]);
+    if let Some(vidas) = resultado.vidas_perdidas {
+        campos_resultado.insert("livesLost".into(), inteiro(vidas.into()));
+    }
+    if let Some(continues) = resultado.continues_usados {
+        campos_resultado.insert("continuesUsed".into(), inteiro(continues.into()));
+    }
     let escrita = atualizar(
         fs,
         &caminho,
@@ -297,8 +355,8 @@ async fn submeter_na_transacao(
 fn ler_resultado(campos: &Campos) -> Option<Resultado> {
     Some(Resultado {
         score_bruto: ler_inteiro(campos, "score")?,
-        vidas_perdidas: ler_inteiro(campos, "livesLost")?.try_into().ok()?,
-        continues_usados: ler_inteiro(campos, "continuesUsed")?.try_into().ok()?,
+        vidas_perdidas: ler_inteiro(campos, "livesLost").and_then(|v| v.try_into().ok()),
+        continues_usados: ler_inteiro(campos, "continuesUsed").and_then(|v| v.try_into().ok()),
     })
 }
 
@@ -359,9 +417,9 @@ mod tests {
         let uid = format!("uid-{}", Uuid::new_v4());
 
         // Jogo não publicado não abre run nem cria carteira.
-        assert!(iniciar(&fs, &uid, &oculto).await.is_err());
+        assert!(iniciar(&fs, &uid, &oculto, &Detalhes::default()).await.is_err());
 
-        let run = iniciar(&fs, &uid, &jogo).await.unwrap();
+        let run = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();
         assert_eq!(run.max_duration_segundos, 3600);
         let leitura = fs.iniciar_transacao().await.unwrap();
         let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
@@ -372,14 +430,14 @@ mod tests {
         fs.desfazer(&leitura).await;
 
         // Segunda run debita de novo, sem recriar o bônus inicial.
-        let segunda = iniciar(&fs, &uid, &jogo).await.unwrap();
+        let segunda = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();
         let leitura = fs.iniciar_transacao().await.unwrap();
         let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
         assert_eq!(ler_inteiro(&carteira, "balance"), Some(FICHAS_INICIAIS - 2));
         assert_eq!(ler_inteiro(&carteira, "version"), Some(2));
         fs.desfazer(&leitura).await;
 
-        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: 2, continues_usados: 0 };
+        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0) };
 
         // Outro jogador não enxerga nem submete a run.
         assert!(submeter(&fs, "uid-intruso", &run.run_id, &jogo, resultado.clone()).await.is_err());
@@ -438,10 +496,10 @@ mod tests {
         let uid = format!("uid-{}", Uuid::new_v4());
         let tx = fs.iniciar_transacao().await.unwrap();
         fs.confirmar(&tx, vec![criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(600))]))]).await.unwrap();
-        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: 0, continues_usados: 0 };
+        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0) };
 
         // Fluxo normal: encerrar (idempotente), depois enviar.
-        let run = iniciar(&fs, &uid, &jogo).await.unwrap();
+        let run = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();
         assert!(encerrar(&fs, "uid-intruso", &run.run_id).await.is_err(), "outro jogador não encerra");
         let encerrada = encerrar(&fs, &uid, &run.run_id).await.unwrap();
         assert_eq!(encerrada.status, "processing");
@@ -479,7 +537,7 @@ mod tests {
             criar(&fs, &format!("wallets/{uid}"), campos(&[("balance", inteiro(0)), ("version", inteiro(7))])),
         ]).await.unwrap();
 
-        assert!(iniciar(&fs, &uid, &jogo).await.is_err());
+        assert!(iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.is_err());
         let leitura = fs.iniciar_transacao().await.unwrap();
         let carteira = fs.ler(&format!("wallets/{uid}"), &leitura).await.unwrap().unwrap();
         assert_eq!(ler_inteiro(&carteira, "balance"), Some(0));

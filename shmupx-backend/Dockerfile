@@ -4,6 +4,9 @@ FROM rust:1-bookworm AS build
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+# Cache offline do sqlx: compila as macros query! sem um Postgres vivo.
+COPY .sqlx ./.sqlx
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 FROM debian:bookworm-slim

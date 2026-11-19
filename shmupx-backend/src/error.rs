@@ -21,6 +21,9 @@ pub enum AppError {
     /// Token ausente, malformado, com assinatura/expiração inválida — 401. O detalhe é seguro
     /// para o cliente ver (nunca contém o segredo nem o conteúdo do token).
     Unauthorized(String),
+    /// Recurso do servidor ainda não configurado (ex.: envio de e-mail) — 503. A mensagem é
+    /// segura para o cliente: diz o que falta, sem detalhes internos.
+    Unavailable(String),
     /// Erro do nosso lado que não é culpa do cliente (ex.: variável de ambiente obrigatória
     /// ausente) — 500. Mensagem detalhada só no log do servidor, igual a `Database`.
     Internal(String),
@@ -45,6 +48,10 @@ impl AppError {
 
     pub fn unauthorized(message: impl Into<String>) -> Self {
         Self::Unauthorized(message.into())
+    }
+
+    pub fn unavailable(message: impl Into<String>) -> Self {
+        Self::Unavailable(message.into())
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
@@ -73,6 +80,7 @@ impl IntoResponse for AppError {
             AppError::Conflict(message) => (StatusCode::CONFLICT, message),
             AppError::Forbidden(message) => (StatusCode::FORBIDDEN, message),
             AppError::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
+            AppError::Unavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             AppError::Internal(message) => {
                 eprintln!("erro interno: {message}");
                 (

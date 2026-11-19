@@ -323,3 +323,15 @@ adicionada) para gerar um token HS256 válido com um `sub` escolhido, subi o ser
 - [ ] Segurança do ranking (o Client não é confiável): o servidor deve receber a evidência da run (vídeo ou quadros-chave) e reanalisar por amostragem e em placares altos; limites de frequência; detecção de resultados fora do padrão; gravar a versão do validador na gameplay. Pré-requisito para publicar ranking.
 - [ ] Aprovação de `needs_review`, nota normalizada e publicação dos rankings no Firestore (preservar a regra dos 5 jogos mais jogados).
 - [ ] Edge Function `robotx-voice` ainda valida JWT do Supabase.
+
+## Ambientes
+- [x] Produção = projeto real, banco `(default)`. Desenvolvimento = emuladores do Firestore e do Authentication em Docker (`shmupx-infra/firebase/docker-compose.yml`, projeto `demo-shmupx`). `start-dev.ps1` usa dev por padrão (sobe o Docker, remove conta de serviço, role da AWS e remetente de e-mail do processo); `-Ambiente prd` é explícito.
+- [x] Tokens do emulador (sem assinatura) aceitos só com `FIREBASE_AUTH_EMULATOR_HOST` + `FIRESTORE_EMULATOR_HOST` + projeto `demo-*` + fora do Cloud Run; senão o backend recusa subir (`middleware/firebase.rs`).
+
+## Versões do Client e avisos (ADR 007)
+- [x] `releases/{versão}` (`services/versoes.rs`): rascunho, agendamento com antecedência (`urgent`, `24h`, `48h`, `7d`), status pelo relógio do servidor (`scheduled` → `released`) e cancelamento antes da liberação. Rotas de admin: `GET /api/admin/releases`, `PUT /api/admin/releases/{v}`, `POST .../schedule`, `POST .../cancel`.
+- [x] Notificações (`services/notificacoes.rs`): `notifications/{id}` publicado ao agendar; `players/{uid}` com e-mail, `emailUpdates` e lidas. Rotas do Client: `GET /api/notifications`, `GET /api/notifications/{id}` (marca lida), `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`, `PUT /api/me/notification-preferences`, `GET /api/client/version`.
+- [x] E-mail pelo Amazon SES (`services/email.rs`, API v2 assinada com SigV4 e credenciais temporárias da role), em segundo plano; resultado gravado na versão. Opcional: sem `EMAIL_FROM`/`AWS_SECRETS_ROLE_ARN`, só o aviso no Client.
+- [x] Versão obrigatória liberada: `POST /api/runs/start` recusa Clients mais antigos (cabeçalho `x-shmupx-client-version`; ausente = 0.0.0), sem debitar ficha.
+- [x] Teste no emulador: rascunho → urgente → aviso → lida → bloqueio por versão → preferência de e-mail → cancelamento.
+- [ ] Configurar o SES em produção (`terraform apply` em shmupx-infra/envs/backend-prod com ses.tf, DKIM verificado, saída do sandbox, `EMAIL_FROM` no segredo `shmupx/backend/prod`).

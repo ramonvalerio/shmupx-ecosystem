@@ -103,6 +103,9 @@ impl Verificador {
     }
 
     async fn verificar(&self, token: &str) -> Result<FirebaseUser, AppError> {
+        if emulador_de_login_ativo() {
+            return validar_token_do_emulador(token, &self.project_id, agora());
+        }
         let kid = jsonwebtoken::decode_header(token)
             .ok()
             .and_then(|header| header.kid)
@@ -150,6 +153,64 @@ impl Verificador {
             .collect();
         Ok((chaves, max_age))
     }
+}
+
+/// Ambiente de desenvolvimento: `FIREBASE_AUTH_EMULATOR_HOST` aponta para o emulador do
+/// Authentication (Docker local), que emite ID tokens **sem assinatura**.
+pub fn emulador_de_login_ativo() -> bool {
+    std::env::var("FIREBASE_AUTH_EMULATOR_HOST").is_ok_and(|v| !v.trim().is_empty())
+}
+
+/// Recusa subir com o emulador de login num lugar que não é desenvolvimento: aceitar tokens sem
+/// assinatura em produção deixaria qualquer um se passar por qualquer jogador ou admin.
+pub fn conferir_ambiente_do_emulador() -> Result<(), String> {
+    if !emulador_de_login_ativo() {
+        return Ok(());
+    }
+    let projeto = std::env::var("FIREBASE_PROJECT_ID").unwrap_or_default();
+    if !projeto.starts_with("demo-") {
+        return Err(format!("FIREBASE_AUTH_EMULATOR_HOST só vale com um projeto demo-* (atual: {projeto:?})"));
+    }
+    if std::env::var("FIRESTORE_EMULATOR_HOST").is_err() {
+        return Err("FIREBASE_AUTH_EMULATOR_HOST exige também FIRESTORE_EMULATOR_HOST (dev é todo no emulador)".into());
+    }
+    if std::env::var("K_SERVICE").is_ok() {
+        return Err("emulador de login configurado no Cloud Run: recusado".into());
+    }
+    Ok(())
+}
+
+/// Token do emulador: `alg: none`, sem assinatura. Confere o resto como o Firebase faz (emissor,
+/// público, validade, `sub`), para o fluxo de dev se comportar como o de produção.
+fn validar_token_do_emulador(token: &str, project_id: &str, agora: u64) -> Result<FirebaseUser, AppError> {
+    use base64::Engine;
+    let invalido = || AppError::unauthorized("token inválido ou expirado");
+    let mut partes = token.split('.');
+    let (Some(cabecalho), Some(corpo)) = (partes.next(), partes.next()) else { return Err(invalido()) };
+    let decodificar = |parte: &str| -> Result<serde_json::Value, AppError> {
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parte.trim_end_matches('=')).map_err(|_| invalido())?;
+        serde_json::from_slice(&bytes).map_err(|_| invalido())
+    };
+    if decodificar(cabecalho)?.get("alg").and_then(|a| a.as_str()) != Some("none") {
+        return Err(invalido());
+    }
+    let corpo = decodificar(corpo)?;
+    let texto = |nome: &str| corpo.get(nome).and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let numero = |nome: &str| corpo.get(nome).and_then(|v| v.as_u64()).unwrap_or(0);
+    let valido = texto("aud") == project_id
+        && texto("iss") == format!("https://securetoken.google.com/{project_id}")
+        && numero("exp") + 60 >= agora
+        && numero("iat") <= agora + 60
+        && !texto("sub").is_empty()
+        && texto("sub").len() <= 128;
+    if !valido {
+        return Err(invalido());
+    }
+    Ok(FirebaseUser {
+        uid: texto("sub"),
+        email: corpo.get("email").and_then(|v| v.as_str()).map(str::to_string),
+        email_verified: corpo.get("email_verified").and_then(|v| v.as_bool()).unwrap_or(false),
+    })
 }
 
 fn max_age(header: Option<&reqwest::header::HeaderValue>) -> Option<Duration> {
@@ -233,6 +294,36 @@ mod tests {
 
     fn usuario(email: Option<&str>, verificado: bool) -> FirebaseUser {
         FirebaseUser { uid: "uid".into(), email: email.map(str::to_string), email_verified: verificado }
+    }
+
+    fn token_do_emulador(alg: &str, corpo: serde_json::Value) -> String {
+        use base64::Engine;
+        let b64 = |v: serde_json::Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(v.to_string());
+        format!("{}.{}.", b64(serde_json::json!({ "alg": alg, "typ": "JWT" })), b64(corpo))
+    }
+
+    #[test]
+    fn token_do_emulador_valido_vira_usuario() {
+        let corpo = serde_json::json!({
+            "aud": "demo-shmupx", "iss": "https://securetoken.google.com/demo-shmupx",
+            "iat": 1_000, "exp": 4_600, "sub": "uid-dev", "email": "eu@example.com", "email_verified": true
+        });
+        let usuario = validar_token_do_emulador(&token_do_emulador("none", corpo), "demo-shmupx", 2_000).unwrap();
+        assert_eq!(usuario, FirebaseUser { uid: "uid-dev".into(), email: Some("eu@example.com".into()), email_verified: true });
+    }
+
+    #[test]
+    fn token_do_emulador_errado_e_recusado() {
+        let base = serde_json::json!({
+            "aud": "demo-shmupx", "iss": "https://securetoken.google.com/demo-shmupx", "iat": 1_000, "exp": 4_600, "sub": "uid"
+        });
+        assert!(validar_token_do_emulador(&token_do_emulador("RS256", base.clone()), "demo-shmupx", 2_000).is_err(), "só alg none");
+        assert!(validar_token_do_emulador(&token_do_emulador("none", base.clone()), "outro", 2_000).is_err(), "outro projeto");
+        assert!(validar_token_do_emulador(&token_do_emulador("none", base.clone()), "demo-shmupx", 9_000).is_err(), "expirado");
+        let mut sem_sub = base.clone();
+        sem_sub["sub"] = serde_json::json!("");
+        assert!(validar_token_do_emulador(&token_do_emulador("none", sem_sub), "demo-shmupx", 2_000).is_err());
+        assert!(validar_token_do_emulador("lixo", "demo-shmupx", 2_000).is_err());
     }
 
     #[test]

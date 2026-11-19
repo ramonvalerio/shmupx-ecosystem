@@ -133,6 +133,39 @@ impl Firestore {
         Ok(())
     }
 
+    /// Lê um documento fora de transação (leitura simples, sem garantia de consistência com
+    /// escritas concorrentes). `None` quando não existe.
+    pub async fn ler_documento(&self, caminho: &str) -> Result<Option<Campos>, AppError> {
+        #[derive(Deserialize)]
+        struct Documento {
+            #[serde(default)]
+            fields: Campos,
+        }
+        #[derive(Deserialize)]
+        struct Item {
+            found: Option<Documento>,
+        }
+        let itens: Vec<Item> =
+            self.post(&format!("{}:batchGet", self.raiz), &json!({ "documents": [self.nome(caminho)] })).await?;
+        Ok(itens.into_iter().find_map(|item| item.found).map(|documento| documento.fields))
+    }
+
+    /// Acrescenta textos a uma lista do documento sem repetir os que já estão lá (`arrayUnion`),
+    /// criando o documento se preciso. Atômico no servidor: duas chamadas juntas não se perdem.
+    pub async fn acrescentar_na_lista(&self, caminho: &str, campo: &str, valores: &[String]) -> Result<(), AppError> {
+        let escrita = json!({
+            "transform": {
+                "document": self.nome(caminho),
+                "fieldTransforms": [{
+                    "fieldPath": campo,
+                    "appendMissingElements": { "values": valores.iter().map(|v| valor::texto(v)).collect::<Vec<_>>() },
+                }],
+            },
+        });
+        let _: Value = self.post(&format!("{}:commit", self.raiz), &json!({ "writes": [escrita] })).await?;
+        Ok(())
+    }
+
     /// Lista os documentos de uma coleção de primeiro nível, como `(id, campos)`.
     pub async fn listar(&self, colecao: &str) -> Result<Vec<(String, Campos)>, AppError> {
         #[derive(Deserialize)]
