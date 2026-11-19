@@ -1,0 +1,9 @@
+{
+  "game": "aero-fighters-2",
+  "name": "Aero Fighters 2",
+  "version": "0.2.0",
+  "status": "draft",
+  "analyzer": "hud_score",
+  "based_on": "0.1.0",
+  "notes": "Ícones de vida dos 8 personagens (life_p1..p8, recortados do longplay 'All Characters | Level 8'), além de life.png e life_keaton.png da 0.1.0."
+}

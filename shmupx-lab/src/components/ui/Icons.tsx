@@ -56,6 +56,22 @@ export const IconExternal = (p: SVGProps<SVGSVGElement>) => (
 export const IconLogout = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></Icon>
 );
+export const IconRelease = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></Icon>
+);
+export const IconBell = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></Icon>
+);
+export const IconPaperclip = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="m21.4 11.1-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" /></Icon>
+);
+/** Símbolo do YouTube (play branco em fundo vermelho), preenchido, em cores próprias. */
+export const IconYoutube = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" width={16} height={16} aria-hidden="true" {...p}>
+    <rect x="1.5" y="4.5" width="21" height="15" rx="4.5" fill="#FF0000" />
+    <path d="M10 8.8v6.4l5.6-3.2z" fill="#FFFFFF" />
+  </svg>
+);
 export const IconAlert = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></Icon>
 );

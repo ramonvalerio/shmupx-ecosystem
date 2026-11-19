@@ -111,6 +111,20 @@ Para melhorar um script existente, **Nova versão** copia a versão escolhida pa
 - Continue e game over são heurísticos e ainda não foram validados com vídeos reais desses casos.
 - HUD cortado, coberto por overlays ou vídeo muito comprimido (< 360p) pode falhar na calibração.
 
+## Executável para o Client
+
+O Client instalado não usa Python: roda este motor compilado com PyInstaller.
+
+```powershell
+.	oolsuild_validator.ps1     # gera dist\shmupx-validator\shmupx-validator.exe
+dist\shmupx-validator\shmupx-validator.exe --list-games --games-dir games
+```
+
+O build usa um ambiente isolado (`.venv-build`) com as versões fixas de `requirements-build.txt`. Os scripts dos
+jogos (`games/`) não entram no binário: quem chama passa `--games-dir` (ou `SHMUPX_GAMES_DIR`); sem isso, o
+`.exe` procura `games/` ao lado dele. O `--grok` fica de fora do executável. Mudar o motor ou as versões fixas é
+mudar o que os jogadores rodam: compare os vídeos de referência no Lab antes de lançar.
+
 ## Testes
 
 ```powershell

@@ -13,7 +13,7 @@ import time
 
 from contextlib import redirect_stdout
 
-from .catalog import get_script, scripts
+from .catalog import GAMES_DIR, get_script, scripts
 
 
 def main(argv=None):
@@ -26,6 +26,8 @@ def main(argv=None):
     ap.add_argument("--game", help="ID do jogo (pasta games/<jogo>)")
     ap.add_argument("--version", help="versão do script (padrão: a mais nova aprovada)")
     ap.add_argument("--list-games", action="store_true", help="lista os scripts (jogo, versão e status)")
+    ap.add_argument("--games-dir", default=os.environ.get("SHMUPX_GAMES_DIR") or str(GAMES_DIR),
+                    help="pasta games/<jogo>/<versão>/ (padrão: SHMUPX_GAMES_DIR, senão a do motor)")
     ap.add_argument("--format", choices=("legacy", "client-v1"), default="legacy",
                     help="formato da saída (padrão: legacy)")
     ap.add_argument("--player", help="nome do jogador/canal")
@@ -44,17 +46,21 @@ def main(argv=None):
                     help="publica o andamento no stderr, em linhas 'SHMUPX_PROGRESS <0-100>'")
     a = ap.parse_args(argv)
     if a.list_games:
-        print(json.dumps([s.to_json() for s in scripts()], ensure_ascii=False, indent=2))
+        print(json.dumps([s.to_json() for s in scripts(a.games_dir)], ensure_ascii=False, indent=2))
         return
     if not a.video or not a.game or not a.player:
         ap.error("VIDEO, --game e --player são obrigatórios para analisar")
     if a.grok_always and not a.grok:
         ap.error("--grok-always exige --grok (autoriza acesso à API externa)")
     try:
-        spec = get_script(a.game, a.version)
+        spec = get_script(a.game, a.version, games_dir=a.games_dir)
     except ValueError as exc:
         ap.error(str(exc))
     a.validator_version = spec.version
+    missing = spec.missing_resources()
+    if missing:
+        sys.exit(f"Script {a.game} {spec.version} incompleto; faltam: {', '.join(missing)}. "
+                 "Siga o templates/LEIA-ME.md da versão.")
 
     if not os.path.isfile(a.video):
         sys.exit(f"Arquivo não encontrado: {a.video}")
@@ -132,6 +138,9 @@ def _analyze(a, an, gk, t0):
         "lives-lost": r["lives_lost"],
         "game-over": r["game_over"],
         "attempts": r["attempts"],
+        "players": r.get("players", 1),
+        "cleared": r.get("cleared", False),
+        "bombs-used": r.get("bombs_used"),
         "observation": r["observation"],
         "total_tokens": total_tokens,
     }}

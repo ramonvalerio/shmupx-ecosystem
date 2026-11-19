@@ -1,0 +1,151 @@
+{
+  "description": "AERO FIGHTERS 2 (Neo Geo/arcade). HUD superior esquerdo: rótulo '1P:' + placar de até 8 dígitos alinhado à direita, sem zeros à esquerda; vidas como ícones de avião logo abaixo do rótulo. Sem número de fase no HUD e sem tela de total.",
+  "reference_height": 360,
+  "sample_interval_s": 2.0,
+  "hud_variants": [
+    {
+      "name": "arcade",
+      "label_template": "labels/hud_1p.png",
+      "language": "en"
+    }
+  ],
+  "hud_label_search_region": {
+    "x0": 0.0,
+    "y0": 0.0,
+    "x1": 0.45,
+    "y1": 0.2
+  },
+  "hud_label_min_score": 0.6,
+  "scale_search": {
+    "min": 0.4,
+    "max": 4.5,
+    "coarse_step": 0.01,
+    "fine_step": 0.005
+  },
+  "digit_templates": "digits",
+  "digit_size": [
+    12,
+    16
+  ],
+  "score": {
+    "dx": 38,
+    "dy": 1,
+    "count": 8,
+    "pitch": 13.0,
+    "pad": 3,
+    "align": "right",
+    "white_level": 180,
+    "blank_max_white": 0.06,
+    "multiple_of": 100
+  },
+  "lives": {
+    "mode": "icons",
+    "templates": [
+      "labels/life.png",
+      "labels/life_keaton.png",
+      "labels/life_p1.png",
+      "labels/life_p2.png",
+      "labels/life_p3.png",
+      "labels/life_p4.png",
+      "labels/life_p5.png",
+      "labels/life_p6.png",
+      "labels/life_p7.png",
+      "labels/life_p8.png"
+    ],
+    "_comment_templates": "O ícone de vida é o avião do personagem escolhido: life.png (avião azul) e life_keaton.png (jato do Robo Keaton). life_p1..p8: um por personagem, do longplay All Characters (Level 8).",
+    "channel": "blue",
+    "also_gray": true,
+    "dx": -2,
+    "dy": 18,
+    "pitch": 13.0,
+    "pad": 4,
+    "max": 9,
+    "min_score": 0.7,
+    "doubt_margin": 0.05,
+    "counts_reserve": true,
+    "start": 2,
+    "game_over_gap_s": 5.0
+  },
+  "bombs": {
+    "mode": "icons",
+    "templates": [
+      "labels/bomb.png"
+    ],
+    "channel": "blue",
+    "also_gray": true,
+    "dx": 2,
+    "dy": 315,
+    "pitch": 25.0,
+    "pitch_tolerance": 0.2,
+    "pad": 5,
+    "pad_first_y": 10,
+    "max": 9,
+    "min_score": 0.6,
+    "doubt_margin": 0.05,
+    "confirm_samples": 3,
+    "confirm_s": 1.0,
+    "death_window_s": 5.0
+  },
+  "ranking_screen": {
+    "label_template": "labels/name_entry.png",
+    "label_search_region": {
+      "x0": 0.0,
+      "y0": 0.0,
+      "x1": 1.0,
+      "y1": 0.35
+    },
+    "label_min_score": 0.7,
+    "digit_templates": "ranking_digits",
+    "number_region": {
+      "x0": 0.0,
+      "y0": 0.15,
+      "x1": 1.0,
+      "y1": 0.95
+    },
+    "digit_min_score": 0.75,
+    "max_gain": 100000,
+    "dense_fps": 4,
+    "min_consecutive": 3
+  },
+  "clear_screen": {
+    "label_templates": [
+      "labels/clear_congratulations.png"
+    ],
+    "label_search_region": {
+      "x0": 0.0,
+      "y0": 0.0,
+      "x1": 1.0,
+      "y1": 0.45
+    },
+    "label_min_score": 0.7
+  },
+  "players": {
+    "p2_label_template": "labels/hud_2p.png",
+    "dx": 289,
+    "dy": 0,
+    "pad": 6,
+    "pad_x": 45,
+    "min_score": 0.7,
+    "min_samples": 10,
+    "min_fraction": 0.05
+  },
+  "digit_min_score": 0.72,
+  "digit_min_margin": 0.02,
+  "final_vote": {
+    "min_consecutive": 10,
+    "window_s": 20,
+    "dense_fps": 6
+  },
+  "lives_dense_fps": 4,
+  "lives_confirm_samples": 12,
+  "lives_confirm_s": 3.0,
+  "restart": {
+    "score_drop_ratio": 0.5,
+    "confirm_samples": 3
+  },
+  "flash": {
+    "max_mean": 200,
+    "min_label_score": 0.6
+  },
+  "_comment_medidas": "Medido num vídeo 514x360 (referência 360 px): rótulo '1P:' em (40,5) 24x18; casas do placar de 12x16 a cada 13 px, a primeira (de 8) em dx=38; ícones de vida 12x14 a cada 13 px em dx=-2, dy=18."
+}

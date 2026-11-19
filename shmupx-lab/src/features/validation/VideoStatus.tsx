@@ -3,7 +3,7 @@ import ProgressBar from "../../components/ui/ProgressBar";
 import { isYoutubeBlock, type ValidationVideo } from "../../lib/validation";
 
 /** Situação do vídeo: andamento (download/fila/análise) ou veredito e aceitação. */
-export default function VideoStatus({ video, remaining }: { video: ValidationVideo; remaining?: string }) {
+export default function VideoStatus({ video, remaining, queue }: { video: ValidationVideo; remaining?: string; queue?: number | null }) {
   const { estado, resultado } = video;
   switch (estado.fase) {
     case "baixando":
@@ -21,7 +21,7 @@ export default function VideoStatus({ video, remaining }: { video: ValidationVid
     case "pronto":
       return <Badge>Aguardando análise</Badge>;
     case "na_fila":
-      return <Badge>Na fila</Badge>;
+      return <Badge>{queue ? `Na fila ${queue}` : "Na fila"}</Badge>;
     case "falhou": {
       if (estado.erro === "Download cancelado.") return <Badge tone="danger">Download cancelado</Badge>;
       const blocked = isYoutubeBlock(estado.erro);

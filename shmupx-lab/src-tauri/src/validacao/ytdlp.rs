@@ -71,11 +71,11 @@ pub fn navegador_cookies(raiz_validacao: &Path) -> Option<OsString> {
     navegador_salvo(raiz_validacao).map(OsString::from).or_else(|| std::env::var_os(VARIAVEL_COOKIES).filter(|v| !v.is_empty()))
 }
 
-/// O yt-dlp é Python empacotado: sem isto, num pipe do Windows ele escreve na página de código do
-/// console e acentos e apóstrofos chegam quebrados.
+/// Num pipe do Windows o yt-dlp escreve na página de código do console (cp1252) e ignora
+/// `PYTHONIOENCODING`: acentos e apóstrofos chegavam quebrados. A opção dele força UTF-8.
 fn comando(executavel: &Path) -> Command {
     let mut comando = Command::new(executavel);
-    comando.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
+    comando.args(["--encoding", "utf-8"]);
     comando
 }
 
@@ -83,9 +83,15 @@ fn comando(executavel: &Path) -> Command {
 /// explicação com o que fazer; o resto vai com a última linha do yt-dlp.
 fn explicar_falha(stderr: &str, com_cookies: bool) -> String {
     let ultima = stderr.lines().rev().find(|l| !l.trim().is_empty()).map(str::trim).unwrap_or("sem detalhe");
+    if stderr.contains("Could not copy Chrome cookie database") || stderr.contains("Failed to decrypt with DPAPI") {
+        return "O yt-dlp não conseguiu ler os cookies do navegador escolhido (navegadores baseados no Chrome travam e criptografam o arquivo enquanto estão abertos). Feche o navegador de todo e tente de novo, ou escolha o Firefox.".into();
+    }
+    if stderr.contains("HTTP Error 429") && !stderr.contains("not a bot") {
+        return "O YouTube limitou os downloads deste PC (HTTP 429, muitas requisições). Espere alguns minutos e clique em Baixar de novo.".into();
+    }
     if stderr.contains(BLOQUEIO_YOUTUBE) && stderr.contains("not a bot") {
         let dica = if com_cookies {
-            "Os cookies do navegador escolhido não bastaram: abra o YouTube nele, confirme que está logado e tente de novo (ou escolha outro navegador)."
+            "Os cookies do navegador escolhido não bastaram: abra o YouTube nele, confirme que está logado (no perfil principal do navegador) e tente de novo. Instalar o Deno, que o yt-dlp usa para o YouTube, também ajuda."
         } else {
             "Escolha, acima da lista, o navegador em que você está logado no YouTube para o yt-dlp usar os cookies dele, e clique em Baixar de novo."
         };
@@ -186,6 +192,20 @@ pub async fn versao(executavel: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&saida.stdout).trim().to_string())
 }
 
+/// Versão do Deno no PATH: o yt-dlp o usa para resolver os desafios em JavaScript do YouTube; sem
+/// ele a extração é incompleta e o bloqueio "não é um robô" fica mais provável.
+pub async fn versao_deno() -> Result<String, String> {
+    let mut comando = Command::new("deno");
+    comando.arg("--version").stdin(Stdio::null()).kill_on_drop(true);
+    sem_janela(&mut comando);
+    let saida = tokio::time::timeout(Duration::from_secs(15), comando.output())
+        .await
+        .map_err(|_| "o Deno não respondeu".to_string())?
+        .map_err(|_| "Deno não encontrado no PATH".to_string())?;
+    let texto = String::from_utf8_lossy(&saida.stdout);
+    texto.lines().next().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).ok_or_else(|| "Deno não respondeu à versão".into())
+}
+
 /// Só http(s): o yt-dlp aceita muitos esquemas, e nenhum outro faz sentido aqui.
 pub fn url_valida(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url.trim()).ok()?;
@@ -262,6 +282,11 @@ pub async fn baixar(
         "--newline",
         "--no-warnings",
         "--no-part",
+        // Nome de arquivo só com ASCII seguro e curto: títulos com », ｜ e afins já fizeram o
+        // Windows recusar o arquivo (OSError 22). O título de verdade vem dos metadados.
+        "--restrict-filenames",
+        "--trim-filenames",
+        "120",
         // Um MP4 único primeiro (toca mesmo sem FFmpeg para juntar); depois o par vídeo+áudio.
         "-f",
         "b[ext=mp4]/bv*[ext=mp4]+ba[ext=m4a]/b",
@@ -382,6 +407,9 @@ mod tests {
         let sem = explicar_falha(stderr, false);
         assert!(sem.starts_with("O YouTube bloqueou o download") && sem.contains("navegador"));
         assert!(explicar_falha(stderr, true).contains("não bastaram"));
+        let chrome = "ERROR: Could not copy Chrome cookie database. See  https://github.com/yt-dlp/yt-dlp/issues/7271\n";
+        assert!(explicar_falha(chrome, true).contains("Feche o navegador"));
+        assert!(explicar_falha("WARNING: HTTP Error 429: Too Many Requests\nERROR: x\n", false).contains("HTTP 429"));
         assert_eq!(explicar_falha("x\nERROR: Video unavailable\n\n", false), "o yt-dlp falhou: ERROR: Video unavailable");
         assert_eq!(explicar_falha("", false), "o yt-dlp falhou: sem detalhe");
     }

@@ -53,6 +53,8 @@ pub struct Ambiente {
     /// OpenCV e NumPy no Python escolhido.
     pub dependencias: Item,
     pub ytdlp: Item,
+    /// Deno, o runtime JavaScript que o yt-dlp usa para o YouTube.
+    pub deno: Item,
     pub scripts: Vec<ScriptInfo>,
     /// Navegador escolhido para os cookies do YouTube (`None` = sem cookies).
     pub cookies_navegador: Option<String>,
@@ -202,6 +204,10 @@ fn iniciar_download(app: &AppHandle, jogo: &str, id: &str, url: String, executav
 #[tauri::command]
 pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
     let cookies_navegador = pasta_validacao(&app).ok().and_then(|pasta| ytdlp::navegador_salvo(&pasta));
+    let deno = match ytdlp::versao_deno().await {
+        Ok(versao) => Item { ok: true, detalhe: versao },
+        Err(e) => Item { ok: false, detalhe: e },
+    };
     let ytdlp = match localizar_ytdlp(&app) {
         Some(exe) => match ytdlp::versao(&exe).await {
             Ok(versao) => Item { ok: true, detalhe: format!("yt-dlp {versao}") },
@@ -213,7 +219,7 @@ pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
         Ok(raiz) => raiz,
         Err(e) => {
             let falta = Item { ok: false, detalhe: e.clone() };
-            return Ok(Ambiente { python: falta, dependencias: Item { ok: false, detalhe: e }, ytdlp, scripts: vec![], cookies_navegador });
+            return Ok(Ambiente { python: falta, dependencias: Item { ok: false, detalhe: e }, ytdlp, deno, scripts: vec![], cookies_navegador });
         }
     };
     let (python, scripts) = match script::listar_scripts(&raiz).await {
@@ -224,7 +230,7 @@ pub async fn validacao_ambiente(app: AppHandle) -> Result<Ambiente, String> {
         Ok(()) => Item { ok: true, detalhe: "OpenCV e NumPy instalados".into() },
         Err(e) => Item { ok: false, detalhe: format!("faltam bibliotecas do script ({e})") },
     };
-    Ok(Ambiente { python, dependencias, ytdlp, scripts, cookies_navegador })
+    Ok(Ambiente { python, dependencias, ytdlp, deno, scripts, cookies_navegador })
 }
 
 #[tauri::command]
@@ -417,8 +423,16 @@ pub async fn validacao_remover(app: AppHandle, game_id: String, video_id: String
     Ok(())
 }
 
-/// Põe os vídeos na fila de análise e processa um por vez em segundo plano. Devolve quantos
-/// entraram (vídeos sem arquivo, baixando ou já na fila são ignorados).
+/// Próximo número de ordem da fila: crescente durante toda a execução do Lab.
+fn proxima_ordem() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static ORDEM: AtomicU64 = AtomicU64::new(1);
+    ORDEM.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Põe os vídeos na fila de análise e processa um por vez em segundo plano, sempre o de menor
+/// ordem (a posição que a tela mostra). Devolve quantos entraram (vídeos sem arquivo, baixando ou
+/// já na fila são ignorados).
 #[tauri::command]
 pub async fn validacao_rodar(app: AppHandle, game_id: String, versao: String, video_ids: Vec<String>) -> Result<usize, String> {
     conferir_jogo(&game_id)?;
@@ -431,7 +445,7 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, versao: String, vi
         for video in dataset.videos.iter_mut().filter(|v| video_ids.contains(&v.id)) {
             let pode = video.caminho.is_some() && matches!(video.estado, Estado::Pronto | Estado::Concluido);
             if pode {
-                video.estado = Estado::NaFila { sessao: sessao() };
+                video.estado = Estado::NaFila { sessao: sessao(), ordem: proxima_ordem() };
                 ids.push(video.id.clone());
             }
         }
@@ -443,19 +457,16 @@ pub async fn validacao_rodar(app: AppHandle, game_id: String, versao: String, vi
     let (app_tarefa, jogo) = (app.clone(), game_id.clone());
     tauri::async_runtime::spawn(async move {
         let estado = app_tarefa.state::<ValidacaoState>();
-        for id in enfileirados {
+        // Uma vez por vídeo enfileirado aqui; cada vez roda o primeiro da fila (pode ser de outro
+        // clique em Rodar). Quando a fila esvazia, as tarefas que sobraram não acham nada e saem.
+        for _ in 0..enfileirados.len() {
             let _vez = estado.fila.lock().await;
-            // Pode ter sido removido ou tirado da fila enquanto esperava.
-            let caminho = {
+            // Lido agora: vídeos podem ter sido removidos ou tirados da fila enquanto esperavam.
+            let proximo = {
                 let _trava = estado.gravacao.lock().await;
-                repositorio(&app_tarefa)
-                    .and_then(|repo| repo.carregar(&jogo))
-                    .ok()
-                    .and_then(|d| d.videos.into_iter().find(|v| v.id == id))
-                    .filter(|v| matches!(v.estado, Estado::NaFila { .. }))
-                    .and_then(|v| v.caminho)
+                repositorio(&app_tarefa).and_then(|repo| repo.carregar(&jogo)).ok().and_then(|d| d.proximo_da_fila())
             };
-            let Some(caminho) = caminho else { continue };
+            let Some((id, caminho)) = proximo else { break };
             let cancelar = registrar_cancelamento(&app_tarefa, &id).await;
             let _ = alterar_video(&app_tarefa, &jogo, &id, |v| v.estado = Estado::Analisando { progresso: 0.0, sessao: sessao() }).await;
             let (tx, rx) = watch::channel(0.0f32);

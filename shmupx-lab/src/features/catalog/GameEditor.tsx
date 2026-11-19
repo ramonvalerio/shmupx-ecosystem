@@ -280,8 +280,8 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
 
         <footer className="flex items-center gap-3 border-t border-white/5 bg-[#0e0e11] px-6 py-3">
           <p role={error ? "alert" : undefined} className="min-w-0 flex-1 text-xs text-red-300">{error}</p>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="primary" type="submit" loading={saving}>{isNew ? "Criar jogo" : "Salvar"}</Button>
+          <Button variant="info" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="success" type="submit" loading={saving}>{isNew ? "Criar jogo" : "Salvar"}</Button>
         </footer>
       </form>
     </aside>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { formatDuration, formatScore, type Expected, type ValidationVideo } from "../../lib/validation";
+import { formatDuration, formatScore, queuePosition, type Expected, type ValidationVideo } from "../../lib/validation";
 import { LinkActions, PrimaryAction } from "./VideoActions";
 import VideoStatus from "./VideoStatus";
 
@@ -124,7 +124,7 @@ export default function VideoTable({ videos, selectedId, canRun, remaining, onOp
               <td className="px-4 py-3 text-xs whitespace-nowrap text-zinc-400 tabular-nums">
                 {result && !result.erro ? `${result.vidas ?? "—"} · ${result.continues ?? "—"}` : "—"}
               </td>
-              <td className="px-4 py-3"><VideoStatus video={video} remaining={remaining.get(video.id)} /></td>
+              <td className="px-4 py-3"><VideoStatus video={video} remaining={remaining.get(video.id)} queue={queuePosition(videos, video)} /></td>
               <td className="px-4 py-2 text-right">
                 <PrimaryAction
                   video={video}

@@ -1,0 +1,5 @@
+# Versões fixas do shmupx-validator.exe (tools/build_validator.ps1). Mudar uma linha muda o motor
+# entregue aos jogadores: gere o .exe de novo e rode os vídeos de referência antes de lançar.
+opencv-python==4.10.0.84
+numpy==2.1.3
+pyinstaller==6.11.1

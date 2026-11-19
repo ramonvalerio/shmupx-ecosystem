@@ -15,7 +15,7 @@ class ReportTests(unittest.TestCase):
 
     def test_uncertain_or_heuristic_results_require_review(self):
         for override in (dict(confidence="low"), dict(hi=None),
-                         dict(continues=1), dict(game_over=True)):
+                         dict(continues=1), dict(game_over=True), dict(players=2)):
             result = dict(confidence="high", hi=123, continues=0, game_over=False)
             result.update(override)
             self.assertTrue(client_report("earthion", "1.0.0", result, {})["needs_review"])

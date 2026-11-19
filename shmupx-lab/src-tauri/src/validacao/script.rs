@@ -27,6 +27,9 @@ pub struct ScriptInfo {
     pub version: String,
     /// `draft` (rascunho) ou `approved`.
     pub status: String,
+    /// Imagens e arquivos que o script pede e ainda não existem; vazio = pronto para rodar.
+    #[serde(default)]
+    pub missing: Vec<String>,
 }
 
 /// Pasta `validators` do Lab: `SHMUPX_VALIDATORS_ROOT`, ou a do repositório em desenvolvimento.
@@ -238,6 +241,12 @@ struct Gameplay {
     #[serde(rename = "game-over")]
     game_over: bool,
     observation: Option<String>,
+    #[serde(default)]
+    players: Option<u8>,
+    #[serde(default)]
+    cleared: Option<bool>,
+    #[serde(default, rename = "bombs-used")]
+    bombs_used: Option<i32>,
 }
 
 /// Lê o relatório `client-v1`. `aceito_automatico` segue a regra do Client
@@ -257,7 +266,9 @@ fn interpretar(bytes: &[u8], jogo: &str, versao: &str, duracao_segundos: u64) ->
     }
     let g = &relatorio.gameplay;
     let contadores_validos = g.score.is_none_or(|s| s >= 0) && g.lives >= 0 && g.continues >= 0;
+    // Partida a 2 também vai para revisão (o ranking é de 1 jogador), como o relatório já marca.
     let aceito_automatico = contadores_validos
+        && g.players.is_none_or(|p| p <= 1)
         && relatorio.confidence == "high"
         && !relatorio.needs_review
         && !g.game_over
@@ -272,6 +283,9 @@ fn interpretar(bytes: &[u8], jogo: &str, versao: &str, duracao_segundos: u64) ->
         revisao: relatorio.needs_review,
         observacao: g.observation.clone(),
         versao_validador: Some(relatorio.validator_version.clone()),
+        jogadores: g.players,
+        zerado: g.cleared,
+        bombas: g.bombs_used,
         aceito_automatico,
         erro: None,
         relatorio: Some(bruto),

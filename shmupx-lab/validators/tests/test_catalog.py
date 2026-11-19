@@ -60,6 +60,26 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             scripts(self.games)
 
+    def test_missing_resources_lists_labels_and_digits(self):
+        folder = write_script(self.games, "ibara", "0.1.0", status="draft")
+        config = {"hud_variants": [{"label_template": "labels/score.png", "alt_label_templates": ["labels/boss.png"]}],
+                  "results": {"label_templates": ["labels/total.png"]}}
+        (folder / "config.json").write_text(json.dumps(config), encoding="utf-8")
+        script = get_script("ibara", games_dir=self.games)
+        self.assertEqual(script.missing_resources(), ["templates/labels/score.png", "templates/labels/boss.png",
+                                                      "templates/labels/total.png",
+                                                      "templates/digits/<conjunto>/0.png … 9.png"])
+        for name in ("score", "boss", "total"):
+            (folder / "templates" / "labels").mkdir(parents=True, exist_ok=True)
+            (folder / "templates" / "labels" / f"{name}.png").write_bytes(b"png")
+        digits = folder / "templates" / "digits" / "pc"
+        digits.mkdir(parents=True)
+        for n in range(9):
+            (digits / f"{n}.png").write_bytes(b"png")
+        self.assertEqual(len(script.missing_resources()), 1, "conjunto sem o 9 não serve")
+        (digits / "9.png").write_bytes(b"png")
+        self.assertEqual(script.missing_resources(), [])
+
     def test_folders_without_manifest_or_with_odd_names_are_ignored(self):
         write_script(self.games, "earthion", "1.0.0")
         (Path(self.games) / "earthion" / "rascunho").mkdir()

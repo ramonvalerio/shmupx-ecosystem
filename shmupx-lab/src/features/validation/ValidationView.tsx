@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
-import { IconAlert, IconCheck, IconPlus, IconRefresh } from "../../components/ui/Icons";
+import { IconAlert, IconCheck, IconPaperclip, IconRefresh, IconYoutube } from "../../components/ui/Icons";
 import {
   installYtDlp,
   cancelProcessing,
@@ -15,6 +15,7 @@ import {
   newScriptVersion,
   setCookiesBrowser,
   percent,
+  queuePosition,
   removeVideo,
   runVideos,
   setExpected,
@@ -98,6 +99,13 @@ function EnvironmentNotice({ environment, checking, onCheck }: { environment: Va
       ),
     });
   }
+  if (environment.ytdlp.ok && !environment.deno.ok) {
+    issues.push({
+      title: "Deno não instalado (o yt-dlp precisa dele para o YouTube)",
+      detail: "Sem um runtime JavaScript, o yt-dlp extrai o YouTube de forma incompleta e o bloqueio “confirme que não é um robô” fica mais provável. Ele usa o Deno do PATH sozinho:",
+      command: "winget install DenoLand.Deno",
+    });
+  }
   if (issues.length === 0) return null;
   return (
     <div className="mx-8 mb-4 rounded-lg border border-amber-400/20 bg-amber-500/5 p-4">
@@ -155,7 +163,8 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
   const summary = dataset?.resumo;
   const selected = videos.find((video) => video.id === selectedId) ?? null;
   const ready = Boolean(environment?.python.ok && environment.dependencias.ok);
-  const canRun = script !== null && ready;
+  const incomplete = script?.missing ?? [];
+  const canRun = script !== null && ready && incomplete.length === 0;
   const pending = videos.filter((video) => video.estado.fase === "pronto" && video.caminho !== null);
   const rerunnable = videos.filter(runnable);
   const blocked = videos.some((video) => video.estado.fase === "falhou" && isYoutubeBlock(video.estado.erro));
@@ -281,6 +290,24 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
             Este jogo ainda não tem script de validação em <code className="font-mono text-zinc-300">shmupx-lab/validators/games/{gameId}</code>. Dá para reunir os vídeos e o gabarito agora e rodar quando o script existir.
           </p>
         )}
+        {script && incomplete.length > 0 && (
+          <div className="mx-8 mb-4 rounded-lg border border-amber-400/20 bg-amber-500/5 p-4 text-xs">
+            <p className="flex items-center gap-2 text-sm font-medium text-amber-200">
+              <IconAlert />
+              O script {script.version} ainda não pode rodar: faltam as imagens do HUD deste jogo
+            </p>
+            <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-zinc-300">
+              {incomplete.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+            <p className="mt-2 text-zinc-400">
+              Recorte-as seguindo o passo a passo em <strong>Ver script</strong> → <code className="font-mono">LEIA-ME.md</code> (pasta{" "}
+              <code className="font-mono">validators/games/{gameId}/{script.version}/templates</code>) e clique em <strong>Verificar de novo</strong>.
+            </p>
+            <div className="mt-3">
+              <Button size="sm" variant="ghost" loading={checkingEnvironment} onClick={onCheckEnvironment}>Verificar de novo</Button>
+            </div>
+          </div>
+        )}
         {environment && <EnvironmentNotice environment={environment} checking={checkingEnvironment} onCheck={onCheckEnvironment} />}
 
         <div className="grid grid-cols-1 gap-3 px-8 pb-5 md:grid-cols-3">
@@ -314,10 +341,13 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
             className="h-9 min-w-64 flex-1 rounded-md border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/15"
           />
           <Button type="submit" loading={adding} disabled={!url.trim() || environment?.ytdlp.ok === false}>
-            <IconPlus />
+            <IconYoutube />
             Adicionar do YouTube
           </Button>
-          <Button onClick={() => void onAddFiles()}>Adicionar arquivos</Button>
+          <Button onClick={() => void onAddFiles()}>
+            <IconPaperclip />
+            Adicionar arquivos
+          </Button>
         </form>
         <div className="-mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-8 pb-3 text-[11px]">
           <p className="text-zinc-600">Use gameplays suas ou de quem autorizou: os vídeos ficam só neste PC.</p>
@@ -389,6 +419,7 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
         <VideoPanel
           key={selected.id}
           video={selected}
+          queue={queuePosition(videos, selected)}
           canRun={canRun}
           remaining={remaining.get(selected.id)}
           onClose={() => setSelectedId(null)}

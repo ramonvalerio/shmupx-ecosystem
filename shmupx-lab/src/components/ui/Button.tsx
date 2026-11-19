@@ -1,12 +1,18 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "ghost";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "info" | "success";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-cyan-400 text-zinc-950 hover:bg-cyan-300",
   secondary: "border border-white/10 bg-zinc-900 text-zinc-200 hover:border-white/20 hover:bg-zinc-800",
   ghost: "text-zinc-400 hover:bg-white/5 hover:text-zinc-100",
+  // ações destrutivas (remover)
+  danger: "bg-red-500 text-white hover:bg-red-400",
+  // interromper/desistir (cancelar)
+  info: "bg-blue-500 text-white hover:bg-blue-400",
+  // confirmar/gravar (salvar)
+  success: "bg-emerald-500 text-zinc-950 hover:bg-emerald-400",
 };
 
 const SIZES: Record<Size, string> = {

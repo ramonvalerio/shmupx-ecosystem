@@ -24,13 +24,23 @@ class CliTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-c", script], cwd=ROOT,
                                 capture_output=True, text=True, check=True)
         listed = json.loads(result.stdout)
-        self.assertIn({"id": "earthion", "name": "Earthion", "version": "1.0.0", "status": "approved"}, listed)
+        self.assertIn({"id": "earthion", "name": "Earthion", "version": "1.0.0", "status": "approved", "missing": []}, listed)
 
     def test_entrypoint_works_outside_project_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run([sys.executable, str(ROOT / "analyze.py"), "--list-games"],
                                     cwd=directory, capture_output=True, text=True, check=True)
         self.assertTrue(any(s["id"] == "earthion" for s in json.loads(result.stdout)))
+
+    def test_games_dir_points_to_scripts_outside_the_engine(self):
+        # O .exe do Client recebe os scripts como dados, numa pasta separada do motor.
+        from tests.test_catalog import write_script
+        with tempfile.TemporaryDirectory() as games:
+            write_script(games, "ketsui", "2.0.0")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                main(["--list-games", "--games-dir", games])
+        self.assertEqual([(s["id"], s["version"]) for s in json.loads(out.getvalue())], [("ketsui", "2.0.0")])
 
     def test_earthion_resources_load_from_the_version_folder(self):
         from engine.hud import GameConfig
@@ -54,6 +64,20 @@ class CliTests(unittest.TestCase):
             main(["video.mp4", "--game", "earthion", "--player", "P", "--grok-always"])
         self.assertEqual(error.exception.code, 2)
 
+    def test_incomplete_script_stops_before_reading_the_video(self):
+        spec = Mock(version="0.1.0")
+        spec.missing_resources.return_value = ["templates/labels/hud_score.png"]
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "video.mp4"
+            video.touch()
+            with patch("engine.cli.get_script", return_value=spec), self.assertRaises(SystemExit) as error:
+                main([str(video), "--game", "ibara", "--player", "P"])
+        self.assertIn("hud_score.png", str(error.exception.code))
+        spec.create.assert_not_called()
+
+    def test_earthion_has_every_resource(self):
+        self.assertEqual(get_script("earthion", "1.0.0").missing_resources(), [])
+
     def test_unknown_version_is_a_usage_error(self):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
             main(["video.mp4", "--game", "earthion", "--version", "9.9.9", "--player", "P"])
@@ -71,6 +95,7 @@ class CliTests(unittest.TestCase):
             return result
         analyzer.run.side_effect = run
         spec = Mock(version="1.0.0")
+        spec.missing_resources.return_value = []
         spec.create.return_value = analyzer
         stdout, stderr = io.StringIO(), io.StringIO()
         with tempfile.TemporaryDirectory() as directory:
@@ -94,6 +119,7 @@ class CliTests(unittest.TestCase):
         analyzer.run.return_value = dict(hi=10, confidence="high", continues=0, lives_lost=0,
                                          game_over=False, attempts=0, observation=None, deaths=[])
         spec = Mock(version="1.2.0")
+        spec.missing_resources.return_value = []
         spec.create.return_value = analyzer
         stdout = io.StringIO()
         with tempfile.TemporaryDirectory() as directory:
@@ -108,6 +134,7 @@ class CliTests(unittest.TestCase):
         analyzer = Mock()
         analyzer.run.side_effect = SystemExit("HUD não encontrado")
         spec = Mock(version="1.0.0")
+        spec.missing_resources.return_value = []
         spec.create.return_value = analyzer
         output = io.StringIO()
         with tempfile.TemporaryDirectory() as directory:

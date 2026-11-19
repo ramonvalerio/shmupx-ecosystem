@@ -12,6 +12,8 @@ interface VideoPanelProps {
   canRun: boolean;
   /** Tempo restante estimado do download/análise em andamento. */
   remaining?: string;
+  /** Posição na fila de análise (1 = o próximo), quando o vídeo está na fila. */
+  queue?: number | null;
   onClose: () => void;
   onRun: () => void;
   onCancel: () => void;
@@ -49,7 +51,7 @@ function parse(text: string): number | null | undefined {
 }
 
 /** Detalhes de um vídeo: gabarito completo, resultado do script e relatório bruto. */
-export default function VideoPanel({ video, canRun, remaining, onClose, onRun, onCancel, onDownloadAgain, onRemove, onSaveExpected }: VideoPanelProps) {
+export default function VideoPanel({ video, canRun, remaining, queue, onClose, onRun, onCancel, onDownloadAgain, onRemove, onSaveExpected }: VideoPanelProps) {
   const [score, setScore] = useState(toText(video.gabarito.placar));
   const [lives, setLives] = useState(toText(video.gabarito.vidas));
   const [continues, setContinues] = useState(toText(video.gabarito.continues));
@@ -101,7 +103,7 @@ export default function VideoPanel({ video, canRun, remaining, onClose, onRun, o
             {[video.origem.tipo === "youtube" ? "YouTube" : "Arquivo local", formatDuration(video.duracao_segundos)].filter(Boolean).join(" · ")}
           </p>
           <h2 className="mt-0.5 line-clamp-2 text-base font-semibold break-words text-zinc-100">{video.titulo}</h2>
-          <div className="mt-2"><VideoStatus video={video} remaining={remaining} /></div>
+          <div className="mt-2"><VideoStatus video={video} remaining={remaining} queue={queue} /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="Fechar" className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-white/5 hover:text-zinc-200">
           <IconClose />
@@ -122,7 +124,7 @@ export default function VideoPanel({ video, canRun, remaining, onClose, onRun, o
                 <TextInput inputMode="numeric" value={continues} onChange={(e) => setContinues(e.target.value)} placeholder="opcional" />
               </Field>
               <div className="flex items-end">
-                <Button type="submit" loading={saving} className="w-full">Salvar</Button>
+                <Button type="submit" variant="success" loading={saving} className="w-full">Salvar</Button>
               </div>
             </div>
             <p className="text-xs text-zinc-500">Vidas e continues, se informados, também precisam bater para contar como acerto.</p>
@@ -147,8 +149,11 @@ export default function VideoPanel({ video, canRun, remaining, onClose, onRun, o
                 <Fact label="Continues" value={result.continues ?? "—"} />
                 <Fact label="Confiança" value={result.confianca || "—"} />
                 <Fact label="Game over" value={result.game_over ? "sim" : "não"} />
+                <Fact label="Jogadores" value={result.jogadores == null ? "—" : result.jogadores > 1 ? `${result.jogadores} (cooperativa)` : "1 (solo)"} />
+                <Fact label="Zerado (loop)" value={result.zerado == null ? "—" : result.zerado ? "sim" : "não"} />
+                <Fact label="Bombas gastas" value={result.bombas == null ? "—" : String(result.bombas)} />
                 <Fact label="Script" value={result.versao_validador ?? "—"} />
-                <Fact label="Duração" value={`${result.duracao_segundos} s`} />
+                <Fact label="Tempo de análise" value={formatDuration(result.duracao_segundos) ?? "—"} />
               </dl>
               <p className="rounded-md border border-white/5 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
                 {result.aceito_automatico
@@ -205,11 +210,11 @@ export default function VideoPanel({ video, canRun, remaining, onClose, onRun, o
           <>
             <p className="flex-1 text-xs text-zinc-400">{video.origem.tipo === "youtube" ? "Remover e apagar o vídeo baixado?" : "Remover da lista? O arquivo original fica intacto."}</p>
             <Button variant="ghost" onClick={() => setConfirmRemove(false)}>Não</Button>
-            <Button className="border-red-400/40 text-red-200 hover:bg-red-500/10" onClick={() => void onRemove()}>Remover</Button>
+            <Button variant="danger" onClick={() => void onRemove()}>Remover</Button>
           </>
         ) : (
           <>
-            <Button variant="ghost" onClick={() => setConfirmRemove(true)} disabled={video.estado.fase === "analisando"} className="mr-auto">
+            <Button variant="danger" onClick={() => setConfirmRemove(true)} disabled={video.estado.fase === "analisando"} className="mr-auto">
               Remover
             </Button>
             <PrimaryAction

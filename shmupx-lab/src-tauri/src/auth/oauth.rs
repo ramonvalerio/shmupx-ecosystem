@@ -23,7 +23,7 @@ const PAGINA_ERRO: &str = "<!doctype html><meta charset=utf-8><title>ShmupX</tit
 <body style=\"font-family:sans-serif;background:#1c1c1c;color:#eee;text-align:center;padding-top:20vh\">\
 <h1>Login não concluído</h1><p>Volte ao ShmupX e tente novamente.</p>";
 
-pub async fn login(client_id: &str) -> Result<String, String> {
+pub async fn login(client_id: &str, backend_url: Option<&str>) -> Result<String, String> {
     if client_id.trim().is_empty() {
         return Err("cliente OAuth do Google não configurado".to_string());
     }
@@ -59,7 +59,7 @@ pub async fn login(client_id: &str) -> Result<String, String> {
         .map_err(|_| "tempo do login esgotado".to_string())??;
 
     // A troca exige o `client_secret`, que só o backend conhece; o app nunca o carrega.
-    backend::trocar_codigo_google(&code, &verifier, &redirect_uri, client_id).await
+    backend::trocar_codigo_google(backend_url, &code, &verifier, &redirect_uri, client_id).await
 }
 
 /// Aceita conexões até chegar o redirecionamento do Google. Requisições alheias (favicon,

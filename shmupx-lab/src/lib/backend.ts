@@ -1,7 +1,4 @@
-import { auth } from "../auth/firebase";
-
-/** Endereço do shmupx-backend. O build de distribuição define `VITE_BACKEND_URL`. */
-const BACKEND_URL: string = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3000";
+import { getBackendUrl, getLabAuth } from "../auth/firebase";
 
 /** Jogo do catálogo, como o backend devolve em `/api/admin/games`. */
 export interface CatalogGame {
@@ -24,7 +21,9 @@ export interface CatalogGame {
 export type CatalogGameInput = Omit<CatalogGame, "id">;
 
 async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const user = auth.currentUser;
+  const user = getLabAuth().currentUser;
+  // Segue o ambiente escolhido ao abrir o Lab (lib/ambiente.ts).
+  const BACKEND_URL = getBackendUrl();
   if (!user) throw new Error("Sem sessão: entre com sua conta Google.");
   let response: Response;
   try {
@@ -57,4 +56,54 @@ export function saveGame(id: string, input: CatalogGameInput): Promise<CatalogGa
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+/** Antecedência entre o aviso e a liberação no Client. */
+export type ReleaseLead = "urgent" | "24h" | "48h" | "7d";
+
+/** Versão do ShmupX Client, como o backend devolve em `/api/admin/releases`. */
+export interface ClientRelease {
+  version: string;
+  title: string;
+  features: string[];
+  fixes: string[];
+  rules: string[];
+  /** Scripts de validação incluídos, como `jogo@versão`. */
+  scripts: string[];
+  mandatory: boolean;
+  /** `scheduled` vira `released` sozinho quando chega `release_at` (relógio do servidor). */
+  status: "draft" | "scheduled" | "released" | "cancelled";
+  lead?: ReleaseLead;
+  scheduled_at?: string;
+  release_at?: string;
+  /** `not_configured`, `sending`, `sent` ou `failed: ...`. */
+  email_status?: string;
+  emails_sent?: number;
+}
+
+export type ClientReleaseInput = Pick<ClientRelease, "title" | "features" | "fixes" | "rules" | "scripts" | "mandatory">;
+
+export function listReleases(): Promise<ClientRelease[]> {
+  return adminRequest<ClientRelease[]>("/api/admin/releases");
+}
+
+/** Cria ou edita o rascunho da versão (versões agendadas não mudam). */
+export function saveRelease(version: string, input: ClientReleaseInput): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Agenda a versão: publica o aviso no Client, manda os e-mails e libera após a antecedência. */
+export function scheduleRelease(version: string, lead: ReleaseLead): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/schedule`, {
+    method: "POST",
+    body: JSON.stringify({ lead }),
+  });
+}
+
+/** Cancela um agendamento ainda não liberado e esconde o aviso no Client. */
+export function cancelRelease(version: string): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/cancel`, { method: "POST" });
 }

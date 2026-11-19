@@ -114,7 +114,7 @@ export default function GenerateScriptDialog({ gameId, gameTitle, onClose, onGen
             <Button variant="primary" onClick={onClose}>Concluir</Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={onClose} disabled={generating}>Cancelar</Button>
+              <Button variant="info" onClick={onClose} disabled={generating}>Cancelar</Button>
               <Button variant="primary" loading={generating} onClick={() => void generate()}>Gerar rascunho</Button>
             </>
           )}

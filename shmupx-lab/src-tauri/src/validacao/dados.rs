@@ -40,7 +40,12 @@ pub enum Estado {
     Baixando { progresso: f32, sessao: u64 },
     /// Vídeo disponível, ainda sem análise.
     Pronto,
-    NaFila { sessao: u64 },
+    /// `ordem`: posição de chegada na fila (crescente); a fila sempre roda a menor primeiro.
+    NaFila {
+        sessao: u64,
+        #[serde(default)]
+        ordem: u64,
+    },
     /// `progresso` de 0 a 100, publicado pelo script (`--progress`).
     Analisando {
         #[serde(default)]
@@ -67,6 +72,15 @@ pub struct Resultado {
     pub vidas: Option<i32>,
     pub continues: Option<i32>,
     pub game_over: bool,
+    /// Jogadores na partida (2 = cooperativa); `None` em resultados antigos ou scripts que não sabem.
+    #[serde(default)]
+    pub jogadores: Option<u8>,
+    /// A volta foi completada (tela de final ou de resultado); `None` em resultados antigos.
+    #[serde(default)]
+    pub zerado: Option<bool>,
+    /// Bombas gastas, quando o script do jogo conta bombas; `None` nos demais.
+    #[serde(default)]
+    pub bombas: Option<i32>,
     pub confianca: String,
     pub revisao: bool,
     pub observacao: Option<String>,
@@ -92,6 +106,9 @@ impl Resultado {
             revisao: true,
             observacao: None,
             versao_validador: None,
+            jogadores: None,
+            zerado: None,
+            bombas: None,
             aceito_automatico: false,
             erro: Some(erro),
             relatorio: None,
@@ -138,7 +155,7 @@ impl Video {
             Estado::Baixando { sessao, .. } if *sessao != sessao_atual => {
                 Estado::Falhou { erro: "download interrompido: o Lab foi fechado".into() }
             }
-            Estado::NaFila { sessao } | Estado::Analisando { sessao, .. } if *sessao != sessao_atual => {
+            Estado::NaFila { sessao, .. } | Estado::Analisando { sessao, .. } if *sessao != sessao_atual => {
                 if self.resultado.is_some() { Estado::Concluido } else { Estado::Pronto }
             }
             _ => return false,
@@ -151,6 +168,21 @@ impl Video {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Dataset {
     pub videos: Vec<Video>,
+}
+
+impl Dataset {
+    /// Próximo vídeo da fila de análise (menor `ordem`) e o arquivo dele.
+    pub fn proximo_da_fila(&self) -> Option<(String, String)> {
+        self.videos
+            .iter()
+            .filter_map(|v| match v.estado {
+                Estado::NaFila { ordem, .. } => Some((ordem, v)),
+                _ => None,
+            })
+            .filter(|(_, v)| v.caminho.is_some())
+            .min_by_key(|(ordem, _)| *ordem)
+            .and_then(|(_, v)| Some((v.id.clone(), v.caminho.clone()?)))
+    }
 }
 
 /// Números do topo da tela.
@@ -246,6 +278,9 @@ mod tests {
             revisao: false,
             observacao: None,
             versao_validador: Some("1.0.0".into()),
+            jogadores: None,
+            zerado: None,
+            bombas: None,
             aceito_automatico: aceito,
             erro: None,
             relatorio: None,
@@ -266,6 +301,17 @@ mod tests {
             estado: if resultado.is_some() { Estado::Concluido } else { Estado::Pronto },
             resultado,
         }
+    }
+
+    #[test]
+    fn fila_roda_primeiro_a_menor_ordem() {
+        let na_fila = |id: &str, ordem: u64| Video { id: id.into(), estado: Estado::NaFila { sessao: 1, ordem }, ..video(Gabarito::default(), None) };
+        let mut dataset = Dataset { videos: vec![na_fila("c", 7), video(Gabarito::default(), None), na_fila("a", 3), na_fila("b", 5)] };
+        assert_eq!(dataset.proximo_da_fila(), Some(("a".into(), "x.mp4".into())));
+        dataset.videos[2].estado = Estado::Concluido;
+        assert_eq!(dataset.proximo_da_fila().map(|(id, _)| id).as_deref(), Some("b"));
+        dataset.videos.retain(|v| !matches!(v.estado, Estado::NaFila { .. }));
+        assert_eq!(dataset.proximo_da_fila(), None);
     }
 
     #[test]
@@ -312,7 +358,7 @@ mod tests {
         assert_eq!(analisando.estado, Estado::Concluido);
 
         let mut na_fila = video(Gabarito::default(), None);
-        na_fila.estado = Estado::NaFila { sessao: 2 };
+        na_fila.estado = Estado::NaFila { sessao: 2, ordem: 1 };
         assert!(!na_fila.recuperar_interrompido(2), "a execução atual não é tocada");
     }
 

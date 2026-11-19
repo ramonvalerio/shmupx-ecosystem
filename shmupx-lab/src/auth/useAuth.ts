@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, signInWithGoogle, signOutAdmin } from "./firebase";
+import { getLabAuth, signInWithGoogle, signOutAdmin } from "./firebase";
 
 export type AuthState =
   | { status: "loading" }
@@ -16,7 +16,7 @@ export function useAuth() {
 
   useEffect(
     () =>
-      onAuthStateChanged(auth, (user) =>
+      onAuthStateChanged(getLabAuth(), (user) =>
         setState(user ? { status: "signed-in", email: user.email ?? user.uid } : { status: "signed-out" }),
       ),
     [],

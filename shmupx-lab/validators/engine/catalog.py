@@ -5,12 +5,15 @@ analisador é escolhido por nome dentro de ANALYZERS.
 """
 import json
 import re
+import sys
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GAMES_DIR = ROOT / "games"
+# Compilado (shmupx-validator.exe), os scripts dos jogos não vão dentro do binário: são dados ao
+# lado dele (ou em --games-dir), para trocar de versão sem recompilar o motor.
+GAMES_DIR = Path(sys.executable).resolve().parent / "games" if getattr(sys, "frozen", False) else ROOT / "games"
 GAME_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 VERSION = re.compile(r"^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})$")
 # O script.json escolhe o analisador por nome, nunca por caminho de módulo.
@@ -36,8 +39,41 @@ class Script:
         module = import_module(ANALYZERS[self.analyzer])
         return module.create_analyzer(self.path, video_path, debug_dir=debug_dir, quiet=quiet)
 
+    def missing_resources(self):
+        """Arquivos que o config.json pede e não existem (sem abrir imagens; não exige OpenCV)."""
+        try:
+            cfg = json.loads((self.path / "config.json").read_text(encoding="utf-8"))
+        except OSError:
+            return ["config.json"]
+        except ValueError:
+            return ["config.json (JSON inválido)"]
+        templates = self.path / "templates"
+        needed = []
+        for variant in cfg.get("hud_variants", []):
+            needed.append(variant.get("label_template"))
+            needed.extend(variant.get("alt_label_templates", []))
+        needed.extend((cfg.get("results") or {}).get("label_templates", []))
+        needed.append((cfg.get("players") or {}).get("p2_label_template"))
+        needed.extend((cfg.get("clear_screen") or {}).get("label_templates", []))
+        ranking = cfg.get("ranking_screen") or {}
+        if ranking:
+            needed.append(ranking.get("label_template"))
+            needed.extend(f"{ranking.get('digit_templates')}/{d}.png" for d in range(10))
+        for key in ("lives", "bombs"):
+            icons = cfg.get(key) or {}
+            if icons.get("mode") == "icons":
+                needed.extend(icons.get("templates") or [icons.get("template")])
+        missing = [f"templates/{p}" for p in needed if p and not (templates / p).is_file()]
+        digits_name = cfg.get("digit_templates", "digits")
+        digits = templates / digits_name
+        sets = [d for d in digits.iterdir() if d.is_dir()] if digits.is_dir() else []
+        if not any(all((d / f"{n}.png").is_file() for n in range(10)) for d in sets):
+            missing.append(f"templates/{digits_name}/<conjunto>/0.png … 9.png")
+        return missing
+
     def to_json(self):
-        return {"id": self.game_id, "name": self.name, "version": self.version, "status": self.status}
+        return {"id": self.game_id, "name": self.name, "version": self.version, "status": self.status,
+                "missing": self.missing_resources()}
 
 
 def _load(game_dir, version_dir):

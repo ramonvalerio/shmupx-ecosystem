@@ -8,7 +8,7 @@ export type VideoOrigin = { tipo: "youtube"; url: string } | { tipo: "arquivo" }
 export type VideoState =
   | { fase: "baixando"; progresso: number; sessao: number }
   | { fase: "pronto" }
-  | { fase: "na_fila"; sessao: number }
+  | { fase: "na_fila"; sessao: number; ordem: number }
   | { fase: "analisando"; progresso: number; sessao: number }
   | { fase: "concluido" }
   | { fase: "falhou"; erro: string };
@@ -25,6 +25,12 @@ export interface ScriptResult {
   vidas: number | null;
   continues: number | null;
   game_over: boolean;
+  /** Jogadores na partida (2 = cooperativa); `null` em resultados antigos. */
+  jogadores: number | null;
+  /** A volta foi completada (jogo zerado); `null` em resultados antigos. */
+  zerado: boolean | null;
+  /** Bombas gastas, quando o script do jogo conta bombas. */
+  bombas: number | null;
   confianca: string;
   revisao: boolean;
   observacao: string | null;
@@ -77,6 +83,8 @@ export interface ScriptInfo {
   name: string;
   version: string;
   status: "draft" | "approved";
+  /** Imagens e arquivos que o script pede e ainda não existem; vazio = pronto para rodar. */
+  missing: string[];
 }
 
 function versionKey(version: string): number[] {
@@ -103,6 +111,8 @@ export interface ValidationEnvironment {
   python: EnvironmentItem;
   dependencias: EnvironmentItem;
   ytdlp: EnvironmentItem;
+  /** Deno, o runtime JavaScript que o yt-dlp usa para o YouTube. */
+  deno: EnvironmentItem;
   scripts: ScriptInfo[];
   /** Navegador de onde o yt-dlp lê os cookies do YouTube; `null` = sem cookies. */
   cookies_navegador: string | null;
@@ -182,6 +192,13 @@ export const downloadAgain = (gameId: string, videoId: string) => invoke<void>("
 
 /** Abre o link no navegador padrão do sistema. */
 export const openInBrowser = (url: string) => openUrl(url);
+
+/** Posição na fila de análise (1 = o próximo a rodar), ou `null` se o vídeo não está na fila. */
+export function queuePosition(videos: ValidationVideo[], video: ValidationVideo): number | null {
+  if (video.estado.fase !== "na_fila") return null;
+  const mine = video.estado.ordem;
+  return videos.filter((other) => other.estado.fase === "na_fila" && other.estado.ordem < mine).length + 1;
+}
 
 /** Há algo em andamento no vídeo (download, fila ou análise). */
 export function isBusy(video: ValidationVideo): boolean {

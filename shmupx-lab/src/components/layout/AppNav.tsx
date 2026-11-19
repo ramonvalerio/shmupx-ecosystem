@@ -1,11 +1,13 @@
 import type { ComponentType, SVGProps } from "react";
-import { IconCatalog, IconLogout, IconValidation } from "../ui/Icons";
+import { IconCatalog, IconLogout, IconRelease, IconValidation } from "../ui/Icons";
+import { getAmbiente } from "../../auth/firebase";
 
-export type LabView = "catalog" | "validation";
+export type LabView = "catalog" | "validation" | "releases";
 
 const VIEWS: { id: LabView; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
   { id: "catalog", label: "Catálogo", icon: IconCatalog },
   { id: "validation", label: "Validação", icon: IconValidation },
+  { id: "releases", label: "Versões", icon: IconRelease },
 ];
 
 interface AppNavProps {
@@ -13,10 +15,13 @@ interface AppNavProps {
   onChangeView: (view: LabView) => void;
   accountEmail: string;
   onSignOut: () => void;
+  /** Sai e volta à escolha do ambiente. Ausente quando `VITE_SHMUPX_ENV` fixa o ambiente. */
+  onSwitchEnvironment?: () => void;
 }
 
 /** Navegação principal do Lab: seções à esquerda, conta no rodapé. */
-export default function AppNav({ view, onChangeView, accountEmail, onSignOut }: AppNavProps) {
+export default function AppNav({ view, onChangeView, accountEmail, onSignOut, onSwitchEnvironment }: AppNavProps) {
+  const ambiente = getAmbiente();
   return (
     <nav aria-label="Seções do Lab" className="flex h-full w-56 flex-shrink-0 flex-col border-r border-white/5 bg-zinc-950">
       <div className="flex items-center gap-2.5 px-5 py-5">
@@ -24,10 +29,40 @@ export default function AppNav({ view, onChangeView, accountEmail, onSignOut }: 
           X
         </span>
         <div className="leading-tight">
-          <p className="text-sm font-semibold text-zinc-100">ShmupX Lab</p>
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-100">
+            ShmupX Lab
+            <span
+              className={`rounded px-1.5 py-px text-[9px] font-bold tracking-wider ring-1 ${
+                ambiente === "dev" ? "bg-amber-500/15 text-amber-200 ring-amber-400/40" : "bg-red-500/15 text-red-200 ring-red-400/40"
+              }`}
+            >
+              {ambiente === "dev" ? "DEV" : "PROD"}
+            </span>
+          </p>
           <p className="text-[11px] text-zinc-500">Backoffice</p>
         </div>
       </div>
+      {ambiente === "dev" ? (
+        <p className="mx-3 mb-3 rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-snug text-amber-200" title="Firestore e login nos emuladores do Docker (projeto demo-shmupx). Nada aqui chega aos jogadores.">
+          <strong className="block tracking-wider">DESENVOLVIMENTO</strong>
+          Emuladores locais · sem jogadores reais
+        </p>
+      ) : (
+        <p className="mx-3 mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] leading-snug text-red-200">
+          <strong className="block tracking-wider">PRODUÇÃO</strong>
+          Mudanças valem para os jogadores
+        </p>
+      )}
+
+      {onSwitchEnvironment && (
+        <button
+          type="button"
+          onClick={onSwitchEnvironment}
+          className="mx-3 mb-3 rounded-md px-3 py-1 text-left text-[11px] text-zinc-500 transition-colors hover:bg-white/[0.03] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-cyan-400/50 focus-visible:outline-none"
+        >
+          Trocar ambiente
+        </button>
+      )}
 
       <ul className="flex-1 space-y-0.5 px-3">
         {VIEWS.map(({ id, label, icon: Icon }) => {

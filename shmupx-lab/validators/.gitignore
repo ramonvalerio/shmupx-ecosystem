@@ -8,3 +8,7 @@ games/*/*/templates/raw_digits/
 .env
 .env.*
 !.env.example
+.venv-build/
+build/
+dist/
+*.spec

@@ -49,7 +49,7 @@ export function PrimaryAction({ video, canRun, onRun, onCancel, onDownloadAgain,
   };
   if (isBusy(video)) {
     return (
-      <Button size={size} variant="ghost" onClick={stop(onCancel)} className="text-red-300 hover:bg-red-500/10 hover:text-red-200">
+      <Button size={size} variant="info" onClick={stop(onCancel)}>
         Cancelar
       </Button>
     );
