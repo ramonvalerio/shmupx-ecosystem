@@ -12,6 +12,9 @@ service cloud.firestore {
     // wallets/{uid}: server-owned balance; wallets/{uid}/entries/{id}: ledger.
     // seasons/{id}/gameRankings/{gameId}/entries/{uid}: server-published rankings.
     // seasons/{id}/globalRankings/{uid}: server-published global ranking.
+    // rooms/{gameId}/messages/{id}: game-room chat. Signed-in players read and post in
+    //   published games' rooms; authorId/authorName must match the caller's own profile,
+    //   createdAt is the server time, messages are immutable (no edit/delete by clients).
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
@@ -24,6 +27,19 @@ service cloud.firestore {
         && data.displayName.size() >= 1 && data.displayName.size() <= 32
         && data.locale in ['pt-BR', 'en']
         && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    function publishedGame(id) {
+      return get(/databases/$(database)/documents/games/$(id)).data.published == true;
+    }
+    function validMessage(data) {
+      return data.keys().hasAll(['authorId', 'authorName', 'text', 'createdAt'])
+        && data.keys().hasOnly(['authorId', 'authorName', 'text', 'createdAt'])
+        && data.authorId == request.auth.uid
+        && data.authorName is string
+        && data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && data.text is string
+        && data.text.size() >= 1 && data.text.size() <= 500
+        && data.createdAt == request.time;
     }
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;
@@ -62,6 +78,11 @@ service cloud.firestore {
         allow read: if signedIn() && publishedSeason(seasonId);
         allow write: if false;
       }
+    }
+    match /rooms/{gameId}/messages/{messageId} {
+      allow read: if signedIn() && publishedGame(gameId);
+      allow create: if signedIn() && publishedGame(gameId) && validMessage(request.resource.data);
+      allow update, delete: if false;
     }
     match /gameplays/{runId} {
       allow read: if signedIn() && resource.data.ownerId == request.auth.uid;

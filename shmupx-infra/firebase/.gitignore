@@ -2,6 +2,8 @@ node_modules/
 *-debug.log
 *.local.md
 .firebase/
+# Dados do emulador de desenvolvimento (docker-compose): locais, nunca no Git.
+emulator-data/
 .env
 .env.*
 !.env.example

@@ -2,6 +2,27 @@
 
 Projeto: `shmupx-project-id`. Banco: `(default)`, edição **Standard**, plano **Spark**. Banco recriado em 2026-10-27 na região `us-central1`, edição Standard (metadados confirmados pela CLI); a região `southamerica-east1` anterior foi descartada por custo e o Cloud Run do backend fica na mesma região. Após a recriação, regras e índices precisam ser republicados. Autenticação da ferramenta concluída. Nove testes de regras passaram no emulador Standard. Regras e índices publicados em 2026-10-26 após autorização explícita do usuário. A CLI confirmou a compilação e liberação das regras; uma consulta posterior confirmou os cinco índices compostos e as três exclusões de indexação. Nenhum documento de usuário ou gameplay foi criado nesta publicação.
 
+## Ambientes
+
+| Ambiente | Banco e login | Quem usa |
+| --- | --- | --- |
+| **Produção** | projeto `shmupx-project-id`, banco `(default)` | backend no Cloud Run, builds de distribuição do Lab e do Client |
+| **Desenvolvimento** | emuladores do Firestore e do Authentication em Docker, projeto `demo-shmupx` | `start-dev.ps1` (padrão), `npm run dev` / `tauri dev` do Lab e do Client |
+
+Projetos `demo-*` nunca alcançam recursos reais. O backend só aceita os tokens sem assinatura do emulador com projeto `demo-*`, Firestore também no emulador e fora do Cloud Run; senão, recusa subir. O Lab e o Client escolhem o ambiente pelo modo (dev em `npm run dev`, prd nos builds) ou por `VITE_SHMUPX_ENV=dev|prd`, e mostram a faixa **DESENVOLVIMENTO** ou **PRODUÇÃO**.
+
+```powershell
+# sobe os emuladores (dados persistem em emulator-data/, fora do Git) e o backend de dev
+..\..\shmupx-backend\scripts\start-dev.ps1
+# só os emuladores
+docker compose up -d        # interface: http://127.0.0.1:4000
+docker compose down         # para e grava os dados
+# backend local contra PRODUÇÃO (dados e avisos reais), só quando necessário
+..\..\shmupx-backend\scripts\start-dev.ps1 -Ambiente prd
+```
+
+O login Google funciona no emulador: o usuário é criado só nele. Os testes automatizados usam o emulador temporário do `npx ... emulators:exec` (abaixo), não o do Docker, para não misturar dados de teste com os de desenvolvimento.
+
 ## Responsabilidades
 
 - Firebase Authentication guarda identidades e credenciais; seu UID identifica os documentos de jogador. Não guardar senhas no Firestore.

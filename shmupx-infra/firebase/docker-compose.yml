@@ -1,0 +1,24 @@
+# Ambiente de desenvolvimento: emuladores do Firebase em Docker.
+#   docker compose up -d      (sobe; os dados ficam em ./emulator-data, fora do Git)
+#   docker compose down       (para e grava os dados)
+# Interface do emulador: http://127.0.0.1:4000  ·  Firestore: 127.0.0.1:8088  ·  Auth: 127.0.0.1:9099
+services:
+  firebase-emulators:
+    build: ./docker
+    container_name: shmupx-firebase-emulators
+    ports:
+      # Só na máquina local: o ambiente de dev não fica exposto na rede.
+      - "127.0.0.1:4000:4000"
+      - "127.0.0.1:4400:4400"
+      - "127.0.0.1:4500:4500"
+      - "127.0.0.1:8088:8088"
+      - "127.0.0.1:9099:9099"
+    volumes:
+      - ./firebase.docker.json:/firebase/firebase.docker.json:ro
+      - ./firestore.rules:/firebase/firestore.rules:ro
+      - ./firestore.indexes.json:/firebase/firestore.indexes.json:ro
+      - ./emulator-data:/data
+    # O Firebase CLI só exporta os dados ao receber SIGINT (Ctrl+C), não SIGTERM.
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    restart: unless-stopped

@@ -116,3 +116,23 @@ test("internal jobs, unknown paths and nested private documents default to denie
   await assertFails(setDoc(doc(store, "users/alice/roles/admin"), { enabled: true }));
   await assertFails(setDoc(doc(store, "publicProfiles/alice"), { displayName: "Forged" }));
 });
+
+test("room chat: players read and post in published rooms only, as themselves", async () => {
+  const message = (extra = {}) => ({ authorId: "alice", authorName: "Alice", text: "bora rank?",
+    createdAt: serverTimestamp(), ...extra });
+  const alice = db("alice");
+  const recent = (store, room) => query(collection(store, `rooms/${room}/messages`), orderBy("createdAt", "desc"), limit(50));
+  await assertFails(getDocs(recent(db(), "earthion")));
+  await assertSucceeds(getDocs(recent(alice, "earthion")));
+  await assertFails(getDocs(recent(alice, "draft")));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/messages/m1"), message()));
+  await assertFails(setDoc(doc(alice, "rooms/draft/messages/m2"), message()));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m3"), message({ authorId: "bob" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m4"), message({ authorName: "Admin" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m5"), message({ text: "" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m6"), message({ text: "x".repeat(501) })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m7"), message({ createdAt: now })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m8"), message({ pinned: true })));
+  await assertFails(updateDoc(doc(alice, "rooms/earthion/messages/m1"), { text: "editado" }));
+  await assertFails(setDoc(doc(db("bob"), "rooms/earthion/messages/m9"), message({ authorId: "bob", authorName: "Bob" })));
+});
