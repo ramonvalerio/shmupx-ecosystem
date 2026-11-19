@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use axum::extract::Path;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Extension, Json, Router};
 use serde::Deserialize;
@@ -37,6 +38,31 @@ where
         .layer(Extension(firestore))
 }
 
+/// Rota pública do updater do Tauri: o Client consulta antes de existir login. Só expõe o que já
+/// foi liberado (versão, notas, URL pública do instalador e assinatura).
+pub fn router_publico<S>(firestore: Arc<Firestore>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new().route("/api/client/update/{target}/{arch}/{current}", get(atualizacao)).layer(Extension(firestore))
+}
+
+/// `GET /api/client/update/{target}/{arch}/{current}`: 200 com a versão a instalar ou 204 quando
+/// o Client está em dia. Por ora só há instalador de Windows.
+async fn atualizacao(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Path((target, _arch, atual)): Path<(String, String, String)>,
+) -> Result<Response, AppError> {
+    if target != "windows" {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+    let lista = versoes::listar(&firestore).await?;
+    Ok(match versoes::atualizacao(&lista, &atual) {
+        Some(atualizacao) => Json(atualizacao).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
+}
+
 /// `GET /api/notifications`: avisos com o contador de não lidos. Registra o jogador (e-mail e
 /// versão do Client) para os avisos por e-mail.
 async fn listar(
@@ -45,7 +71,7 @@ async fn listar(
     headers: HeaderMap,
 ) -> Result<Json<ListaNotificacoes>, AppError> {
     let jogador = notificacoes::registrar_jogador(&firestore, &usuario, versao_do_client(&headers).as_deref()).await?;
-    Ok(Json(notificacoes::listar(&firestore, &jogador).await?))
+    Ok(Json(notificacoes::listar(&firestore, &usuario.uid, &jogador).await?))
 }
 
 /// `GET /api/notifications/{id}`: conteúdo completo; abrir marca como lida.
@@ -55,7 +81,7 @@ async fn detalhe(
     Path(id): Path<String>,
 ) -> Result<Json<Notificacao>, AppError> {
     let jogador = firestore.ler_documento(&format!("players/{}", usuario.uid)).await?.unwrap_or_default();
-    let mut notificacao = notificacoes::obter(&firestore, &jogador, &id).await?;
+    let mut notificacao = notificacoes::obter(&firestore, &usuario.uid, &jogador, &id).await?;
     if !notificacao.resumo.read {
         notificacoes::marcar_lidas(&firestore, &usuario.uid, std::slice::from_ref(&id)).await?;
         notificacao.resumo.read = true;
@@ -78,7 +104,7 @@ async fn marcar_todas(
     Extension(usuario): Extension<FirebaseUser>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let jogador = firestore.ler_documento(&format!("players/{}", usuario.uid)).await?.unwrap_or_default();
-    let ids: Vec<String> = notificacoes::listar(&firestore, &jogador).await?.items.into_iter().map(|n| n.id).collect();
+    let ids: Vec<String> = notificacoes::listar(&firestore, &usuario.uid, &jogador).await?.items.into_iter().map(|n| n.id).collect();
     notificacoes::marcar_lidas(&firestore, &usuario.uid, &ids).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

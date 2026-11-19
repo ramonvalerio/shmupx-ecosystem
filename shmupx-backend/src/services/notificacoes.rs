@@ -6,6 +6,9 @@
 //!   (`emailUpdates`, ligada por padrão, desligável pelo jogador), versão do Client e as
 //!   notificações já lidas (`readNotifications`). Criado/atualizado quando o Client consulta as
 //!   notificações; é a lista de destinatários dos e-mails.
+//! - `players/{uid}/inbox/{id}`: avisos só daquele jogador. Todo e-mail enviado a um jogador
+//!   específico (ex.: token do MiSTer) grava aqui o aviso correspondente, para aparecer também no
+//!   sininho. Os e-mails de versão já têm o aviso geral em `notifications/release-*`.
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -88,12 +91,13 @@ fn resumo_de(id: String, campos: &Campos, lidas: &[String]) -> NotificacaoResumo
     }
 }
 
-/// Avisos visíveis, do mais novo para o mais antigo, com o contador de não lidos do jogador.
-pub async fn listar(fs: &Firestore, jogador: &Campos) -> Result<ListaNotificacoes, AppError> {
+/// Avisos visíveis (gerais e os do próprio jogador), do mais novo para o mais antigo, com o
+/// contador de não lidos.
+pub async fn listar(fs: &Firestore, uid: &str, jogador: &Campos) -> Result<ListaNotificacoes, AppError> {
     let lidas = ler_lista_de_textos(jogador, "readNotifications");
-    let mut items: Vec<NotificacaoResumo> = fs
-        .listar("notifications")
-        .await?
+    let mut documentos = fs.listar("notifications").await?;
+    documentos.extend(fs.listar(&caixa_do_jogador(uid)).await?);
+    let mut items: Vec<NotificacaoResumo> = documentos
         .into_iter()
         .filter(|(_, campos)| !ler_booleano(campos, "hidden").unwrap_or(false))
         .map(|(id, campos)| resumo_de(id, &campos, &lidas))
@@ -103,16 +107,36 @@ pub async fn listar(fs: &Firestore, jogador: &Campos) -> Result<ListaNotificacoe
     Ok(ListaNotificacoes { unread: items.iter().filter(|n| !n.read).count(), items })
 }
 
+fn caixa_do_jogador(uid: &str) -> String {
+    format!("players/{uid}/inbox")
+}
+
+/// Grava um aviso só para o jogador `uid` (sininho) e devolve o id. Use junto de todo e-mail
+/// mandado a um jogador: o que chega por e-mail também aparece no Client.
+pub async fn notificar_jogador(fs: &Firestore, uid: &str, kind: &str, titulo: &str, resumo: &str) -> Result<String, AppError> {
+    let id = format!("u-{}", uuid::Uuid::new_v4().simple());
+    let mut campos = Campos::new();
+    campos.insert("kind".into(), texto(kind));
+    campos.insert("title".into(), texto(titulo));
+    campos.insert("summary".into(), texto(resumo));
+    campos.insert("createdAt".into(), data(Utc::now()));
+    campos.insert("hidden".into(), booleano(false));
+    fs.gravar(&format!("{}/{id}", caixa_do_jogador(uid)), campos, &["kind", "title", "summary", "createdAt", "hidden"]).await?;
+    Ok(id)
+}
+
 fn id_seguro(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-pub async fn obter(fs: &Firestore, jogador: &Campos, id: &str) -> Result<Notificacao, AppError> {
+pub async fn obter(fs: &Firestore, uid: &str, jogador: &Campos, id: &str) -> Result<Notificacao, AppError> {
     if !id_seguro(id) {
         return Err(AppError::bad_request("id de notificação inválido"));
     }
+    // Avisos do jogador têm o prefixo `u-`; os gerais, não.
+    let caminho = if id.starts_with("u-") { format!("{}/{id}", caixa_do_jogador(uid)) } else { format!("notifications/{id}") };
     let campos = fs
-        .ler_documento(&format!("notifications/{id}"))
+        .ler_documento(&caminho)
         .await?
         .filter(|c| !ler_booleano(c, "hidden").unwrap_or(false))
         .ok_or_else(|| AppError::not_found("notificação não encontrada"))?;
@@ -235,6 +259,7 @@ mod tests {
     #[test]
     fn ids_de_notificacao_nao_viram_caminhos() {
         assert!(id_seguro("release-0.2.0"));
+        assert!(id_seguro(&format!("u-{}", uuid::Uuid::new_v4().simple())));
         assert!(!id_seguro("../players/x"));
         assert!(!id_seguro(""));
     }
@@ -257,20 +282,31 @@ mod tests {
         let rascunho = versoes::salvar_rascunho(&fs, &versao, entrada).await.unwrap();
         assert_eq!(rascunho.status, "draft");
 
-        let agendada = versoes::agendar(&fs, &versao, Antecedencia::Urgente).await.unwrap();
+        let agendada = versoes::agendar_com(&fs, &versao, Antecedencia::Urgente, Default::default()).await.unwrap();
         assert_eq!(agendada.status, "released", "urgente libera na hora");
         let id = publicar_versao(&fs, &agendada).await.unwrap();
 
         let jogador = registrar_jogador(&fs, &usuario, Some("0.1.0")).await.unwrap();
         assert_eq!(ler_booleano(&jogador, "emailUpdates"), Some(true));
-        let lista = listar(&fs, &jogador).await.unwrap();
+        let lista = listar(&fs, &usuario.uid, &jogador).await.unwrap();
         assert!(lista.items.iter().any(|n| n.id == id && !n.read));
         assert!(destinatarios(&fs).await.unwrap().contains(&"jogador@example.com".to_string()));
 
         marcar_lidas(&fs, &usuario.uid, std::slice::from_ref(&id)).await.unwrap();
         let jogador = registrar_jogador(&fs, &usuario, Some("0.1.0")).await.unwrap();
-        assert!(listar(&fs, &jogador).await.unwrap().items.iter().any(|n| n.id == id && n.read));
-        assert_eq!(obter(&fs, &jogador, &id).await.unwrap().fixes, vec!["Correção"]);
+        assert!(listar(&fs, &usuario.uid, &jogador).await.unwrap().items.iter().any(|n| n.id == id && n.read));
+        assert_eq!(obter(&fs, &usuario.uid, &jogador, &id).await.unwrap().fixes, vec!["Correção"]);
+
+        // Aviso só deste jogador (o que acompanha um e-mail individual): aparece no sininho dele,
+        // abre pelo id e marca como lido como os gerais.
+        let pessoal = notificar_jogador(&fs, &usuario.uid, "mister", "Token do MiSTer", "Enviado por e-mail.").await.unwrap();
+        let lista = listar(&fs, &usuario.uid, &jogador).await.unwrap();
+        assert!(lista.items.iter().any(|n| n.id == pessoal && !n.read && n.kind == "mister"));
+        assert_eq!(obter(&fs, &usuario.uid, &jogador, &pessoal).await.unwrap().resumo.title, "Token do MiSTer");
+        assert!(obter(&fs, "outro-uid", &jogador, &pessoal).await.is_err(), "aviso de outro jogador não abre");
+        marcar_lidas(&fs, &usuario.uid, std::slice::from_ref(&pessoal)).await.unwrap();
+        let jogador = registrar_jogador(&fs, &usuario, Some("0.1.0")).await.unwrap();
+        assert!(listar(&fs, &usuario.uid, &jogador).await.unwrap().items.iter().any(|n| n.id == pessoal && n.read));
 
         // Obrigatória liberada: Client antigo não abre run; o atualizado abre.
         assert!(versoes::exigir_versao_em_dia(&fs, Some("0.1.0")).await.is_err());
@@ -286,7 +322,7 @@ mod tests {
         let futura = format!("{}.0.0", maior.0 + 2);
         let entrada = VersaoEntrada { title: "Futura".into(), features: vec!["x".into()], ..Default::default() };
         versoes::salvar_rascunho(&fs, &futura, entrada).await.unwrap();
-        assert_eq!(versoes::agendar(&fs, &futura, Antecedencia::Dias7).await.unwrap().status, "scheduled");
+        assert_eq!(versoes::agendar_com(&fs, &futura, Antecedencia::Dias7, Default::default()).await.unwrap().status, "scheduled");
         assert!(versoes::cancelar(&fs, &versao).await.is_err(), "já liberada");
         assert_eq!(versoes::cancelar(&fs, &futura).await.unwrap().status, "cancelled");
     }

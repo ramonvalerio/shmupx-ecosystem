@@ -99,6 +99,8 @@ async fn servidor() {
         .merge(routes::admin::router(firestore.clone(), email.clone()))
         .merge(routes::mister::router(firestore.clone(), email))
         .merge(routes::notificacoes::router(firestore.clone()))
+        .merge(routes::notificacoes::router_publico(firestore.clone()))
+        .merge(routes::ranking_publico::router(firestore.clone()))
         .merge(routes::runs::router(firestore));
 
     // Legado: catálogo e ranking do portal ainda leem o PostgreSQL/Supabase. Só são montados

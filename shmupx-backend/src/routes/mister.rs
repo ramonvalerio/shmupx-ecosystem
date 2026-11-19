@@ -9,7 +9,7 @@ use crate::error::AppError;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
 use crate::services::email::Ses;
-use crate::services::mister;
+use crate::services::{mister, notificacoes};
 
 /// `POST /api/mister/tokens`: só com login do Firebase (não com outro token do MiSTer).
 pub fn router<S>(firestore: Arc<Firestore>, email: Option<Arc<Ses>>) -> Router<S>
@@ -46,5 +46,12 @@ async fn enviar_token(
         eprintln!("falha ao enviar o token do MiSTer: {erro}");
         return Err(AppError::unavailable("não foi possível enviar o e-mail agora; tente de novo"));
     }
-    Ok(Json(json!({ "enviado_para": mister::mascarar_email(&destino) })))
+    // Todo e-mail ao jogador também vira aviso no sininho do Client (sem o token, só no e-mail).
+    let mascarado = mister::mascarar_email(&destino);
+    let resumo = format!("Enviamos um token novo do MiSTer para {mascarado}. Se não foi você, ignore o e-mail.");
+    if let Err(erro) = notificacoes::notificar_jogador(&firestore, &usuario.uid, "mister", "Token do MiSTer enviado", &resumo).await {
+        // O e-mail já saiu: falhar aqui só tira o aviso do sininho.
+        eprintln!("falha ao registrar o aviso do token do MiSTer no sininho: {erro:?}");
+    }
+    Ok(Json(json!({ "enviado_para": mascarado })))
 }

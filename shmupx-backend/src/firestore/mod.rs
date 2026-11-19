@@ -212,6 +212,55 @@ impl Firestore {
         Ok(itens)
     }
 
+    /// Consulta (`:runQuery`) fora de transação, com uma `structuredQuery` da API REST. Devolve os
+    /// documentos encontrados como `(id, campos)`; o teto de documentos vem na própria consulta.
+    pub async fn consultar(&self, consulta: Value) -> Result<Vec<(String, Campos)>, AppError> {
+        #[derive(Deserialize)]
+        struct Documento {
+            name: String,
+            #[serde(default)]
+            fields: Campos,
+        }
+        #[derive(Deserialize)]
+        struct Item {
+            document: Option<Documento>,
+        }
+        let itens: Vec<Item> =
+            self.post(&format!("{}:runQuery", self.raiz), &json!({ "structuredQuery": consulta })).await?;
+        Ok(itens
+            .into_iter()
+            .filter_map(|item| item.document)
+            .map(|d| (d.name.rsplit('/').next().unwrap_or_default().to_string(), d.fields))
+            .collect())
+    }
+
+    /// Lê vários documentos de uma vez (`:batchGet`), fora de transação. Devolve só os que
+    /// existem, indexados pelo caminho relativo (`colecao/id`).
+    pub async fn ler_varios(&self, caminhos: &[String]) -> Result<std::collections::HashMap<String, Campos>, AppError> {
+        #[derive(Deserialize)]
+        struct Documento {
+            name: String,
+            #[serde(default)]
+            fields: Campos,
+        }
+        #[derive(Deserialize)]
+        struct Item {
+            found: Option<Documento>,
+        }
+        let mut lidos = std::collections::HashMap::new();
+        let prefixo = format!("{}/", self.raiz);
+        // O batchGet aceita lotes grandes, mas lotes menores mantêm cada resposta pequena.
+        for lote in caminhos.chunks(100) {
+            let nomes: Vec<String> = lote.iter().map(|c| self.nome(c)).collect();
+            let itens: Vec<Item> = self.post(&format!("{}:batchGet", self.raiz), &json!({ "documents": nomes })).await?;
+            for documento in itens.into_iter().filter_map(|item| item.found) {
+                let caminho = documento.name.strip_prefix(&prefixo).unwrap_or(&documento.name).to_string();
+                lidos.insert(caminho, documento.fields);
+            }
+        }
+        Ok(lidos)
+    }
+
     /// Libera a transação quando a operação desiste antes do commit. Falha aqui é inofensiva:
     /// a transação expira sozinha no servidor.
     pub async fn desfazer(&self, transacao: &str) {

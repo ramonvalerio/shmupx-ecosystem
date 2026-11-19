@@ -6,5 +6,6 @@ pub mod email;
 pub mod gameplays;
 pub mod mister;
 pub mod notificacoes;
+pub mod placar;
 pub mod ranking;
 pub mod versoes;

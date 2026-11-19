@@ -14,6 +14,7 @@ use crate::firestore::valor::{
 };
 use crate::firestore::{Campos, Firestore};
 use crate::services::gameplays::id_valido;
+use crate::services::versoes::Mudanca;
 
 const DURACAO_PADRAO_SEGUNDOS: i64 = 3600;
 const DURACAO_MAXIMA_SEGUNDOS: i64 = 7200;
@@ -186,6 +187,63 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
     })
 }
 
+/// Jogo do catálogo, publicado ou não; `None` se ainda não existe.
+pub async fn obter(fs: &Firestore, id: &str) -> Result<Option<Jogo>, AppError> {
+    if !id_valido(id) {
+        return Ok(None);
+    }
+    Ok(fs.ler_documento(&format!("games/{id}")).await?.map(|campos| jogo_de(id.to_string(), &campos)))
+}
+
+const NOMES_MODOS: [(&str, &str); 3] = [("highscore", "pontuação"), ("1cc", "1 crédito"), ("caravan", "caravana")];
+
+fn nomes_dos_modos(modos: &[String]) -> String {
+    let nomes: Vec<&str> =
+        modos.iter().map(|m| NOMES_MODOS.iter().find(|(id, _)| id == m).map_or(m.as_str(), |(_, nome)| nome)).collect();
+    if nomes.is_empty() { "nenhum".into() } else { nomes.join(", ") }
+}
+
+type DadosDoJogo<'a> = (&'a str, i64, Option<&'a str>, Option<&'a str>, Option<&'a str>, Option<i64>, Option<&'a str>);
+
+/// Informações exibidas do jogo, fora regras (duração e modos).
+fn dados_do_jogo(j: &Jogo) -> DadosDoJogo<'_> {
+    (&j.title, j.steam_app_id, j.developer.as_deref(), j.publisher.as_deref(), j.genre.as_deref(), j.year, j.platform.as_deref())
+}
+
+/// O que uma gravação do jogo muda para os jogadores, em itens para o rascunho da próxima
+/// versão. Jogo que não está (nem estava) publicado não aparece para ninguém: não gera nada.
+/// Cada item tem chave estável por jogo e assunto, então gravar de novo só atualiza o texto.
+pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
+    let estava = antes.is_some_and(|a| a.published);
+    let item = |assunto: &str, section: &str, text: Option<String>| Mudanca {
+        key: format!("game:{}:{assunto}", depois.id),
+        section: section.into(),
+        text,
+    };
+    match (estava, depois.published) {
+        (false, false) => vec![],
+        (false, true) => vec![item("sala", "features", Some(format!("Nova sala: {}", depois.title)))],
+        // Mudanças de catálogo valem na hora, então a retirada também é notícia. Mesma chave da
+        // publicação: publicar e retirar antes da versão sair deixa só a linha final.
+        (true, false) => vec![item("sala", "fixes", Some(format!("{} saiu do catálogo", depois.title)))],
+        (true, true) => {
+            let antes = antes.expect("estava publicado");
+            let mut mudancas = Vec::new();
+            if antes.max_duration_segundos != depois.max_duration_segundos {
+                let minutos = (depois.max_duration_segundos + 59) / 60;
+                mudancas.push(item("duracao", "rules", Some(format!("{}: duração máxima da run agora é de {minutos} min", depois.title))));
+            }
+            if antes.modes != depois.modes {
+                mudancas.push(item("modos", "rules", Some(format!("{}: modos competitivos agora são {}", depois.title, nomes_dos_modos(&depois.modes)))));
+            }
+            if dados_do_jogo(antes) != dados_do_jogo(depois) {
+                mudancas.push(item("dados", "fixes", Some(format!("{}: informações do jogo atualizadas", depois.title))));
+            }
+            mudancas
+        }
+    }
+}
+
 /// Todos os jogos, publicados ou não (visão do admin), ordenados por id.
 pub async fn listar(fs: &Firestore) -> Result<Vec<Jogo>, AppError> {
     let mut jogos: Vec<Jogo> = fs
@@ -287,6 +345,37 @@ mod tests {
         let corpo = r#"{"title":"A","steam_app_id":1,"max_duration_segundos":60,"published":true}"#;
         let entrada: JogoEntrada = serde_json::from_str(corpo).unwrap();
         assert!(entrada.modes.is_empty() && entrada.developer.is_none());
+    }
+
+    fn jogo(published: bool) -> Jogo {
+        Jogo { id: "earthion".into(), title: "Earthion".into(), max_duration_segundos: 1800, published, ..Default::default() }
+    }
+
+    #[test]
+    fn mudancas_do_jogo_para_o_rascunho() {
+        // Rascunho de jogo nunca publicado: invisível aos jogadores.
+        assert!(mudancas_do_jogo(None, &jogo(false)).is_empty());
+
+        let nova = mudancas_do_jogo(None, &jogo(true));
+        assert_eq!(nova.len(), 1);
+        assert_eq!((nova[0].key.as_str(), nova[0].section.as_str()), ("game:earthion:sala", "features"));
+        assert_eq!(nova[0].text.as_deref(), Some("Nova sala: Earthion"));
+
+        let saiu = mudancas_do_jogo(Some(&jogo(true)), &jogo(false));
+        assert_eq!(saiu[0].key, "game:earthion:sala", "mesma chave da publicação");
+
+        // Sem diferença visível: nada.
+        assert!(mudancas_do_jogo(Some(&jogo(true)), &jogo(true)).is_empty());
+
+        let regras = Jogo { max_duration_segundos: 3600, modes: vec!["1cc".into()], ..jogo(true) };
+        let itens = mudancas_do_jogo(Some(&jogo(true)), &regras);
+        let chaves: Vec<&str> = itens.iter().map(|m| m.key.as_str()).collect();
+        assert_eq!(chaves, vec!["game:earthion:duracao", "game:earthion:modos"]);
+        assert!(itens.iter().all(|m| m.section == "rules"));
+        assert_eq!(itens[1].text.as_deref(), Some("Earthion: modos competitivos agora são 1 crédito"));
+
+        let dados = Jogo { developer: Some("Yuzo Koshiro".into()), ..jogo(true) };
+        assert_eq!(mudancas_do_jogo(Some(&jogo(true)), &dados)[0].section, "fixes");
     }
 
     #[test]

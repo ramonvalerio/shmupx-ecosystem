@@ -8,5 +8,6 @@ pub mod jogos;
 pub mod me;
 pub mod mister;
 pub mod notificacoes;
+pub mod ranking_publico;
 pub mod rankings;
 pub mod runs;
