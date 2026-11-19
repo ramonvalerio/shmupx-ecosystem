@@ -9,6 +9,10 @@ export interface GameRoom {
 export interface ChatMessage {
   id: string;
   author: string;
+  /** uid de quem enviou (Firebase); ausente em mensagens de sistema. */
+  authorId?: string;
   text: string;
   timestamp: string;
+  /** Ainda não confirmada pelo servidor. */
+  pending?: boolean;
 }

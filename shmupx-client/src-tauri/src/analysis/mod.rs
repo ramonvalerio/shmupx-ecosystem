@@ -4,8 +4,8 @@
 pub mod crop;
 pub mod frames;
 pub mod model;
+pub mod offline;
 pub mod pipeline;
 pub mod profile;
-pub mod offline;
 
-pub use offline::{analisar_run, AnalysisResult};
+pub use offline::{AnalysisResult, analisar_run};

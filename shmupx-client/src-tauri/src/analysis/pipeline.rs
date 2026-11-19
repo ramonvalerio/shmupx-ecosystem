@@ -51,7 +51,12 @@ pub async fn analisar_run(
     let mut melhor_confianca = -1.0_f64;
 
     for frame_path in &frames_extraidos {
-        let candidato = analisar_frame(frame_path, &regiao_score, regiao_vidas.as_ref(), regiao_continues.as_ref())?;
+        let candidato = analisar_frame(
+            frame_path,
+            &regiao_score,
+            regiao_vidas.as_ref(),
+            regiao_continues.as_ref(),
+        )?;
 
         if candidato.confidence > melhor_confianca {
             melhor_confianca = candidato.confidence;
@@ -85,9 +90,7 @@ fn analisar_frame(
         None => (0, 0.0),
     };
 
-    let regioes_medidas = 1
-        + regiao_vidas.is_some() as usize
-        + regiao_continues.is_some() as usize;
+    let regioes_medidas = 1 + regiao_vidas.is_some() as usize + regiao_continues.is_some() as usize;
     let confianca_total = confianca_score + confianca_vidas + confianca_continues;
     let confianca_media = confianca_total / regioes_medidas as f64;
 
@@ -134,7 +137,10 @@ fn ler_primeiro_digito(frame_path: &Path, regiao: &Region) -> Result<(u8, f64), 
 
 fn inferir_regiao(frame_path: &Path, regiao: &Region) -> Result<Vec<f32>, String> {
     let imagem = crop::recortar_regiao(frame_path, regiao)?;
-    let entrada: Vec<f32> = imagem.pixels().map(|pixel| pixel.0[0] as f32 / 255.0).collect();
+    let entrada: Vec<f32> = imagem
+        .pixels()
+        .map(|pixel| pixel.0[0] as f32 / 255.0)
+        .collect();
     model::inferir_digitos(&entrada)
 }
 
@@ -165,7 +171,10 @@ mod tests {
         let logits = [0.1, 0.2, 5.0, 0.3, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0];
         let (classe, probabilidade) = softmax_argmax(&logits);
         assert_eq!(classe, 2);
-        assert!(probabilidade > 0.9, "classe dominante deveria ter alta confiança, teve {probabilidade}");
+        assert!(
+            probabilidade > 0.9,
+            "classe dominante deveria ter alta confiança, teve {probabilidade}"
+        );
     }
 
     #[test]

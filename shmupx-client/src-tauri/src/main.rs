@@ -2,6 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  shmupx_client_lib::run();
+    shmupx_client_lib::run();
 }
-

@@ -78,7 +78,12 @@ async fn aguardar_codigo(listener: &TcpListener, state: &str) -> Result<String, 
         let pares: Vec<(String, String)> = url::form_urlencoded::parse(query.as_bytes())
             .into_owned()
             .collect();
-        let valor = |chave: &str| pares.iter().find(|(k, _)| k == chave).map(|(_, v)| v.clone());
+        let valor = |chave: &str| {
+            pares
+                .iter()
+                .find(|(k, _)| k == chave)
+                .map(|(_, v)| v.clone())
+        };
 
         if valor("state").as_deref() != Some(state) {
             responder(&mut stream, "400 Bad Request", PAGINA_ERRO).await;
@@ -109,7 +114,12 @@ async fn ler_query(stream: &mut TcpStream) -> Option<String> {
         .ok()?
         .ok()?;
     let texto = String::from_utf8_lossy(&buffer[..lidos]);
-    let alvo = texto.lines().next()?.strip_prefix("GET ")?.split(' ').next()?;
+    let alvo = texto
+        .lines()
+        .next()?
+        .strip_prefix("GET ")?
+        .split(' ')
+        .next()?;
     alvo.strip_prefix("/?").map(str::to_string)
 }
 
@@ -124,7 +134,8 @@ async fn responder(stream: &mut TcpStream, status: &str, corpo: &str) {
 
 fn aleatorio_base64(bytes: usize) -> Result<String, String> {
     let mut buffer = vec![0u8; bytes];
-    getrandom::getrandom(&mut buffer).map_err(|e| format!("falha ao gerar valor aleatório: {e}"))?;
+    getrandom::getrandom(&mut buffer)
+        .map_err(|e| format!("falha ao gerar valor aleatório: {e}"))?;
     Ok(URL_SAFE_NO_PAD.encode(buffer))
 }
 

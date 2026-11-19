@@ -3,12 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { isTauri, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ClientShell from "./components/ClientShell";
-import RoomView from "./components/RoomView";
+import RoomView, { type RoomViewProps } from "./components/RoomView";
 import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
-import { MOCK_MESSAGES } from "./data/mockRooms";
+import { useRoomChat } from "./data/useRoomChat";
 import { useCatalog } from "./data/useCatalog";
-import type { ChatMessage } from "./types/room";
 import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
 
@@ -26,7 +25,6 @@ interface RunExpiredPayload {
 export default function App() {
   const { t } = useI18n();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [messagesByRoom, setMessagesByRoom] = useState<Record<string, ChatMessage[]>>(MOCK_MESSAGES);
   const [expiredRoomId, setExpiredRoomId] = useState<string | null>(null);
   const [runs, setRuns] = useState<SessionRun[]>([]);
   // Por jogo: por que a última tentativa de gravação não começou (mostrado na sala).
@@ -88,25 +86,12 @@ export default function App() {
     };
   }, []);
 
-  function handleSendMessage(roomId: string, text: string) {
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      author: "Você",
-      text,
-      timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    setMessagesByRoom((prev) => ({
-      ...prev,
-      [roomId]: [...(prev[roomId] ?? []), newMessage],
-    }));
-  }
-
   const expiredRoom = rooms.find((room) => room.id === expiredRoomId) ?? null;
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
   if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} />;
   const profileName = auth.state.profile.displayName;
+  const profileUid = auth.state.profile.uid;
 
   return (
     <>
@@ -120,12 +105,11 @@ export default function App() {
       onSelectRoom={setSelectedRoomId}
       runs={runs}
       renderRoom={(room, actions) => (
-        <RoomView
+        <LiveRoomView
           room={room}
-          messages={messagesByRoom[room.id] ?? []}
+          author={{ uid: profileUid, displayName: profileName }}
           isRecording={recordingRoomId === room.id}
           playerName={profileName}
-          onSendMessage={(text) => handleSendMessage(room.id, text)}
           onOpenRanking={actions.openRanking}
           lastRun={runs.find((run) => run.gameId === room.id)}
           startError={startErrors[room.id]}
@@ -151,5 +135,25 @@ export default function App() {
         </div>
       )}
     </>
+  );
+}
+
+type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "chatStatus" | "chatError" | "playerId"> & {
+  author: { uid: string; displayName: string };
+};
+
+/** Sala com o chat em tempo real (Firestore `rooms/{gameId}/messages`). */
+function LiveRoomView({ author, ...props }: LiveRoomViewProps) {
+  const { locale } = useI18n();
+  const chat = useRoomChat(props.room.id, author, locale);
+  return (
+    <RoomView
+      {...props}
+      messages={chat.messages}
+      chatStatus={chat.status}
+      chatError={chat.error}
+      playerId={author.uid}
+      onSendMessage={chat.send}
+    />
   );
 }

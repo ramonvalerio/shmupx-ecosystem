@@ -27,7 +27,7 @@ pub async fn iniciar_corrida_safe(
     jogo_id: String,
 ) -> Result<u32, String> {
     if !ffmpeg::is_ffmpeg_available() {
-        return Err("ffmpeg não encontrado no PATH do sistema".into());
+        return Err("FFmpeg não encontrado: reinstale o ShmupX Client".into());
     }
 
     let mut guard = state
@@ -55,12 +55,20 @@ pub async fn iniciar_corrida_safe(
         .map(|d| d.as_millis())
         .unwrap_or_default();
     let output_path = data_dir.join(format!("shmupx_run_{carimbo}.mp4"));
-    let config = RecordingConfig::new(output_path.clone());
+    let mut config = RecordingConfig::new(output_path.clone());
 
-    let mut child = ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
+    let mut child =
+        ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
     if let Err(erro) = ffmpeg::confirmar_inicio(&mut child, &config).await {
-        let _ = std::fs::remove_file(&output_path);
-        return Err(erro.to_string());
+        // ddagrab indisponível (área de trabalho remota, driver antigo): tenta a captura por GDI.
+        log::warn!("captura pelo monitor principal falhou ({erro}); usando a área de trabalho");
+        config.captura = ffmpeg::Captura::AreaDeTrabalho;
+        child =
+            ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
+        if let Err(erro) = ffmpeg::confirmar_inicio(&mut child, &config).await {
+            let _ = std::fs::remove_file(&output_path);
+            return Err(erro.to_string());
+        }
     }
     let pid = child
         .id()
@@ -111,7 +119,13 @@ pub async fn finalizar_corrida_manual(
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
     if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
-        emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao encerrar captura: {error}")));
+        emit_analysis(
+            &app,
+            &handle.jogo_id,
+            handle.pid,
+            "failed",
+            Some(format!("falha ao encerrar captura: {error}")),
+        );
         return Err(error.to_string());
     }
     // Com a captura fechada, a próxima run já pode começar.
@@ -131,7 +145,12 @@ struct RunAnalysisPayload {
 fn emit_analysis(app: &AppHandle, jogo_id: &str, pid: u32, status: &str, message: Option<String>) {
     let _ = app.emit(
         "run://analysis",
-        RunAnalysisPayload { jogo_id: jogo_id.to_string(), pid, status: status.into(), message },
+        RunAnalysisPayload {
+            jogo_id: jogo_id.to_string(),
+            pid,
+            status: status.into(),
+            message,
+        },
     );
 }
 
@@ -146,7 +165,10 @@ struct AnaliseJob {
 
 /// O ID token do Firebase vale ~1 h: uma análise longa na fila envia com o token atual da sessão.
 fn token_atual(app: &AppHandle, guardado: &str) -> String {
-    app.state::<SessionState>().snapshot().token.unwrap_or_else(|| guardado.to_string())
+    app.state::<SessionState>()
+        .snapshot()
+        .token
+        .unwrap_or_else(|| guardado.to_string())
 }
 
 /// Registra no servidor o fim da gameplay e agenda a análise. Se o servidor disser que a
@@ -163,12 +185,26 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
     match backend::encerrar_run(&token_atual(app, &job.token), &job.run_id).await {
         Ok(()) => {}
         Err(backend::FalhaEncerramento::Recusado(erro)) => {
-            log::warn!("capture: run {} recusada no encerramento: {erro}", job.run_id);
-            emit_analysis(app, &job.jogo_id, job.pid, "failed", Some(format!("vídeo preservado; a run foi encerrada pelo servidor: {erro}")));
+            log::warn!(
+                "capture: run {} recusada no encerramento: {erro}",
+                job.run_id
+            );
+            emit_analysis(
+                app,
+                &job.jogo_id,
+                job.pid,
+                "failed",
+                Some(format!(
+                    "vídeo preservado; a run foi encerrada pelo servidor: {erro}"
+                )),
+            );
             return;
         }
         Err(backend::FalhaEncerramento::Outro(erro)) => {
-            log::warn!("capture: aviso de encerramento da run {} falhou: {erro}", job.run_id);
+            log::warn!(
+                "capture: aviso de encerramento da run {} falhou: {erro}",
+                job.run_id
+            );
         }
     }
     emit_analysis(app, &job.jogo_id, job.pid, "analyzing", None);
@@ -222,10 +258,22 @@ fn spawn_safe_timer(
         if let Some(mut handle) = guard.take() {
             drop(guard);
             if let Err(error) = handle.child.kill().await {
-                emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao cortar captura: {error}")));
+                emit_analysis(
+                    &app,
+                    &handle.jogo_id,
+                    handle.pid,
+                    "failed",
+                    Some(format!("falha ao cortar captura: {error}")),
+                );
                 return;
             }
-            let _ = app.emit("run://expired", RunExpiredPayload { jogo_id, pid: handle.pid });
+            let _ = app.emit(
+                "run://expired",
+                RunExpiredPayload {
+                    jogo_id,
+                    pid: handle.pid,
+                },
+            );
             encerrar_e_enfileirar(&app, handle).await;
         }
     });

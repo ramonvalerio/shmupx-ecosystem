@@ -1,6 +1,6 @@
 [package]
 name = "shmupx-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "ShmupX Client"
 authors = ["ShmupX"]
 license = ""
@@ -36,4 +36,8 @@ sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.2"
 url = "2.5"
+tauri-plugin-process = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
 

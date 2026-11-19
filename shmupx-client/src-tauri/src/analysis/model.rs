@@ -13,8 +13,7 @@ use ort::session::Session;
 /// `include_bytes!` evita resolver caminho em runtime; quando a sincronização de perfis/modelos
 /// existir (Spec 001, passo 6), isto deve carregar do caminho sincronizado em `app_data_dir()`
 /// em vez de ficar embutido no binário.
-const MODELO_PLACEHOLDER_BYTES: &[u8] =
-    include_bytes!("../../models/digit_strip_placeholder.onnx");
+const MODELO_PLACEHOLDER_BYTES: &[u8] = include_bytes!("../../models/digit_strip_placeholder.onnx");
 
 const POSICOES: usize = 8;
 const CLASSES: usize = 10;

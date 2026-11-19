@@ -57,7 +57,9 @@ fn run_listener(app: AppHandle) {
                     pressed_since = Some(Instant::now());
                     let _ = app.emit(
                         "robotx://voice-start",
-                        VoicePttPayload { button: format!("{button:?}") },
+                        VoicePttPayload {
+                            button: format!("{button:?}"),
+                        },
                     );
 
                     // Dispara a captura de microfone em segundo plano (capture/audio.rs). Usa o
@@ -75,7 +77,9 @@ fn run_listener(app: AppHandle) {
                     pressed_since = None;
                     let _ = app.emit(
                         "robotx://voice-end",
-                        VoicePttPayload { button: format!("{button:?}") },
+                        VoicePttPayload {
+                            button: format!("{button:?}"),
+                        },
                     );
 
                     audio::parar_gravacao_microfone(app.state::<RecordingState>().inner());

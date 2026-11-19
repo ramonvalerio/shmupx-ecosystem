@@ -3,8 +3,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -38,7 +38,9 @@ struct VoiceErrorPayload {
 }
 
 fn lock_or_recover<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Abre o microfone padrão do sistema e começa a gravar em segundo plano. Chamada pelo
@@ -78,7 +80,9 @@ fn record_until_stopped(app: AppHandle, state: RecordingState, stop_rx: mpsc::Re
     let (stream, sample_rate, channels) = match build_input_stream(samples.clone()) {
         Ok(built) => built,
         Err(message) => {
-            log::warn!("input: falha ao abrir o microfone ({message}); push-to-talk sem áudio nesta tentativa");
+            log::warn!(
+                "input: falha ao abrir o microfone ({message}); push-to-talk sem áudio nesta tentativa"
+            );
             let _ = app.emit("robotx://voice-error", VoiceErrorPayload { message });
             *lock_or_recover(&state.0) = None;
             return;
@@ -118,7 +122,9 @@ fn record_until_stopped(app: AppHandle, state: RecordingState, stop_rx: mpsc::Re
 
     let _ = app.emit(
         "robotx://voice-ready",
-        VoiceReadyPayload { path: path.display().to_string() },
+        VoiceReadyPayload {
+            path: path.display().to_string(),
+        },
     );
 
     enviar_e_reproduzir_resposta(app, path);
@@ -213,7 +219,9 @@ fn build_input_stream(samples: Arc<Mutex<Vec<i16>>>) -> Result<(cpal::Stream, u3
             None,
         ),
         other => {
-            return Err(format!("formato de amostra de áudio não suportado: {other:?}"));
+            return Err(format!(
+                "formato de amostra de áudio não suportado: {other:?}"
+            ));
         }
     }
     .map_err(|e| format!("falha ao abrir a stream de entrada de áudio: {e}"))?;
@@ -233,8 +241,12 @@ fn save_wav(
         .app_data_dir()
         .map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))?
         .join("robotx-voice");
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|e| format!("falha ao criar a pasta de áudio ({}): {e}", data_dir.display()))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| {
+        format!(
+            "falha ao criar a pasta de áudio ({}): {e}",
+            data_dir.display()
+        )
+    })?;
 
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)

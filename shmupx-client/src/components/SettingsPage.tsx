@@ -1,6 +1,6 @@
 import { useI18n } from "../i18n";
 import { useState, type ReactNode } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { appDataDir } from "@tauri-apps/api/path";
 import { PageHeading, type Section } from "./ClientPages";
 import { defaultPreferences, type ClientPreferences } from "./settingsState";
@@ -20,6 +20,27 @@ const GROUPS = [
 function SettingsCard({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
   const { t } = useI18n();
   return <section className="dashboard-panel settings-card"><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
+}
+
+/** Conectar o MiSTer FPGA (ADR 008): o token vai para o e-mail da conta, nunca para a tela. */
+function MisterCard() {
+  const { t } = useI18n();
+  const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" | "error"; text?: string }>({ kind: "idle" });
+  const send = async () => {
+    if (!isTauri()) { setState({ kind: "error", text: t("Entre com sua conta para conectar o MiSTer.") }); return; }
+    setState({ kind: "sending" });
+    try {
+      const reply = await invoke<{ enviado_para: string }>("mister_enviar_token");
+      setState({ kind: "sent", text: t("Token enviado para {email}. Cole a linha do e-mail no shmupx.ini do MiSTer.", { email: reply.enviado_para }) });
+    } catch (error) {
+      setState({ kind: "error", text: error instanceof Error ? error.message : String(error) });
+    }
+  };
+  return <SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}>
+    <button className="primary-action" disabled={state.kind === "sending"} onClick={() => void send()}>{t(state.kind === "sending" ? "Enviando…" : "Enviar token para meu e-mail")}</button>
+    {state.text && <p className="muted" role="status">{state.text}</p>}
+    <p className="muted">{t("Cada pedido gera um token novo; os anteriores continuam valendo.")}</p>
+  </SettingsCard>;
 }
 
 export default function SettingsPage({ preferences, onPreferences, storageError, onNavigate }: {
@@ -65,7 +86,7 @@ export default function SettingsPage({ preferences, onPreferences, storageError,
           </SettingsCard>
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
-        {group === "connections" && <SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><span className="sample-chip">{t("CATÁLOGO DE DEMONSTRAÇÃO")}</span><p className="muted">{t("O lançamento de jogos pela Steam está disponível no aplicativo desktop. A biblioteca instalada ainda não é sincronizada.")}</p><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard>}
+        {group === "connections" && <><SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><span className="sample-chip">{t("CATÁLOGO DE DEMONSTRAÇÃO")}</span><p className="muted">{t("O lançamento de jogos pela Steam está disponível no aplicativo desktop. A biblioteca instalada ainda não é sincronizada.")}</p><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard><MisterCard /></>}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}

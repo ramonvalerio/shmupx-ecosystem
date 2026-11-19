@@ -1,24 +1,40 @@
 import { initializeApp } from "firebase/app";
-import { browserLocalPersistence, GoogleAuthProvider, indexedDBLocalPersistence, initializeAuth, signInWithCredential, signInWithPopup, signOut, type User } from "firebase/auth";
-import { doc, getFirestore, runTransaction, serverTimestamp, updateDoc } from "firebase/firestore";
+import { browserLocalPersistence, connectAuthEmulator, GoogleAuthProvider, indexedDBLocalPersistence, initializeAuth, signInWithCredential, signInWithPopup, signOut, type User } from "firebase/auth";
+import { connectFirestoreEmulator, doc, getFirestore, runTransaction, serverTimestamp, updateDoc } from "firebase/firestore";
 import { isTauri, invoke } from "@tauri-apps/api/core";
 import type { Language } from "../i18nMessages";
+
+/**
+ * Ambiente: `dev` usa os emuladores do Firebase em Docker (shmupx-infra/firebase, projeto
+ * demo-shmupx; nada toca produção); `prd` usa o projeto real. Padrão: `dev` em `npm run dev` /
+ * `tauri dev`, `prd` nos builds. `VITE_SHMUPX_ENV` força um dos dois.
+ */
+export const AMBIENTE: "dev" | "prd" = (import.meta.env.VITE_SHMUPX_ENV ?? (import.meta.env.DEV ? "dev" : "prd")) === "prd" ? "prd" : "dev";
 
 /**
  * Configuração pública do app Web "ShmupX Client" (shmupx-infra/firebase/apps/shmupx-client.json).
  * Identifica o projeto; não é credencial. A proteção vem de Authentication, Rules e backend.
  */
-const app = initializeApp({
-  projectId: "shmupx-project-id",
-  appId: "1:230979440400:web:16c3094411b19dcecbdf95",
-  apiKey: "AIzaSyB7ztOxpUY6wEnNUWUzD0wKT0aVr5HNDcM",
-  authDomain: "shmupx-project-id.firebaseapp.com",
-  messagingSenderId: "230979440400",
-});
+const app = initializeApp(
+  AMBIENTE === "dev"
+    ? // Projeto "demo-*": o SDK só fala com os emuladores e nunca alcança recursos reais.
+      { projectId: "demo-shmupx", apiKey: "demo-key", authDomain: "demo-shmupx.firebaseapp.com" }
+    : {
+        projectId: "shmupx-project-id",
+        appId: "1:230979440400:web:16c3094411b19dcecbdf95",
+        apiKey: "AIzaSyB7ztOxpUY6wEnNUWUzD0wKT0aVr5HNDcM",
+        authDomain: "shmupx-project-id.firebaseapp.com",
+        messagingSenderId: "230979440400",
+      },
+);
 
 // Sessão persistida no IndexedDB da WebView: o jogador continua conectado ao reabrir o app.
 export const auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
 export const db = getFirestore(app);
+if (AMBIENTE === "dev") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8088);
+}
 
 /** Cliente OAuth "Desktop" do Google no mesmo projeto. Público, definido em `.env.local`. */
 const DESKTOP_CLIENT_ID = import.meta.env.VITE_GOOGLE_DESKTOP_CLIENT_ID ?? "";

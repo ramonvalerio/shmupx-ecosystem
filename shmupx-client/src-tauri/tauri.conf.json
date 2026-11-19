@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "shmupx-client",
-  "version": "0.1.0",
+  "productName": "ShmupX",
+  "version": "0.1.1",
   "identifier": "com.shmupx.client",
   "build": {
     "frontendDist": "../dist",
@@ -16,6 +16,7 @@
         "width": 1100,
         "height": 720,
         "resizable": true,
+        "maximized": true,
         "fullscreen": false
       }
     ],
@@ -33,8 +34,29 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp"
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5NkZBMUQyQkU5RDg4RDQKUldUVWlKMiswcUZ2R1JIM0NJaGxZUTBZRjRwTDBUYkp1NXI1QlVpelBxMFFxb29JTldFSUpxV3IK",
+      "endpoints": [
+        "https://www.shmupx.com/api/client/update/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      },
+      "requireSignedVersion": true
     }
   }
 }

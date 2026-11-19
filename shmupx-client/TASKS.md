@@ -32,7 +32,7 @@ Contexto: `docs/adr/001..003` e `docs/specs/002`.
 ## 3. Módulo `capture` — FFmpeg
 - [x] 3.1a Verificação de disponibilidade do binário no PATH (`ffmpeg -version`) via `capture::ffmpeg::is_ffmpeg_available`.
 - [ ] 3.1b Resolver via sidecar do Tauri (hoje depende do PATH do sistema) e validar versão mínima.
-- [x] 3.2 Linha de comando de captura real em `capture::ffmpeg::spawn_ffmpeg`: vídeo via `-f gdigrab -framerate 60 -i desktop` (tela inteira do Windows), áudio do sistema via `-f dshow -i audio=<dispositivo>` (sem microfone), `-c:v libx264 -preset ultrafast -c:a aac`, saída `.mp4` fragmentado (`-movflags +frag_keyframe+empty_moov`, legível mesmo após `kill` por timeout) na pasta de dados do app (`app.path().app_data_dir()`, ver `capture/commands.rs`). Parâmetros (`framerate`, `video_preset`, `audio_device`) ficam em `RecordingConfig` para ajuste futuro.
+- [x] 3.2 Linha de comando de captura real em `capture::ffmpeg::spawn_ffmpeg`: monitor principal via Desktop Duplication (`ddagrab`, GPU), reduzido **sempre para 720p** de altura (`ALTURA_GRAVACAO`, a resolução de referência dos scripts; filtro `area`), 60 fps **constantes** (`-fps_mode cfr`: o motor calcula o tempo por índice / fps), `libx264 -preset ultrafast`, sem áudio por padrão. Se o `ddagrab` não iniciar (área de trabalho remota, driver antigo), tenta `gdigrab` (todos os monitores, mais lento) com o mesmo 720p. Saída `.mp4` fragmentado (`-movflags +frag_keyframe+empty_moov`, legível mesmo após `kill` por timeout) na pasta de dados do app. Antes (2026-10-28) gravava a área de trabalho inteira na resolução nativa: com dois monitores saía 3000×1920 a ~12 fps e a análise de 6 min levava 13 min.
   - **Pendência conhecida:** o nome do dispositivo `dshow` (`DEFAULT_AUDIO_DEVICE = "virtual-audio-capturer"`) depende de um driver de loopback instalado na máquina do jogador; falta detecção/configuração em runtime (TODO em `ffmpeg.rs`, TASKS 3.1b).
 - [x] 3.3 Spawn assíncrono com `tokio::process::Command`, PID armazenado em estado global (`capture::state::RunState`, `tauri::State` com `Arc<Mutex<Option<RunHandle>>>`).
 - [x] 3.4 Parada graciosa (`q` no stdin + `shutdown`) com fallback para `kill` após timeout de 3s (`capture::ffmpeg::graceful_stop`, usado pelo comando `finalizar_corrida_manual`); validada contra o novo pipeline gdigrab/dshow/libx264.
@@ -41,7 +41,7 @@ Contexto: `docs/adr/001..003` e `docs/specs/002`.
 - [ ] 3.7 Extrair metadados do arquivo final (duração, hash SHA-256) para o payload de submissão.
 
 ### Comandos Tauri expostos (capture/commands.rs)
-- [x] `iniciar_corrida_safe(jogo_id)`: valida FFmpeg no PATH, spawna o processo, guarda PID/estado e agenda o timer seguro. Retorna o PID.
+- [x] `iniciar_corrida_safe(jogo_id)`: valida o FFmpeg (empacotado, ou do PATH em dev), spawna o processo, guarda PID/estado e agenda o timer seguro. Retorna o PID.
 - [x] `finalizar_corrida_manual()`: encerra a corrida ativa de forma graciosa.
 
 ## 4. Módulo `input` (hotkeys de controle)

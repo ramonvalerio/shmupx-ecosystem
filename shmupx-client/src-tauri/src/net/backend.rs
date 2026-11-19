@@ -13,11 +13,42 @@ const BACKEND_BASE_URL: &str = match option_env!("SHMUPX_BACKEND_URL") {
 /// não deve travar o app do jogador indefinidamente (ex.: backend fora do ar).
 const TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Versão deste Client, enviada em toda chamada: o backend recusa runs de versões abaixo de uma
+/// atualização obrigatória já liberada e mostra a situação da versão no sininho.
+pub const VERSAO_CLIENT: &str = env!("CARGO_PKG_VERSION");
+
 fn client() -> Result<reqwest::Client, String> {
+    let mut cabecalhos = reqwest::header::HeaderMap::new();
+    cabecalhos.insert(
+        "x-shmupx-client-version",
+        reqwest::header::HeaderValue::from_static(VERSAO_CLIENT),
+    );
     reqwest::Client::builder()
         .timeout(TIMEOUT)
+        .default_headers(cabecalhos)
         .build()
         .map_err(|e| format!("falha ao construir cliente HTTP: {e}"))
+}
+
+/// `GET`/`POST`/`PUT` genérico em nome do jogador, devolvendo o JSON do backend como veio (as
+/// notificações só passam pelo Rust porque é ele que guarda o token).
+pub async fn chamar_json(
+    token: &str,
+    metodo: reqwest::Method,
+    caminho: &str,
+    corpo: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let mut pedido = client()?
+        .request(metodo, format!("{BACKEND_BASE_URL}{caminho}"))
+        .bearer_auth(token);
+    if let Some(corpo) = corpo {
+        pedido = pedido.json(&corpo);
+    }
+    let response = pedido
+        .send()
+        .await
+        .map_err(|e| format!("falha de rede com o backend: {e}"))?;
+    responder_ou_erro(response).await
 }
 
 #[derive(Debug, Serialize)]
@@ -95,7 +126,11 @@ pub async fn encerrar_run(token: &str, run_id: &str) -> Result<(), FalhaEncerram
     }
     let corpo = response.text().await.unwrap_or_default();
     let detalhe = format!("backend respondeu HTTP {status}: {corpo}");
-    Err(if status == reqwest::StatusCode::CONFLICT { FalhaEncerramento::Recusado(detalhe) } else { FalhaEncerramento::Outro(detalhe) })
+    Err(if status == reqwest::StatusCode::CONFLICT {
+        FalhaEncerramento::Recusado(detalhe)
+    } else {
+        FalhaEncerramento::Outro(detalhe)
+    })
 }
 
 /// `POST /api/runs`: submete o resultado da run (fim do timer seguro ou parada manual).
@@ -149,7 +184,11 @@ pub async fn trocar_codigo_google(
 ) -> Result<String, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/auth/google/token"))
-        .json(&TrocaCodigoPayload { code, code_verifier, redirect_uri })
+        .json(&TrocaCodigoPayload {
+            code,
+            code_verifier,
+            redirect_uri,
+        })
         .send()
         .await
         .map_err(|e| format!("falha de rede ao concluir o login (backend fora do ar?): {e}"))?;

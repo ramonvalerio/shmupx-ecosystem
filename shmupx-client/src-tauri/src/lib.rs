@@ -13,6 +13,8 @@ pub mod net;
 pub mod session;
 pub mod steam;
 
+use tauri::Manager;
+
 #[tauri::command]
 fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -21,6 +23,8 @@ fn app_version() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(capture::RunState::default())
         .manage(capture::AnalysisQueue::default())
         .manage(capture::RecordingState::default())
@@ -33,6 +37,12 @@ pub fn run() {
             session::commands::definir_token_autenticacao,
             session::commands::limpar_token_autenticacao,
             session::commands::definir_sala_ativa,
+            session::notificacoes::notificacoes_listar,
+            session::notificacoes::notificacoes_obter,
+            session::notificacoes::notificacoes_marcar_todas,
+            session::notificacoes::notificacoes_preferencia_email,
+            session::notificacoes::versao_situacao,
+            session::mister::mister_enviar_token,
             auth::commands::login_google_desktop,
         ])
         .setup(|app| {
@@ -44,6 +54,7 @@ pub fn run() {
                 )?;
             }
 
+            capture::ffmpeg::usar_empacotado(app.path().resource_dir().ok());
             input::spawn_listener(app.handle().clone());
 
             Ok(())

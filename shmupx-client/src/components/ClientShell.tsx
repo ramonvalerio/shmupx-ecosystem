@@ -10,16 +10,21 @@ import RoomRankingView from "./RoomRankingView";
 import RoomTabs from "./RoomTabs";
 import SettingsPage from "./SettingsPage";
 import { readPreferences, PREFERENCES_KEY } from "./settingsState";
-import type { PlayerProfile } from "../auth/firebase";
+import NotificationBell from "./NotificationBell";
+import NotificationPage from "./NotificationPage";
+import { useNotifications } from "../data/useNotifications";
+import { useAutoUpdate } from "../data/useAutoUpdate";
+import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 
-const NAVIGATION: { id: Section; icon: string; label: string }[] = [
+// `hidden`: fora do menu por enquanto; a tela continua existindo e abre por outros caminhos.
+const NAVIGATION: { id: Section; icon: string; label: string; hidden?: boolean }[] = [
   { id: "home", icon: "⌂", label: "Início" },
   { id: "collection", icon: "▦", label: "Coleção" },
-  { id: "events", icon: "◇", label: "Eventos" },
+  { id: "events", icon: "◇", label: "Eventos", hidden: true },
   { id: "ranking", icon: "☆", label: "Ranking" },
-  { id: "submissions", icon: "↑", label: "Submissões" },
+  { id: "submissions", icon: "↑", label: "Submissões", hidden: true },
   { id: "settings", icon: "⚙", label: "Configurações" },
-  { id: "help", icon: "?", label: "Ajuda" },
+  { id: "help", icon: "?", label: "Ajuda", hidden: true },
 ];
 interface ClientShellProps {
   rooms: GameRoom[];
@@ -42,6 +47,12 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const bigPicture = useBigPicture(preferences.startupBigPicture);
   const recordingRoom = rooms.find((room) => room.id === recordingRoomId);
+  const notifications = useNotifications();
+  // Instalar fecha o app: nunca durante uma gravação.
+  const autoUpdate = useAutoUpdate(Boolean(recordingRoom));
+  const autoUpdateActive = autoUpdate.state.status !== "idle" && autoUpdate.state.status !== "error";
+  const [notificationId, setNotificationId] = useState<string | null>(null);
+  function openNotification(id: string | null) { setNotificationId(id); setSection("notification"); }
 
   useEffect(() => {
     try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences)); setStorageError(false); }
@@ -87,7 +98,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
       <nav className="navigation-rail" aria-label={t("Navegação principal")}>
-        <div className="navigation-tabs">{NAVIGATION.map((item) => <button type="button" key={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => setSection(item.id)}><span aria-hidden="true">{item.icon}</span> {t(item.label)}</button>)}</div>
+        <div className="navigation-tabs">{NAVIGATION.filter((item) => !item.hidden).map((item) => <button type="button" key={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => setSection(item.id)}><span aria-hidden="true">{item.icon}</span> {t(item.label)}</button>)}</div>
         <div className="profile-menu-anchor">
           <button className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}>{profile.displayName.slice(0, 2).toUpperCase()}</button>
           {profileMenuOpen && <div id="profile-actions" className="profile-menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}><strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span><button onClick={() => { setSection("profile"); setProfileMenuOpen(false); }}>{t("Meu perfil")}</button><button onClick={() => { setSection("subscription"); setProfileMenuOpen(false); }}>{t("Assinatura")}</button><button onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button><button data-menu-close onClick={() => setProfileMenuOpen(false)}>{t("Fechar")}</button></div>}
@@ -95,8 +106,29 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       </nav>
       <header className="client-topbar">
         <img src="/img/logo.png" alt="ShmupX Client" />
+        {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
         <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO PARA JOGAR")}</div>
-        <button type="button" className="secondary-action big-picture-toggle" onClick={bigPicture.toggle} aria-pressed={bigPicture.active} title={t("Alt+Enter")}>{bigPicture.active ? t("Sair do Big Picture") : t("Big Picture")}</button>
+        {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}
+        {!autoUpdateActive && !notifications.version?.update_required && notifications.version?.update_available && notifications.version.latest && <p className="update-available">{t("Versão {version} disponível.", { version: notifications.version.latest })}</p>}
+        {autoUpdate.state.status === "downloading" && (
+          <p className="update-available" role="status">
+            {t("Baixando a versão {version}…", { version: autoUpdate.state.version })}
+            {autoUpdate.state.progress !== null && ` ${Math.round(autoUpdate.state.progress * 100)}%`}
+          </p>
+        )}
+        {autoUpdate.state.status === "ready" && (
+          <p className="update-available" role="status">
+            {t("Versão {version} pronta.", { version: autoUpdate.state.version })}{" "}
+            <button type="button" className="text-action" onClick={() => void autoUpdate.installNow()} disabled={Boolean(recordingRoom)} title={recordingRoom ? t("Termine a gravação antes de atualizar.") : undefined}>
+              {t("Reiniciar e atualizar")}
+            </button>
+          </p>
+        )}
+        {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
+        <div className="client-topbar-actions">
+          <NotificationBell items={notifications.items} unread={notifications.unread} error={notifications.error} onOpen={openNotification} onSeen={notifications.markSeen} />
+          <button type="button" className="secondary-action big-picture-toggle" onClick={bigPicture.toggle} aria-pressed={bigPicture.active} title={t("Alt+Enter")}>{bigPicture.active ? t("Sair do Big Picture") : t("Big Picture")}</button>
+        </div>
       </header>
       <div className="client-content">
       {bigPicture.error && <p className="mode-error" role="alert">{t(bigPicture.error)}</p>}
@@ -108,6 +140,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "ranking" && <RankingPage rooms={rooms} />}
       {section === "settings" && <SettingsPage preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
       {section === "help" && <HelpPage />}
+      {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
       <div className="client-workspace" hidden={!isLibrary}>
         <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} />
         <div className="room-stage">

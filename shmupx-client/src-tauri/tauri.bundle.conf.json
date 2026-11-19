@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "resources": {
+      "bundle/validator/": "validator/",
+      "bundle/games/": "games/",
+      "bundle/ffmpeg/": "ffmpeg/"
+    }
+  }
+}

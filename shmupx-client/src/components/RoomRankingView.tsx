@@ -1,6 +1,6 @@
 import { useI18n } from "../i18n";
 import { useMemo, useState } from "react";
-import { gerarRankingSalaMock } from "../data/mockRoomRanking";
+import { useGameRanking } from "../data/useRanking";
 import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { RUN_LABELS, runDate } from "./AccountPages";
@@ -31,8 +31,8 @@ interface RoomRankingViewProps {
 
 /**
  * Ranking do jogo, aberto na aba da sala. Local: runs deste jogo observadas nesta sessão (o
- * placar ainda não é exposto a esta tela). Online: dados de demonstração até o backend publicar
- * o ranking.
+ * placar ainda não é exposto a esta tela). Online: `GET /api/ranking/jogos/{id}` do backend
+ * (melhor placar de cada jogador no modo escolhido).
  */
 export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewProps) {
   const { t, locale } = useI18n();
@@ -45,19 +45,15 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
     () => runs.filter((run) => run.gameId === room.id).sort((a, b) => b.startedAt - a.startedAt),
     [runs, room.id],
   );
-  const online = useMemo(() => {
-    const entries = gerarRankingSalaMock(room.id);
-    if (mode === "caravan") return [];
-    const pool = mode === "1cc" ? entries.filter((entry) => entry.continuesUsados === 0) : entries;
-    return [...pool].sort((a, b) => b.maiorPlacarBruto - a.maiorPlacarBruto);
-  }, [room.id, mode]);
+  const ranking = useGameRanking(scope === "online" ? room.id : "", mode);
+  const online = useMemo(() => ranking.data?.entradas ?? [], [ranking.data]);
   const term = query.trim().toLowerCase();
   const visibleOnline = online
-    .map((entry, index) => ({ entry, position: index + 1 }))
-    .filter(({ entry }) => entry.jogadorNome.toLowerCase().includes(term));
+    .map((entry) => ({ entry, position: entry.posicao }))
+    .filter(({ entry }) => entry.nome.toLowerCase().includes(term));
 
   const selectedRun = scope === "local" ? localRuns.find((run) => run.id === selected) : undefined;
-  const selectedEntry = scope === "online" ? online.find((entry) => entry.jogadorNome === selected) : undefined;
+  const selectedEntry = scope === "online" ? online.find((entry) => entry.jogador_id === selected) : undefined;
 
   function changeScope(next: Scope) {
     setScope(next);
@@ -98,7 +94,7 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Buscar jogador…")} />
           </label>
         )}
-        {scope === "online" && <span className="sample-chip">{t("DADOS DE DEMONSTRAÇÃO")}</span>}
+        {scope === "online" && <button type="button" className="room-action" onClick={ranking.reload} disabled={ranking.status === "loading"}>{t("Atualizar")}</button>}
       </div>
 
       <div className="room-ranking-list">
@@ -119,14 +115,16 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
         ) : (
           <>
             <div className="room-ranking-row is-head" aria-hidden="true"><span>{t("Posição")}</span><span>{t("Jogador")}</span><span>{t("Placar")}</span><span>{t("Continues")}</span></div>
-            {mode === "caravan" && <p className="empty-state">{t("Ainda não há ranking Caravan para este jogo.")}</p>}
-            {mode !== "caravan" && visibleOnline.length === 0 && <p className="empty-state">{t("Nenhum jogador encontrado.")}</p>}
+            {ranking.status === "loading" && online.length === 0 && <p className="empty-state" role="status">{t("Carregando o ranking…")}</p>}
+            {ranking.status === "error" && <p className="empty-state" role="alert">{t("Não foi possível carregar o ranking agora.")} <button type="button" className="text-action" onClick={ranking.reload}>{t("Tentar de novo")}</button></p>}
+            {ranking.status === "ready" && online.length === 0 && <p className="empty-state">{t("Nenhum resultado ainda")}</p>}
+            {ranking.status === "ready" && online.length > 0 && visibleOnline.length === 0 && <p className="empty-state">{t("Nenhum jogador encontrado.")}</p>}
             {visibleOnline.map(({ entry, position }) => (
-              <button key={entry.jogadorNome} type="button" className="room-ranking-row" aria-pressed={selected === entry.jogadorNome} onClick={() => setSelected(entry.jogadorNome)}>
+              <button key={entry.jogador_id} type="button" className="room-ranking-row" aria-pressed={selected === entry.jogador_id} onClick={() => setSelected(entry.jogador_id)}>
                 <span className="rank-position">{String(position).padStart(2, "0")}</span>
-                <span>{entry.jogadorNome}</span>
-                <span className="rank-score">{entry.maiorPlacarBruto.toLocaleString(locale)}</span>
-                <span className="rank-duration">{entry.continuesUsados === 0 ? t("1CC") : entry.continuesUsados}</span>
+                <span>{entry.nome}{!entry.verificada && <span className="muted" title={t("Resultado em revisão")}> *</span>}</span>
+                <span className="rank-score">{entry.score.toLocaleString(locale)}</span>
+                <span className="rank-duration">{entry.continues === 0 ? t("1CC") : entry.continues}</span>
               </button>
             ))}
           </>
@@ -148,13 +146,17 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
         )}
         {selectedEntry && (
           <>
-            <p className="room-ranking-player">{selectedEntry.jogadorNome}</p>
-            <div className="big-score">{selectedEntry.maiorPlacarBruto.toLocaleString(locale)}</div>
+            <p className="room-ranking-player">{selectedEntry.nome}</p>
+            <div className="big-score">{selectedEntry.score.toLocaleString(locale)}</div>
             <dl className="detail-list">
+              <dt>{t("Posição")}</dt><dd>{selectedEntry.posicao}</dd>
               <dt>{t("Modo de jogo")}</dt><dd>{t(MODES.find((item) => item.id === mode)?.label ?? "")}</dd>
-              <dt>{t("Vidas perdidas")}</dt><dd>{selectedEntry.vidasPerdidas}</dd>
-              <dt>{t("Continues")}</dt><dd>{selectedEntry.continuesUsados === 0 ? t("1CC · sem continues") : selectedEntry.continuesUsados}</dd>
-              <dt>{t("Nota normalizada")}</dt><dd className="score-value">{selectedEntry.notaNormalizada.toFixed(2)}</dd>
+              <dt>{t("Vidas perdidas")}</dt><dd>{selectedEntry.vidas_perdidas ?? "—"}</dd>
+              <dt>{t("Continues")}</dt><dd>{selectedEntry.continues === 0 ? t("1CC · sem continues") : selectedEntry.continues}</dd>
+              <dt>{t("Nota normalizada")}</dt><dd className="score-value">{selectedEntry.nota.toFixed(2)}</dd>
+              <dt>{t("Runs")}</dt><dd>{selectedEntry.runs}</dd>
+              <dt>{t("Status")}</dt><dd>{selectedEntry.verificada ? t("Verificado") : t("Em revisão")}</dd>
+              {selectedEntry.conquistado_em && <><dt>{t("Data")}</dt><dd>{new Date(selectedEntry.conquistado_em).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</dd></>}
             </dl>
           </>
         )}

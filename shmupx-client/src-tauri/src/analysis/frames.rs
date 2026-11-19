@@ -27,7 +27,7 @@ pub async fn extrair_frames_finais(
 
     let padrao_saida = output_dir.join("frame_%03d.png");
 
-    let status = Command::new("ffmpeg")
+    let status = Command::new(crate::capture::ffmpeg::programa())
         .args(["-y", "-sseof", &format!("-{JANELA_FINAL_SEGUNDOS}")])
         .arg("-i")
         .arg(video_path)

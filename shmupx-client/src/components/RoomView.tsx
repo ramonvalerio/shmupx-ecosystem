@@ -5,14 +5,20 @@ import ChatFeed from "./ChatFeed";
 import ChatInput from "./ChatInput";
 import type { ChatMessage, GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
+import type { ChatStatus } from "../data/useRoomChat";
 
-interface RoomViewProps {
+export interface RoomViewProps {
   room: GameRoom;
   messages: ChatMessage[];
+  /** Estado da conexão com o chat da sala (Firestore). */
+  chatStatus?: ChatStatus;
+  chatError?: string | null;
+  /** uid do jogador conectado, para destacar as mensagens dele. */
+  playerId?: string;
   isRecording: boolean;
   /** Nome do jogador conectado, listado entre os presentes na sala. */
   playerName: string;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string) => void | Promise<void>;
   /** Abre o ranking deste jogo na mesma aba da sala. */
   onOpenRanking: () => void;
   /** Run mais recente deste jogo nesta sessão: o aviso mostra o andamento e o desfecho. */
@@ -52,7 +58,7 @@ function RunOutcome({ run, onOpenRanking }: { run: SessionRun; onOpenRanking: ()
   );
 }
 
-export default function RoomView({ room, messages, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError }: RoomViewProps) {
+export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError }: RoomViewProps) {
   const { t } = useI18n();
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -114,7 +120,7 @@ export default function RoomView({ room, messages, isRecording, playerName, onSe
         <GameArt room={room} className="game-room-cover" />
         <div className="game-room-title">
           <h1>{room.title}</h1>
-          <p>{t("Presença e chat simulados neste computador · demonstração")}</p>
+          <p>{t("Chat da sala em tempo real · presença simulada (demonstração)")}</p>
         </div>
         <div className="game-room-actions">
           <span className="sample-chip">{MOCK_FICHAS_DIGITAIS} {t(" Fichas Digitais · demo ")}</span>
@@ -134,8 +140,8 @@ export default function RoomView({ room, messages, isRecording, playerName, onSe
           <button type="button" aria-pressed={showDetails} onClick={() => setShowDetails(true)}>{t("Detalhes")}</button>
         </div>
         <div className="room-chat-panel" hidden={showDetails}>
-          <ChatFeed messages={messages} />
-          <ChatInput onSendMessage={onSendMessage} />
+          <ChatFeed messages={messages} status={chatStatus} error={chatStatus === "error" ? chatError : null} playerId={playerId} />
+          <ChatInput onSendMessage={onSendMessage} disabled={chatStatus === "error"} error={chatStatus === "error" ? null : chatError} />
         </div>
         {showDetails && <div className="game-information">
           <GameArt room={room} />

@@ -1,6 +1,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use tokio::io::AsyncWriteExt;
@@ -15,6 +16,19 @@ use tokio::process::{Child, Command};
 /// em vez de fixar este nome.
 pub const DEFAULT_AUDIO_DEVICE: &str = "virtual-audio-capturer";
 
+/// Altura de toda gravação de run.
+pub const ALTURA_GRAVACAO: u32 = 720;
+
+/// Como capturar a tela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Captura {
+    /// Desktop Duplication (`ddagrab`, pela GPU): só o monitor principal, sem perder quadros.
+    MonitorPrincipal,
+    /// GDI (`gdigrab`): reserva quando o `ddagrab` não inicia (área de trabalho remota, driver
+    /// antigo). Pega todos os monitores juntos e é lento em telas grandes.
+    AreaDeTrabalho,
+}
+
 /// Configuração de uma gravação local (e stream RTMP opcional).
 #[derive(Debug, Clone)]
 pub struct RecordingConfig {
@@ -24,6 +38,10 @@ pub struct RecordingConfig {
     /// Taxa de quadros da captura de tela (gdigrab). 60 fps é importante para a leitura
     /// correta de HUD/placar em shmups rápidos (ver docs/adr/002).
     pub framerate: u32,
+    /// Altura do vídeo gravado. Sempre 720p: é a resolução de referência dos scripts de validação
+    /// (`reference_height`), e um vídeo maior só deixa a análise mais lenta sem ler melhor o HUD.
+    pub altura: u32,
+    pub captura: Captura,
     /// Preset do `libx264`; `ultrafast`/`superfast` priorizam CPU baixa sobre tamanho do arquivo,
     /// já que a codificação roda em paralelo com o jogo.
     pub video_preset: String,
@@ -41,6 +59,8 @@ impl RecordingConfig {
             output_path,
             rtmp_url: None,
             framerate: 60,
+            altura: ALTURA_GRAVACAO,
+            captura: Captura::MonitorPrincipal,
             video_preset: "ultrafast".to_string(),
             audio_device: None,
         }
@@ -63,9 +83,30 @@ impl FfmpegSession {
     }
 }
 
-/// Verifica se o binário `ffmpeg` está acessível no PATH do sistema operacional.
+static EMPACOTADO: OnceLock<PathBuf> = OnceLock::new();
+
+/// Registra o FFmpeg que vem com o app (`ffmpeg/ffmpeg.exe` nos recursos), se existir. Em
+/// desenvolvimento ele não existe e vale o do PATH.
+pub fn usar_empacotado(recursos: Option<PathBuf>) {
+    if let Some(exe) = recursos
+        .map(|dir| dir.join("ffmpeg").join("ffmpeg.exe"))
+        .filter(|p| p.is_file())
+    {
+        let _ = EMPACOTADO.set(exe);
+    }
+}
+
+/// Programa a executar: o empacotado ou, sem ele, `ffmpeg` do PATH.
+pub fn programa() -> PathBuf {
+    EMPACOTADO
+        .get()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("ffmpeg"))
+}
+
+/// Verifica se o FFmpeg (empacotado ou do PATH) executa.
 pub fn is_ffmpeg_available() -> bool {
-    std::process::Command::new("ffmpeg")
+    std::process::Command::new(programa())
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -78,32 +119,36 @@ pub fn is_ffmpeg_available() -> bool {
 /// via GDI (`gdigrab`) a taxa fixa, mixa com o áudio do sistema via DirectShow (`dshow`,
 /// sem depender de microfone) e codifica em tempo real com `libx264`/`aac`.
 pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(programa());
     cmd.arg("-y");
 
-    // Vídeo: tela inteira do Windows via GDI, a uma taxa de quadros fixa (60 fps por padrão).
-    cmd.args([
-        "-f",
-        "gdigrab",
-        "-framerate",
-        &config.framerate.to_string(),
-        "-i",
-        "desktop",
-    ]);
+    // Vídeo: a tela, reduzida para a altura da gravação (ver `filtro_de_video`).
+    match config.captura {
+        Captura::MonitorPrincipal => {
+            cmd.args(["-filter_complex", &filtro_de_video(config)]);
+        }
+        Captura::AreaDeTrabalho => {
+            cmd.args([
+                "-f",
+                "gdigrab",
+                "-framerate",
+                &config.framerate.to_string(),
+                "-i",
+                "desktop",
+            ]);
+            cmd.args(["-vf", &filtro_de_video(config)]);
+        }
+    }
+    // Taxa constante: o motor de validação calcula o tempo de cada quadro por índice / fps.
+    // Sem mudança na tela, o ddagrab não gera quadro; aqui o anterior é repetido.
+    cmd.args(["-fps_mode", "cfr", "-r", &config.framerate.to_string()]);
 
     // Áudio: mixer do sistema via DirectShow — efeitos sonoros do jogo sem microfone externo.
     if let Some(audio_device) = &config.audio_device {
         cmd.args(["-f", "dshow", "-i", &format!("audio={audio_device}")]);
     }
 
-    cmd.args([
-        "-c:v",
-        "libx264",
-        "-preset",
-        &config.video_preset,
-        "-pix_fmt",
-        "yuv420p",
-    ]);
+    cmd.args(["-c:v", "libx264", "-preset", &config.video_preset]);
 
     if config.audio_device.is_some() {
         cmd.args(["-c:a", "aac"]);
@@ -134,6 +179,22 @@ pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
     cmd.spawn()
 }
 
+/// Filtro de vídeo da gravação: reduz para `altura` mantendo a proporção (largura par, exigida pelo
+/// yuv420p). `area` é a melhor interpolação para reduzir texto pequeno (placar). O ddagrab entrega
+/// quadros na GPU: `hwdownload` os traz para a CPU (a redução na GPU não funciona em todo driver).
+fn filtro_de_video(config: &RecordingConfig) -> String {
+    let reduzir = format!("scale=-2:{}:flags=area,format=yuv420p", config.altura);
+    match config.captura {
+        Captura::MonitorPrincipal => {
+            format!(
+                "ddagrab=framerate={},hwdownload,format=bgra,{reduzir}",
+                config.framerate
+            )
+        }
+        Captura::AreaDeTrabalho => reduzir,
+    }
+}
+
 /// Tempo que o FFmpeg precisa sobreviver para a captura contar como iniciada.
 const CONFIRMACAO_INICIO: Duration = Duration::from_millis(1500);
 
@@ -145,7 +206,10 @@ pub async fn confirmar_inicio(child: &mut Child, config: &RecordingConfig) -> io
         return Ok(());
     }
     let log = std::fs::read_to_string(config.log_path()).unwrap_or_default();
-    Err(io::Error::other(format!("a captura de tela não iniciou: {}", ultima_linha(&log))))
+    Err(io::Error::other(format!(
+        "a captura de tela não iniciou: {}",
+        ultima_linha(&log)
+    )))
 }
 
 /// Última linha útil do log do FFmpeg (as anteriores costumam ser banner e configuração).
@@ -166,7 +230,24 @@ mod tests {
     fn run_padrao_grava_sem_audio_e_log_fica_ao_lado_do_video() {
         let config = RecordingConfig::new(PathBuf::from("C:/dados/shmupx_run_1.mp4"));
         assert!(config.audio_device.is_none());
-        assert_eq!(config.log_path(), PathBuf::from("C:/dados/shmupx_run_1.ffmpeg.log"));
+        assert_eq!(config.altura, 720);
+        assert_eq!(config.captura, Captura::MonitorPrincipal);
+        assert_eq!(
+            filtro_de_video(&config),
+            "ddagrab=framerate=60,hwdownload,format=bgra,scale=-2:720:flags=area,format=yuv420p"
+        );
+        let reserva = RecordingConfig {
+            captura: Captura::AreaDeTrabalho,
+            ..config.clone()
+        };
+        assert_eq!(
+            filtro_de_video(&reserva),
+            "scale=-2:720:flags=area,format=yuv420p"
+        );
+        assert_eq!(
+            config.log_path(),
+            PathBuf::from("C:/dados/shmupx_run_1.ffmpeg.log")
+        );
     }
 
     #[test]

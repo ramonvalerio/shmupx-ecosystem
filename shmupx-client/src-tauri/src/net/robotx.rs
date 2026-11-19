@@ -16,7 +16,11 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 /// `sala_id` vem de `session::SessionState` (definido pelo frontend via `definir_sala_ativa`);
 /// sem ele a Edge Function não tem como resolver o `jogo_id` no servidor e rejeita a chamada
 /// (ADR 003 — isolamento de RAG por sala).
-pub async fn enviar_audio_ptt(token: &str, sala_id: &str, wav_path: &Path) -> Result<Vec<u8>, String> {
+pub async fn enviar_audio_ptt(
+    token: &str,
+    sala_id: &str,
+    wav_path: &Path,
+) -> Result<Vec<u8>, String> {
     let bytes = tokio::fs::read(wav_path)
         .await
         .map_err(|e| format!("falha ao ler o áudio gravado ({}): {e}", wav_path.display()))?;

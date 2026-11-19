@@ -5,4 +5,4 @@ pub mod commands;
 pub mod detector;
 
 pub use commands::inicializar_jogo_steam;
-pub use detector::{is_steam_running, DetectedGame, GameDetector};
+pub use detector::{DetectedGame, GameDetector, is_steam_running};
