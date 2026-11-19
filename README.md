@@ -6,6 +6,7 @@ Monorepositório do ShmupX. Cada aplicação mantém suas dependências e comand
 | --- | --- |
 | `shmupx-client/` | Aplicativo do jogador: interface React, sessão, captura e integração nativa Tauri/Rust. |
 | `shmupx_offline/` | Validação local de vídeos, com um script específico por jogo. Earthion é o primeiro. |
+| `shmupx-mister/` | Agente para MiSTer FPGA (jogo no hardware, em CRT): lê o placar da RAM do core. Protótipo. |
 | `shmupx-lab/` | Ferramentas administrativas de mapeamento e preparação de recursos de análise. |
 | `shmupx-backend/` | API Rust, persistência, regras de submissão e ranking. |
 | `shmupx-frontend/` | Portal web público. |
