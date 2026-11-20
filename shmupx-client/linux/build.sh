@@ -50,7 +50,7 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     echo "aviso: sem TAURI_SIGNING_PRIVATE_KEY; gerando sem assinatura do updater"
     extra=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
 fi
-npx tauri build --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
+npx tauri build --verbose --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
 
 mkdir -p /out
 cp /cache/target/release/bundle/deb/*.deb /out/

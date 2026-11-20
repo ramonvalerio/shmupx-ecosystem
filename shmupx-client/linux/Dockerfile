@@ -26,5 +26,7 @@ RUN mkdir -p /opt/ffmpeg && curl -fsSL https://johnvansickle.com/ffmpeg/releases
 
 # O linuxdeploy do AppImage é um AppImage: sem FUSE dentro do contêiner, ele se extrai e roda.
 ENV APPIMAGE_EXTRACT_AND_RUN=1
+# O strip que vem no linuxdeploy é antigo e não lê as bibliotecas do Ubuntu 24.04 (seções .relr.dyn).
+ENV NO_STRIP=1
 
 WORKDIR /work
