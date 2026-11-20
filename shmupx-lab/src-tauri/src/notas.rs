@@ -12,7 +12,6 @@ use tokio::process::Command;
 
 use serde_json::{json, Value};
 
-use crate::ai::anthropic;
 use crate::instalador::pasta_client;
 
 const LIMITE_SEM_BASE: usize = 15;
@@ -27,7 +26,7 @@ pub struct NotasDoClient {
     pub commits: usize,
     /// As linhas foram reescritas pela IA para o jogador (senão, são os assuntos dos commits).
     pub rewritten: bool,
-    /// Por que a reescrita não aconteceu (sem chave, falha de rede…).
+    /// Por que a reescrita não aconteceu (Claude Code ausente, sem login…).
     pub rewrite_error: Option<String>,
 }
 
@@ -51,30 +50,64 @@ fn esquema() -> Value {
     })
 }
 
-/// Reescreve os commits (técnicos) em notas curtas para o jogador.
+/// Executável do Claude Code: no Windows o npm instala um `.cmd`.
+const CLAUDE: &str = if cfg!(windows) { "claude.cmd" } else { "claude" };
+const TEMPO_MAXIMO: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Reescreve os commits (técnicos) em notas curtas para o jogador, pelo Claude Code instalado no
+/// PC (`claude -p`), com o login da assinatura: sem chave de API. O pedido vai pelo stdin; a
+/// resposta volta em JSON validado pelo esquema. Sem ferramentas, sem MCP, sem sessão salva.
 async fn para_o_jogador(features: &[String], fixes: &[String]) -> Result<(Vec<String>, Vec<String>), String> {
-    let config = anthropic::Config::do_ambiente()?;
-    let entrada = format!(
-        "Novidades nos commits:
+    use tokio::io::AsyncWriteExt;
+    let itens = |linhas: &[String]| linhas.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("
+");
+    let pedido = format!(
+        "{INSTRUCOES}
+
+Novidades nos commits:
 {}
 
 Correções nos commits:
-{}",
-        features.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("
-"),
-        fixes.iter().map(|l| format!("- {l}")).collect::<Vec<_>>().join("
-"),
+{}
+
+Responda só com o JSON pedido.",
+        itens(features),
+        itens(fixes)
     );
-    let corpo = json!({
-        "model": config.modelo,
-        "max_tokens": 2000,
-        "system": INSTRUCOES,
-        "messages": [{ "role": "user", "content": entrada }],
-        "output_config": { "effort": "low", "format": { "type": "json_schema", "schema": esquema() } },
-    });
-    let resposta = anthropic::enviar(&config, &corpo).await?;
-    let notas: Value = serde_json::from_str(&anthropic::texto_da_resposta(&resposta))
-        .map_err(|e| format!("resposta da IA em formato inesperado: {e}"))?;
+    // Pasta neutra: o Claude Code não carrega CLAUDE.md nem configurações de nenhum projeto.
+    let pasta = std::env::temp_dir();
+    let mut comando = Command::new(CLAUDE);
+    // App de janela: sem isso o Windows abre um console preto enquanto o Claude Code roda.
+    #[cfg(windows)]
+    comando.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut processo = comando
+        .current_dir(&pasta)
+        .args(["-p", "--output-format", "json", "--json-schema", &esquema().to_string()])
+        .args(["--tools", "", "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| format!("Claude Code (claude) indisponível: {e}"))?;
+    if let Some(mut entrada) = processo.stdin.take() {
+        entrada.write_all(pedido.as_bytes()).await.map_err(|e| format!("falha ao falar com o Claude Code: {e}"))?;
+    }
+    let saida = tokio::time::timeout(TEMPO_MAXIMO, processo.wait_with_output())
+        .await
+        .map_err(|_| "o Claude Code demorou demais para responder".to_string())?
+        .map_err(|e| format!("falha ao rodar o Claude Code: {e}"))?;
+    let resposta: Value = serde_json::from_slice(&saida.stdout).map_err(|_| {
+        let erro = String::from_utf8_lossy(&saida.stderr);
+        format!("o Claude Code não respondeu ({})", erro.trim().lines().last().unwrap_or("verifique se está instalado e logado"))
+    })?;
+    if resposta["is_error"].as_bool().unwrap_or(false) {
+        return Err(format!("Claude Code: {}", resposta["result"].as_str().unwrap_or("erro sem detalhe")));
+    }
+    let notas = match &resposta["structured_output"] {
+        Value::Object(_) => resposta["structured_output"].clone(),
+        _ => serde_json::from_str(resposta["result"].as_str().unwrap_or("")).map_err(|e| format!("resposta do Claude Code em formato inesperado: {e}"))?,
+    };
     let lista = |campo: &str| -> Vec<String> {
         notas[campo]
             .as_array()
@@ -194,6 +227,21 @@ pub async fn notas_do_client(versao_alvo: String) -> Result<NotasDoClient, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Chama o Claude Code de verdade (gasta do plano): `cargo test -- --ignored claude_code`.
+    #[tokio::test]
+    #[ignore = "usa o Claude Code instalado e logado"]
+    async fn claude_code_reescreve_para_o_jogador() {
+        let (features, fixes) = para_o_jogador(
+            &["Chat da sala em tempo real, ranking dinamico, auto-update e instalador com motor e FFmpeg".into(), "Fichas e gameplays no Firestore (ADR 005)".into()],
+            &[],
+        )
+        .await
+        .unwrap();
+        println!("{features:?} {fixes:?}");
+        assert!(!features.is_empty());
+        assert!(!features.iter().any(|f| f.contains("Firestore") || f.contains("FFmpeg") || f.contains("ADR")));
+    }
 
     #[test]
     fn tipos_viram_secoes() {
