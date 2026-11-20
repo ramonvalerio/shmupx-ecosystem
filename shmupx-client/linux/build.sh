@@ -50,6 +50,11 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
     echo "aviso: sem TAURI_SIGNING_PRIVATE_KEY; gerando sem assinatura do updater"
     extra=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
 fi
+# O linuxdeploy (AppImage) resolve as dependências de todo ELF do pacote, inclusive das bibliotecas
+# do motor (PyInstaller), que se acham entre si pelo `$ORIGIN`. Ele não segue `$ORIGIN`: mostra
+# essas pastas a ele.
+LD_LIBRARY_PATH="$(find "$saida/validator" -name '*.so*' -printf '%h\n' | sort -u | paste -sd:)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH
 npx tauri build --verbose --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
 
 mkdir -p /out
