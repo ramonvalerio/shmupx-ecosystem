@@ -1,6 +1,7 @@
 /** Mesmos valores que o backend aceita em `games/{id}` (shmupx-backend, `services/catalogo.rs`). */
 export const PLATFORMS = [
   { value: "steam", label: "Steam" },
+  { value: "mister", label: "MiSTer FPGA" },
   { value: "megadrive", label: "Mega Drive" },
   { value: "neogeo", label: "Neo Geo" },
   { value: "arcade", label: "Arcade" },

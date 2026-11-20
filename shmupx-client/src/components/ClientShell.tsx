@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GameRoom } from "../types/room";
 import { EventsPage, HelpPage, HomePage, RankingPage, type Section } from "./ClientPages";
 import { ProfilePage, SubmissionsPage, SubscriptionPage } from "./AccountPages";
@@ -7,7 +7,7 @@ import { useBigPicture } from "./useBigPicture";
 import type { SessionRun } from "../types/submission";
 import CollectionPane from "./CollectionPane";
 import RoomRankingView from "./RoomRankingView";
-import RoomTabs from "./RoomTabs";
+import { useDragReorder } from "./useDragReorder";
 import SettingsPage from "./SettingsPage";
 import { readPreferences, PREFERENCES_KEY } from "./settingsState";
 import NotificationBell from "./NotificationBell";
@@ -17,23 +17,13 @@ import { useAutoUpdate } from "../data/useAutoUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 
-// `hidden`: fora do menu por enquanto; a tela continua existindo e abre por outros caminhos.
-const NAVIGATION: { id: Section; icon: string; label: string; hidden?: boolean }[] = [
-  { id: "home", icon: "⌂", label: "Início" },
-  { id: "collection", icon: "▦", label: "Coleção" },
-  { id: "events", icon: "◇", label: "Eventos", hidden: true },
-  { id: "ranking", icon: "☆", label: "Ranking", hidden: true },
-  { id: "submissions", icon: "↑", label: "Submissões", hidden: true },
-  { id: "settings", icon: "⚙", label: "Configurações" },
-  { id: "help", icon: "?", label: "Ajuda", hidden: true },
-];
 interface ClientShellProps {
   rooms: GameRoom[];
   selectedRoomId: string | null;
   recordingRoomId: string | null;
   onSelectRoom: (id: string) => void;
   /** Conteúdo da sala de um jogo; `openRanking` troca a aba para o ranking do jogo. */
-  renderRoom: (room: GameRoom, actions: { openRanking: () => void }) => ReactNode;
+  renderRoom: (room: GameRoom, actions: { openRanking: () => void; showCollection: () => void }) => ReactNode;
   runs: SessionRun[];
   profile: PlayerProfile;
   onProfile: (profile: PlayerProfile) => void;
@@ -43,9 +33,23 @@ interface ClientShellProps {
 export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, onSelectRoom, renderRoom, runs, profile, onProfile, onSignOut }: ClientShellProps) {
   const { t, setLanguage } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
-  const [section, setSection] = useState<Section>(() => preferences.startup);
+  // O app sempre abre na Coleção (a tela principal).
+  const [section, setSection] = useState<Section>("collection");
   const [storageError, setStorageError] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  // O menu do perfil fecha com um clique fora dele (o botão do avatar alterna sozinho).
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (profileMenuRef.current?.contains(target) || profileButtonRef.current?.contains(target)) return;
+      setProfileMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
+  }, [profileMenuOpen]);
   const bigPicture = useBigPicture(preferences.startupBigPicture);
   const recordingRoom = rooms.find((room) => room.id === recordingRoomId);
   const notifications = useNotifications();
@@ -68,6 +72,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [rankingRoomIds, setRankingRoomIds] = useState<string[]>([]);
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
+  // Menu lateral = os jogos abertos, na mesma ordem das abas; arrastar ali reordena as abas também.
+  const railDrag = useDragReorder({ ids: openRoomIds, onReorder: setOpenRoomIds, axis: "y" });
 
   // Um jogo despublicado sai do catálogo: a aba dele fecha.
   useEffect(() => {
@@ -102,10 +108,33 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
       <nav className="navigation-rail" aria-label={t("Navegação principal")}>
-        <div className="navigation-tabs">{NAVIGATION.filter((item) => !item.hidden).map((item) => <button type="button" key={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => setSection(item.id)}><span aria-hidden="true">{item.icon}</span> {t(item.label)}</button>)}</div>
+        {/* Menu lateral: só os jogos abertos (os mesmos das abas da sala). A Coleção, o Dashboard e as
+            Configurações ficam fora daqui (aba "← Coleção" e menu do perfil). */}
+        <div ref={railDrag.listRef} className="navigation-tabs">
+          {openRoomIds.map((id) => {
+            const room = rooms.find((candidate) => candidate.id === id);
+            if (!room) return null;
+            // O item (não girado) é o que se arrasta; o botão dentro dele é girado 180° (texto vertical).
+            return <div key={id} ref={railDrag.register(id)} className={`rail-room-item ${railDrag.draggingId === id ? "is-dragging" : ""}`} style={railDrag.styleFor(id)}
+              onPointerDown={(event) => railDrag.onPointerDown(event, id, ".rail-room-close")}>
+              <button type="button" className="rail-room" title={room.title} aria-current={section === "collection" && activeRoomId === id ? "page" : undefined}
+                onClick={() => { if (railDrag.consumeClick()) return; setSection("collection"); activateRoom(id); }}>
+                {recordingRoomId === id && <span className="rail-room-recording" aria-label={t("Gravando")} />}
+                <span className="rail-room-title">{room.title}</span>
+              </button>
+              <button type="button" className="rail-room-close" aria-label={t("Fechar sala de {game}", { game: room.title })} title={t("Fechar")} onClick={() => closeRoom(id)}>×</button>
+            </div>;
+          })}
+        </div>
         <div className="profile-menu-anchor">
-          <button className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}><img className="avatar-img" src="/img/avatar-default.png" alt="" /></button>
-          {profileMenuOpen && <div id="profile-actions" className="profile-menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}><strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span><button onClick={() => { setSection("profile"); setProfileMenuOpen(false); }}>{t("Meu perfil")}</button><button onClick={() => { setSection("subscription"); setProfileMenuOpen(false); }}>{t("Assinatura")}</button><button onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button><button data-menu-close onClick={() => setProfileMenuOpen(false)}>{t("Fechar")}</button></div>}
+          <button ref={profileButtonRef} className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}><img className="avatar-img" src="/img/avatar-default.png" alt="" /></button>
+          {profileMenuOpen && <div id="profile-actions" ref={profileMenuRef} className="profile-menu" role="menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}>
+            <strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span>
+            {([["profile", "Meu perfil"], ["home", "Dashboard"], ["settings", "Configurações"], ["subscription", "Assinatura"]] as [Section, string][]).map(([id, label]) => (
+              <button key={id} role="menuitem" onClick={() => { setSection(id); setProfileMenuOpen(false); }}>{t(label)}</button>
+            ))}
+            <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button>
+          </div>}
         </div>
       </nav>
       <header className="client-topbar">
@@ -113,7 +142,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
         {AMBIENTE === "prd" && import.meta.env.DEV && <span className="env-badge is-production" title={t("Versão em desenvolvimento ligada aos dados reais: o que você fizer vale para os jogadores.")}>{t("DEV · PRODUÇÃO")}</span>}
         <div className="client-status-group">
-          {live.state.status === "live" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
+          {live.state.status === "live" || live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
             <div className="client-status recording" role="status"><span className="status-dot" />{live.state.status === "live" ? t("AO VIVO") : t("PREPARANDO LIVE")}</div>
             <span className="client-status-caption">{live.state.status === "live" ? `${liveRoom?.title ?? "YouTube"}${liveCountdown ? ` · ${liveCountdown}` : ""}` : t("Conectando ao YouTube…")}</span>
           </> : <>
@@ -145,6 +174,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       </header>
       <div className="client-content">
       {bigPicture.error && <p className="mode-error" role="alert">{t(bigPicture.error)}</p>}
+      {/* Telas do menu do perfil: voltar para a Coleção (a tela principal). */}
+      {(section === "settings" || section === "profile" || section === "home" || section === "subscription") && (
+        <div className="page-back-bar"><button type="button" className="room-tabs-home" onClick={() => setSection("collection")}>{t("← Minhas coleções")}</button></div>
+      )}
       {section === "submissions" && <SubmissionsPage runs={runs} rooms={rooms} onOpenGame={openGame} />}
       {section === "profile" && <ProfilePage profile={profile} onProfile={onProfile} onSubscription={() => setSection("subscription")} />}
       {section === "subscription" && <SubscriptionPage onEvents={() => setSection("events")} />}
@@ -155,15 +188,15 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "help" && <HelpPage />}
       {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
       {/* Sala aberta (sem o ranking): o painel de jogadores sobe até a altura das abas. */}
-      <div className={`client-workspace ${activeRoom && !rankingRoomIds.includes(activeRoom.id) ? "has-room-aside" : ""}`} hidden={!isLibrary}>
-        <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} onReorder={setOpenRoomIds} />
+      <div className="client-workspace" hidden={!isLibrary}>
+        {/* As abas de cima saíram por enquanto: os jogos abertos ficam no menu lateral. */}
         <div className="room-stage">
           {activeRoom === null ? (
             <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => { openGame(id); setRanking(id, true); }} compact={false} bigPicture={bigPicture.active} />
           ) : rankingRoomIds.includes(activeRoom.id) ? (
             <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} onBack={() => setRanking(activeRoom.id, false)} />
           ) : (
-            renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true) })
+            renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true), showCollection: () => setActiveRoomId(null) })
           )}
         </div>
       </div>

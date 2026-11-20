@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { GameRoom } from "../types/room";
 import { useSteamLibrary } from "./steamLibrary";
+import { useEmulatorLibrary } from "./emulatorLibrary";
 
 /** Arte padrão do card: jogo sem imagem própria ("NO LOGO", a mesma do Client antigo). */
 export const DEFAULT_COVER = "/img/no_logo.png";
@@ -41,8 +42,8 @@ const ARTS: Record<string, string> = {
   "raiden": `${TITLES}/raiden.png`,
   "raiden-ii": `${TITLES}/raiden2.png`,
   "raiden-dx": `${TITLES}/raidendx.png`,
-  "aero-fighters": `${TITLES}/samuraia.png`,
-  "sonic-wings": `${TITLES}/samuraia.png`,
+  "samurai-aces": `${TITLES}/samuraia.png`,
+  "sengoku-ace": `${TITLES}/samuraia.png`,
   "truxton": `${TITLES}/truxton.png`,
   "truxton-ii": `${TITLES}/truxton2.png`,
   "zed-blade": `${TITLES}/zedblade.png`,
@@ -59,12 +60,12 @@ export function legacyArt(room: GameRoom): string | undefined {
  * Arte do jogo, em ordem: a capa enviada pelo Lab, a arte do Client antigo e a arte padrão do
  * ShmupX. Se uma falha ao carregar, passa para a próxima.
  *
- * `grayscale`: o jogo não foi importado pelo jogador (não está na biblioteca da Steam importada),
- * como no Client antigo. Só a importação da Steam existe hoje; jogos fora dela ficam em preto e
- * branco até a importação deles (Fightcade, emuladores) chegar.
+ * `grayscale`: o jogo não foi importado pelo jogador (não está na biblioteca da Steam nem tem o ROM
+ * na biblioteca do emulador), como no Client antigo.
  */
 export function useGameArt(room: GameRoom) {
   const { owns } = useSteamLibrary();
+  const emulator = useEmulatorLibrary();
   const candidates = [room.coverUrl, legacyArt(room), DEFAULT_COVER].filter((src): src is string => Boolean(src));
   const [index, setIndex] = useState(0);
   useEffect(() => setIndex(0), [room.id, room.coverUrl]);
@@ -73,7 +74,7 @@ export function useGameArt(room: GameRoom) {
     src,
     kind: src === DEFAULT_COVER ? "is-default" : src === room.coverUrl ? "has-cover" : "is-curated",
     // O "NO LOGO" é um aviso, não a arte do jogo: fica sempre colorido (como no Client antigo).
-    grayscale: src !== DEFAULT_COVER && !(room.steamAppId > 0 && owns(room.steamAppId)),
+    grayscale: src !== DEFAULT_COVER && !((room.steamAppId > 0 && owns(room.steamAppId)) || emulator.owns(room)),
     onError: () => setIndex((current) => Math.min(current + 1, candidates.length - 1)),
   };
 }

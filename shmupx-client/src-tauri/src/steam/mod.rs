@@ -4,6 +4,7 @@
 pub mod biblioteca;
 pub mod commands;
 pub mod detector;
+pub mod emulador;
 
 pub use commands::inicializar_jogo_steam;
 pub use detector::{DetectedGame, GameDetector, is_steam_running};

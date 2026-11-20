@@ -230,3 +230,70 @@
 .game-room-header > .game-room-cover.game-art img { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; }
 .game-room-header > .game-room-cover.game-art.is-default { background: #0b1114; }
 .game-room-header > .game-room-cover.game-art.is-default img { padding: 8px; }
+
+/* Experimento: gabinete arcade no cabeçalho da sala, no lugar do card. */
+.game-room-header > .arcade-cabinet.game-room-cabinet { width: 150px; max-width: none; margin: -4px 0 -6px; align-self: center; }
+
+/* Menu lateral com os jogos abertos (mesma ordem das abas). */
+.navigation-tabs .rail-room { height: auto; min-height: 90px; max-height: 170px; padding: 12px 0; border-top: 1px solid #ffffff10; color: #a8c1cc; font-size: 12px; }
+.navigation-tabs .rail-room-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-height: 146px; }
+.navigation-tabs .rail-room[aria-current] { color: var(--cyan); }
+.rail-room-recording { width: 7px; height: 7px; border-radius: 50%; background: #fd4851; box-shadow: 0 0 6px #fd4851; flex-shrink: 0; }
+
+/* Menu lateral: jogo ativo com a linha vermelha; arrastar com o mesmo efeito das abas. */
+.navigation-rail .navigation-tabs { position: relative; }
+.navigation-rail .rail-room[aria-current] { border-right-color: #fd4851; }
+.navigation-tabs .rail-room { touch-action: none; user-select: none; }
+.navigation-tabs .rail-room.is-dragging {
+  position: relative; z-index: 3; cursor: grabbing; background: #23292b; color: #f0fcff;
+  /* Rastro sutil (o botão está girado 180°: o sentido no eixo y se inverte). */
+  box-shadow: 0 calc(var(--trail, 1) * 10px) 14px -6px #57fcff45, 0 6px 16px #0009;
+}
+.navigation-tabs .rail-room:not(.is-dragging) { transition: background-color .12s, transform .15s ease-out; }
+
+/* Voltar para a Coleção nas telas do menu do perfil (mesmo botão-seta das abas). */
+.page-back-bar { display: flex; padding: 12px 20px 0; }
+.page-back-bar .room-tabs-home { margin-bottom: 0; }
+/* A barra fica fixa em cima e só a página rola embaixo dela (a página tinha height: 100%). */
+.client-content:has(> .page-back-bar) { display: flex; flex-direction: column; }
+.page-back-bar { flex-shrink: 0; }
+.page-back-bar + .client-page { flex: 1; min-height: 0; height: auto; padding-top: 16px; }
+
+/* Sem as abas de cima: a sala começa no topo e o painel de jogadores volta ao alinhamento normal. */
+.client-workspace > .room-stage > .game-room { padding-top: 16px; }
+.game-room-back { margin: 0 0 4px; padding: 0; border: 0; background: transparent; color: var(--cyan); font-size: 12px; letter-spacing: .04em; cursor: pointer; }
+.game-room-back:hover { text-decoration: underline; }
+/* Menu lateral: cada jogo com o × de fechar (aparece ao passar o mouse e no jogo ativo). */
+.navigation-tabs .rail-room-item { position: relative; flex-shrink: 0; border-top: 1px solid #ffffff10; touch-action: none; user-select: none; }
+.navigation-tabs .rail-room-item .rail-room { border-top: 0; }
+.navigation-rail .rail-room-close { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); writing-mode: horizontal-tb; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #fd4851; font-size: 14px; line-height: 1; opacity: 0; transition: opacity .12s; }
+.navigation-rail .rail-room-close:hover, .navigation-rail .rail-room-close:focus-visible { color: #ffffff; background: transparent; opacity: 1; }
+.navigation-tabs .rail-room-item:hover .rail-room-close, .navigation-tabs .rail-room-item:has(.rail-room[aria-current]) .rail-room-close { opacity: 1; }
+.navigation-tabs .rail-room { padding-top: 26px; }
+.navigation-tabs .rail-room-item.is-dragging { z-index: 3; }
+.navigation-tabs .rail-room-item.is-dragging .rail-room { cursor: grabbing; background: #23292b; color: #f0fcff; box-shadow: 0 calc(var(--trail, 1) * 10px) 14px -6px #57fcff45, 0 6px 16px #0009; }
+.navigation-tabs .rail-room-item.is-dragging .rail-room-close { opacity: 0; }
+.navigation-tabs .rail-room-item:not(.is-dragging) { transition: transform .15s ease-out; }
+
+/* Margens da sala pela metade (pedido: aproveitar o espaço). */
+.game-room { gap: 9px; padding: 8px 9px 8px 10px; }
+.client-workspace > .room-stage > .game-room { padding-top: 8px; }
+.game-room-column { gap: 6px; }
+.game-room-header { gap: 0 10px; padding: 6px 8px 6px 6px; }
+.game-room-main { gap: 7px; }
+.game-room-actions { gap: 6px; }
+.room-banner { padding: 4px 7px; }
+.chat-feed { padding: 7px 9px; gap: 7px; }
+.chat-composer { padding: 6px; gap: 6px; }
+.game-room-players { padding: 9px 6px 6px; }
+.game-room-players ul { margin-top: 8px; margin-left: 7px; gap: 4px; }
+.room-player { padding: 5px; }
+/* Sem margens: os blocos da sala encostam uns nos outros e nas bordas. */
+.game-room, .client-workspace > .room-stage > .game-room { gap: 0; padding: 0; }
+.game-room-column { gap: 0; }
+.chat-composer { margin: 0; }
+/* O botão do jogo é girado 180°: o espaço "de baixo" dele aparece em cima, onde fica o ×. */
+.navigation-tabs .rail-room { padding-top: 12px; padding-bottom: 40px; }
+.navigation-rail .rail-room-close { top: 6px; }
+/* Sem a linha ciano vertical à esquerda do cabeçalho da sala. */
+.game-room-header { border-left: 1px solid #ffffff1f; }

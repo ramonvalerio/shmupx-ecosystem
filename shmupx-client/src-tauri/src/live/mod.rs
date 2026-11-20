@@ -1,15 +1,17 @@
 //! START LIVE: transmissão ao vivo no YouTube do jogador (spec 033/036 do Client antigo).
 //!
-//! Fluxo: o backend cria a live (não listada, ou pública se o jogador marcar) e devolve o endereço
-//! RTMP → o FFmpeg captura o monitor principal (canvas fixo 1280×720, o jogo encaixado sem
-//! distorcer) com o som do sistema e envia → quando o YouTube acusa o vídeo chegando, a live vai
-//! ao ar → termina no END LIVE, se o FFmpeg cair, ou sozinha em 45 min (como a sessão de gravação).
+//! Fluxo: acha a janela do jogo da sala (ou abre o jogo pela Steam e espera) → o backend cria a
+//! live (não listada, ou pública se o jogador marcar) e devolve o endereço RTMP → só a janela do
+//! jogo é capturada (`janela`: quadro fixo 1280×720, o jogo encaixado sem distorcer, inclusive em
+//! tela cheia) e vai ao FFmpeg com o som do sistema → quando o YouTube acusa o vídeo chegando, a
+//! live vai ao ar → termina no END LIVE, se o jogo fechar, se o FFmpeg cair ou em 45 min.
 //!
 //! A live não grava MP4 (D-03301) e não convive com uma run gravando: as duas disputam a captura.
 //! O endereço RTMP leva a chave da transmissão: nunca vai para log (FFmpeg em `-loglevel error`).
 
 mod audio;
 pub mod commands;
+pub mod janela;
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -50,6 +52,8 @@ struct Corrente {
     broadcast_id: Option<String>,
     child: Option<Child>,
     parar_audio: Arc<AtomicBool>,
+    /// Captura da janela do jogo (para ao ser descartada).
+    captura: Option<janela::CapturaJanela>,
 }
 
 #[derive(Clone)]
@@ -95,25 +99,21 @@ fn agora_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-/// Canvas fixo 16:9 da live (spec 036): o monitor é encaixado sem distorcer, com barras pretas.
-fn filtro_canvas() -> &'static str {
-    "scale=1280:720:force_original_aspect_ratio=decrease:flags=bicubic,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p"
-}
-
-/// FFmpeg da live: áudio estéreo `f32le` pelo stdin (entrada 0) e a tela pelo `ddagrab` (GPU) ou,
-/// como reserva, pelo `gdigrab`. H.264 + AAC em FLV/RTMP, quadro-chave a cada 2 s (YouTube).
-fn spawn_ffmpeg(ingest: &str, taxa_audio: u32, gdi: bool, log: &PathBuf) -> std::io::Result<Child> {
+/// FFmpeg da live a partir da janela do jogo: vídeo BGRA 1280×720 a 60 quadros/s pelo stdin
+/// (entrada 0) e o áudio `f32le` por uma conexão TCP local (entrada 1, o FFmpeg escuta).
+fn spawn_ffmpeg_janela(ingest: &str, taxa_audio: u32, porta_audio: u16, log: &PathBuf) -> std::io::Result<Child> {
     let mut cmd = Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-loglevel", "error", "-y"]);
-    cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &taxa_audio.to_string(), "-ac", "2", "-i", "pipe:0"]);
-    if gdi {
-        cmd.args(["-thread_queue_size", "512", "-f", "gdigrab", "-framerate", "60", "-i", "desktop"]);
-        cmd.args(["-filter_complex", &format!("[1:v]{}[v]", filtro_canvas())]);
-    } else {
-        cmd.args(["-filter_complex", &format!("ddagrab=framerate=60,hwdownload,format=bgra,{}[v]", filtro_canvas())]);
-    }
-    cmd.args(["-map", "[v]", "-map", "0:a"]);
-    cmd.args(["-fps_mode", "cfr", "-r", "60"]);
+    let tamanho = format!("{}x{}", janela::LARGURA, janela::ALTURA);
+    let fps = janela::QUADROS_POR_SEGUNDO.to_string();
+    // Formatos conhecidos: sem análise das entradas. Analisar segurava o FFmpeg ~4 s antes de
+    // começar, o som acumulava nesse tempo e a live saía com o áudio atrasado.
+    let sem_analise = ["-probesize", "32", "-analyzeduration", "0"];
+    cmd.args(sem_analise);
+    cmd.args(["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
+    cmd.args(sem_analise);
+    cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &taxa_audio.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
+    cmd.args(["-map", "0:v", "-map", "1:a", "-vf", "format=yuv420p"]);
     cmd.args(["-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency"]);
     cmd.args(["-b:v", "4500k", "-maxrate", "4500k", "-bufsize", "9000k", "-g", "120", "-keyint_min", "120", "-sc_threshold", "0"]);
     cmd.args(["-c:a", "aac", "-b:a", "160k", "-ar", "48000"]);
@@ -123,6 +123,67 @@ fn spawn_ffmpeg(ingest: &str, taxa_audio: u32, gdi: bool, log: &PathBuf) -> std:
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     cmd.spawn()
+}
+
+/// Porta livre em 127.0.0.1 (para o FFmpeg escutar o áudio).
+fn porta_livre() -> Result<u16, String> {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .map_err(|e| format!("sem porta local para o áudio: {e}"))
+}
+
+/// Liga o sinal de parada da live (`parar_audio`) ao de cada escritor.
+fn ligar_parada(da_live: Arc<AtomicBool>, do_escritor: Arc<AtomicBool>) {
+    tokio::spawn(async move {
+        while !da_live.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        do_escritor.store(true, Ordering::SeqCst);
+    });
+}
+
+/// Envio a partir da janela do jogo: captura, FFmpeg, escritor de vídeo e de áudio.
+async fn abrir_envio_janela(ingest: &str, log: &PathBuf, parar_audio: Arc<AtomicBool>, tela: janela::Tela, pid: u32) -> Result<(Child, bool), String> {
+    let loopback = match audio::iniciar(pid) {
+        Ok(l) => Some(l),
+        Err(e) => {
+            log::warn!("live: sem som do sistema ({e}); a live sai com silêncio");
+            None
+        }
+    };
+    let silenciosa = loopback.is_none();
+    let taxa = loopback.as_ref().map_or(audio::TAXA_PADRAO, |l| l.taxa);
+    let porta = porta_livre()?;
+    let mut child = spawn_ffmpeg_janela(ingest, taxa, porta, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
+    let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de vídeo")?;
+    let stdin = std::fs::File::from(stdin.into_owned_handle().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
+    let parar = Arc::new(AtomicBool::new(false));
+    janela::alimentar(stdin, tela, parar.clone());
+    // O FFmpeg abre a entrada de áudio depois de ler o vídeo: tenta conectar por até 10 s.
+    let conexao = async {
+        for _ in 0..100 {
+            if let Ok(conexao) = tokio::net::TcpStream::connect(("127.0.0.1", porta)).await {
+                return Some(conexao);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        None
+    }
+    .await;
+    let Some(conexao) = conexao else {
+        parar.store(true, Ordering::SeqCst);
+        let _ = child.kill().await;
+        return Err(format!("o envio do vídeo não iniciou: {}", motivo_do_log(log)));
+    };
+    tokio::spawn(audio::alimentar(conexao, loopback, parar.clone()));
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    if child.try_wait().ok().flatten().is_some() {
+        parar.store(true, Ordering::SeqCst);
+        return Err(format!("o envio do vídeo não iniciou: {}", motivo_do_log(log)));
+    }
+    ligar_parada(parar_audio, parar);
+    Ok((child, silenciosa))
 }
 
 /// Primeira linha útil do log do FFmpeg (motivo de uma falha), sem nada que lembre a chave.
@@ -138,50 +199,10 @@ fn motivo_do_log(log: &PathBuf) -> String {
     }
 }
 
-/// Abre o FFmpeg (ddagrab; reserva gdigrab) com o áudio, e confirma que ficou de pé.
-async fn abrir_envio(ingest: &str, log: &PathBuf, parar_audio: Arc<AtomicBool>) -> Result<(Child, bool), String> {
-    let loopback = match audio::iniciar() {
-        Ok(l) => Some(l),
-        Err(e) => {
-            log::warn!("live: sem som do sistema ({e}); a live sai com silêncio");
-            None
-        }
-    };
-    let silenciosa = loopback.is_none();
-    let taxa = loopback.as_ref().map_or(audio::TAXA_PADRAO, |l| l.taxa);
-    let mut loopback = loopback;
-    for gdi in [false, true] {
-        let mut child = spawn_ffmpeg(ingest, taxa, gdi, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
-        let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de áudio")?;
-        let parar = Arc::new(AtomicBool::new(false));
-        let alimentador = tokio::spawn(audio::alimentar(stdin, loopback.take(), parar.clone()));
-        tokio::time::sleep(Duration::from_millis(2500)).await;
-        if child.try_wait().ok().flatten().is_none() {
-            // Liga o sinal de parada do áudio ao da live.
-            tokio::spawn(async move {
-                while !parar_audio.load(Ordering::SeqCst) {
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-                parar.store(true, Ordering::SeqCst);
-            });
-            return Ok((child, silenciosa));
-        }
-        parar.store(true, Ordering::SeqCst);
-        let _ = alimentador.await;
-        if gdi {
-            return Err(format!("a captura da tela não iniciou: {}", motivo_do_log(log)));
-        }
-        // O ddagrab falha em área de trabalho remota e drivers antigos: tenta pelo GDI. O loopback
-        // foi consumido pela tentativa; a reserva sai com o som de novo, se ele abrir.
-        loopback = audio::iniciar().ok();
-    }
-    unreachable!()
-}
-
 /// Leva a live do início ao ar. Erros viram `failed` com a mensagem; cancelar volta a `idle`.
-pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: String, titulo: String, publica: bool, log: PathBuf) {
+pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: String, titulo: String, publica: bool, steam_app_id: Option<u32>, log: PathBuf) {
     let resultado = tokio::select! {
-        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, publica, &log) => r,
+        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, publica, steam_app_id, &log) => r,
         _ = live.cancelar.notified() => Err(String::new()),
     };
     match resultado {
@@ -197,8 +218,45 @@ pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: S
     }
 }
 
-async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, log: &PathBuf) -> Result<(), String> {
+/// PIDs do jogo da sala: pela pasta de instalação da Steam ou, sem Steam, o emulador do Fightcade.
+fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
+    match steam_app_id.filter(|id| *id > 0) {
+        Some(app_id) => crate::steam::biblioteca::pasta_do_jogo(app_id).map(|p| crate::steam::detector::processos_na_pasta(&p)).unwrap_or_default(),
+        None => crate::steam::detector::processos_por_nome("fcadefbneo.exe"),
+    }
+}
+
+/// Janela do jogo: a que já está aberta ou, na Steam, abre o jogo e espera a janela (até 90 s).
+async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_app_id: Option<u32>) -> Result<windows_capture::window::Window, String> {
+    let procurar = move || {
+        let pids = pids_do_jogo(steam_app_id);
+        janela::janela_dos_processos(&pids)
+    };
+    if let Some(janela) = tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten() {
+        return Ok(janela);
+    }
+    let Some(app_id) = steam_app_id.filter(|id| *id > 0) else {
+        return Err("abra o jogo no emulador antes de começar a live".to_string());
+    };
+    live.definir(app, Estado { status: "waiting", ..base.clone() });
+    crate::steam::commands::launch_steam_uri(app_id).map_err(|e| format!("não foi possível abrir o jogo pela Steam: {e}"))?;
+    let prazo = tokio::time::Instant::now() + Duration::from_secs(90);
+    while tokio::time::Instant::now() < prazo {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        if let Some(janela) = tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten() {
+            // Dá um instante para o jogo terminar de montar a janela.
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            return Ok(tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten().unwrap_or(janela));
+        }
+    }
+    Err("a janela do jogo não apareceu; abra o jogo e tente de novo".to_string())
+}
+
+async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, steam_app_id: Option<u32>, log: &PathBuf) -> Result<(), String> {
     let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, ..Default::default() };
+    // Primeiro o jogo (a live captura só a janela dele), depois a live no YouTube.
+    let janela_do_jogo = achar_janela(app, live, &base, steam_app_id).await?;
+    let captura = janela::iniciar(janela_do_jogo)?;
     live.definir(app, Estado { status: "preparing", ..base.clone() });
     let criada = crate::net::backend::chamar_json(
         token,
@@ -210,12 +268,13 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     let texto = |c: &str| criada[c].as_str().map(str::to_string).ok_or_else(|| "resposta inesperada do servidor".to_string());
     let (broadcast_id, stream_id, ingest, watch) = (texto("broadcast_id")?, texto("stream_id")?, texto("ingest_url")?, texto("watch_url")?);
     let parar_audio = Arc::new(AtomicBool::new(false));
-    *live.corrente.lock().await = Some(Corrente { broadcast_id: Some(broadcast_id.clone()), child: None, parar_audio: parar_audio.clone() });
+    *live.corrente.lock().await = Some(Corrente { broadcast_id: Some(broadcast_id.clone()), child: None, parar_audio: parar_audio.clone(), captura: None });
 
     live.definir(app, Estado { status: "connecting", watch_url: Some(watch.clone()), ..base.clone() });
-    let (child, silenciosa) = abrir_envio(&ingest, log, parar_audio).await?;
+    let (child, silenciosa) = abrir_envio_janela(&ingest, log, parar_audio, captura.tela.clone(), captura.pid).await?;
     if let Some(c) = live.corrente.lock().await.as_mut() {
         c.child = Some(child);
+        c.captura = Some(captura);
     }
     live.alterar(app, |e| e.silent = silenciosa);
 
@@ -267,14 +326,17 @@ async fn vigiar(app: AppHandle, live: LiveState, token: String, log: PathBuf) {
                 .and_then(|c| c.child.as_mut())
                 .is_some_and(|child| child.try_wait().ok().flatten().is_none());
             if !vivo {
-                break;
+                break false;
+            }
+            if guarda.as_ref().and_then(|c| c.captura.as_ref()).is_some_and(|c| c.fechada.load(Ordering::SeqCst)) {
+                break true;
             }
         }
     };
     let (motivo_erro, pelo_tempo) = tokio::select! {
         _ = live.cancelar.notified() => (None, false),
         _ = tokio::time::sleep(LIMITE) => (None, true),
-        _ = caiu => (Some(format!("a transmissão caiu: {}", motivo_do_log(&log))), false),
+        jogo_fechou = caiu => if jogo_fechou { (None, false) } else { (Some(format!("a transmissão caiu: {}", motivo_do_log(&log))), false) },
     };
     live.alterar(&app, |e| e.status = "ending");
     let jogo = live.snapshot().game_id;
@@ -290,6 +352,7 @@ async fn vigiar(app: AppHandle, live: LiveState, token: String, log: PathBuf) {
 async fn encerrar_recursos(live: &LiveState, token: &str) {
     let Some(mut corrente) = live.corrente.lock().await.take() else { return };
     corrente.parar_audio.store(true, Ordering::SeqCst);
+    drop(corrente.captura.take());
     if let Some(mut child) = corrente.child.take() {
         let _ = child.kill().await;
     }
@@ -301,5 +364,40 @@ async fn encerrar_recursos(live: &LiveState, token: &str) {
             Some(serde_json::json!({ "status": "complete" })),
         )
         .await;
+    }
+}
+
+#[cfg(test)]
+mod neste_pc {
+    use super::*;
+
+    /// Envio completo para um arquivo local, com um tom tocando:
+    /// `cargo test -- --ignored envio_local --nocapture`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "depende de som e FFmpeg neste PC"]
+    async fn envio_local() {
+        let pasta = std::env::temp_dir();
+        let saida = pasta.join("shmupx_live_teste.flv");
+        let log = pasta.join("shmupx_live_teste.log");
+        let _ = std::fs::remove_file(&saida);
+        let tela: janela::Tela = Arc::new(Mutex::new(vec![128; janela::LARGURA * janela::ALTURA * 4]));
+        let tom = std::thread::spawn(|| {
+            use rodio::Source;
+            let (_s, h) = rodio::OutputStream::try_default().unwrap();
+            let sink = rodio::Sink::try_new(&h).unwrap();
+            sink.append(rodio::source::SineWave::new(440.0).take_duration(Duration::from_secs(5)).amplify(0.3));
+            sink.sleep_until_end();
+        });
+        let parar = Arc::new(AtomicBool::new(false));
+        let (mut child, silenciosa) = abrir_envio_janela(saida.to_str().unwrap(), &log, parar.clone(), tela, std::process::id()).await.unwrap();
+        println!("silenciosa: {silenciosa}");
+        let t0 = std::time::Instant::now();
+        tokio::time::sleep(Duration::from_secs(8)).await;
+        println!("no ar por {:?}", t0.elapsed());
+        parar.store(true, Ordering::SeqCst);
+        let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
+        tom.join().unwrap();
+        println!("log: {}", std::fs::read_to_string(&log).unwrap_or_default());
+        println!("saida: {} bytes", std::fs::metadata(&saida).map(|m| m.len()).unwrap_or(0));
     }
 }

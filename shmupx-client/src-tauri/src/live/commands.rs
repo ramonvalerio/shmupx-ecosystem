@@ -66,6 +66,8 @@ pub async fn live_iniciar(
     jogo_id: String,
     titulo: String,
     publica: bool,
+    // Jogo da sala: app_id da Steam (0/ausente = emulador). A live captura só a janela dele.
+    steam_app_id: Option<u32>,
 ) -> Result<(), String> {
     let token = token(&sessao)?;
     if live.ativa() {
@@ -83,7 +85,7 @@ pub async fn live_iniciar(
         let _ = std::fs::create_dir_all(pasta);
     }
     let estado = live.inner().clone();
-    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, publica, log));
+    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, publica, steam_app_id, log));
     Ok(())
 }
 

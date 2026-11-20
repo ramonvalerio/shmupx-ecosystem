@@ -47,7 +47,7 @@ pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32) -> Result
 
 /// Dispara o protocolo nativo `steam://run/<app_id>` usando o abridor de URIs do sistema
 /// operacional (equivalente ao "Executar" do Windows / `open` do macOS / `xdg-open` do Linux).
-fn launch_steam_uri(app_id: u32) -> io::Result<()> {
+pub(crate) fn launch_steam_uri(app_id: u32) -> io::Result<()> {
     let uri = format!("steam://run/{app_id}");
 
     #[cfg(target_os = "windows")]
@@ -111,4 +111,12 @@ pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {
     tauri::async_runtime::spawn_blocking(super::biblioteca::ler)
         .await
         .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] })
+}
+
+/// ROMs do emulador (Fightcade/FBNeo) deste PC. `pasta`: a do Fightcade, se o jogador escolheu uma.
+#[tauri::command]
+pub async fn emulador_biblioteca(pasta: Option<String>) -> super::emulador::BibliotecaEmulador {
+    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(pasta.as_deref()))
+        .await
+        .unwrap_or(super::emulador::BibliotecaEmulador { found: false, root: None, roms: vec![] })
 }

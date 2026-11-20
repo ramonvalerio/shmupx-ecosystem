@@ -53,6 +53,31 @@ pub fn processo_na_pasta(pasta: &std::path::Path) -> Option<u32> {
         .map(|(pid, _)| pid.as_u32())
 }
 
+/// Todos os processos rodando de dentro da pasta do jogo.
+pub fn processos_na_pasta(pasta: &std::path::Path) -> Vec<u32> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let pasta = pasta.to_string_lossy().to_lowercase();
+    system
+        .processes()
+        .iter()
+        .filter(|(_, p)| p.exe().is_some_and(|exe| exe.to_string_lossy().to_lowercase().starts_with(pasta.as_str())))
+        .map(|(pid, _)| pid.as_u32())
+        .collect()
+}
+
+/// Processos com este nome de executável (ex.: `fcadefbneo.exe`, o emulador do Fightcade).
+pub fn processos_por_nome(nome: &str) -> Vec<u32> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    system
+        .processes()
+        .iter()
+        .filter(|(_, p)| p.name().to_string_lossy().eq_ignore_ascii_case(nome))
+        .map(|(pid, _)| pid.as_u32())
+        .collect()
+}
+
 /// Snapshot dos PIDs ativos no sistema, usado como baseline para detectar o surgimento
 /// do processo do jogo após o disparo via `steam://run/<app_id>`.
 pub fn snapshot_pids() -> HashSet<u32> {

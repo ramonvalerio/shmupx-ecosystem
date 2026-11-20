@@ -84,7 +84,8 @@ export function useBigPicture(startInBigPicture = false) {
         if (dialog) dialog.querySelector<HTMLButtonElement>("[data-dialog-close]")?.click();
         else {
           const profileMenu = rootRef.current?.querySelector<HTMLElement>("#profile-actions");
-          if (profileMenu) profileMenu.querySelector<HTMLButtonElement>("[data-menu-close]")?.click();
+          // O menu do perfil não tem mais botão "Fechar": o "voltar" do controle manda um Esc.
+          if (profileMenu) profileMenu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
           else void changeMode(false);
         }
         return;

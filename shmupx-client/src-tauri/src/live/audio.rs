@@ -1,5 +1,7 @@
-//! Som do jogo para a live: loopback WASAPI do dispositivo de saída padrão (o que sai nas caixas
-//! ou no fone), sem microfone nem driver extra.
+//! Som do jogo para a live, sem microfone nem driver extra. Primeiro o loopback *do processo do
+//! jogo* (Windows 10 2004+): só o som do jogo, qualquer que seja a saída — inclusive dispositivos
+//! virtuais como o THX Spatial, cujo loopback de saída chega sempre mudo. Se não der, o loopback
+//! WASAPI da saída padrão (tudo o que toca no PC).
 //!
 //! Lições do Client antigo (spec 033, D-03309/D-03310): o loopback não entrega nada enquanto o
 //! jogo está em silêncio, e o FFmpeg trava o vídeo se o áudio parar de chegar. Por isso quem
@@ -15,7 +17,6 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 use tokio::io::AsyncWriteExt;
-use tokio::process::ChildStdin;
 
 /// Taxa usada quando não há loopback (só silêncio).
 pub const TAXA_PADRAO: u32 = 48_000;
@@ -38,9 +39,20 @@ fn travar<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Som do processo `pid` (e dos filhos); sem ele, o da saída padrão.
+pub fn iniciar(pid: u32) -> Result<Loopback, String> {
+    if pid != 0 {
+        match processo::iniciar(pid) {
+            Ok(l) => return Ok(l),
+            Err(e) => log::warn!("live: sem o som do processo do jogo ({e}); usando a saída padrão"),
+        }
+    }
+    iniciar_saida()
+}
+
 /// Liga o loopback numa thread própria (o `cpal::Stream` não pode mudar de thread). Devolve a
 /// taxa do dispositivo; o áudio sai sempre em estéreo `f32`.
-pub fn iniciar() -> Result<Loopback, String> {
+fn iniciar_saida() -> Result<Loopback, String> {
     let amostras = Arc::new(Mutex::new(VecDeque::<f32>::new()));
     let parar = Arc::new(AtomicBool::new(false));
     let (pronto_tx, pronto_rx) = std::sync::mpsc::channel::<Result<u32, String>>();
@@ -118,7 +130,7 @@ pub fn iniciar() -> Result<Loopback, String> {
 
 /// Escreve no FFmpeg o áudio no ritmo do relógio (estéreo `f32le`) até `parar` ou erro de escrita.
 /// Sem `loopback`, escreve só silêncio.
-pub async fn alimentar(mut destino: ChildStdin, loopback: Option<Loopback>, parar: Arc<AtomicBool>) {
+pub async fn alimentar<W: tokio::io::AsyncWrite + Unpin>(mut destino: W, loopback: Option<Loopback>, parar: Arc<AtomicBool>) {
     let taxa = loopback.as_ref().map_or(TAXA_PADRAO, |l| l.taxa) as f64;
     let inicio = Instant::now();
     let mut escritos: u64 = 0;
@@ -158,4 +170,185 @@ pub async fn alimentar(mut destino: ChildStdin, loopback: Option<Loopback>, para
         escritos += faltam as u64;
     }
     let _ = destino.shutdown().await;
+}
+
+/// Loopback do processo (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`).
+mod processo {
+    use std::mem::ManuallyDrop;
+    use std::sync::mpsc;
+
+    use windows::core::{implement, IUnknown, Interface, Ref, HRESULT, PCWSTR};
+    use windows::Win32::Foundation::{CloseHandle, E_FAIL, HANDLE};
+    use windows::Win32::Media::Audio::{
+        ActivateAudioInterfaceAsync, IActivateAudioInterfaceAsyncOperation, IActivateAudioInterfaceCompletionHandler,
+        IActivateAudioInterfaceCompletionHandler_Impl, IAudioCaptureClient, IAudioClient, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        AUDCLNT_STREAMFLAGS_LOOPBACK, AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, AUDIOCLIENT_ACTIVATION_PARAMS,
+        AUDIOCLIENT_ACTIVATION_PARAMS_0, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK, AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS,
+        PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, WAVEFORMATEX,
+    };
+    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, BLOB, COINIT_MULTITHREADED};
+    use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
+    use windows::Win32::System::Variant::VT_BLOB;
+
+    use super::*;
+
+    const TAXA: u32 = 48_000;
+    /// `WAVE_FORMAT_IEEE_FLOAT`.
+    const FLOAT: u16 = 3;
+
+    #[implement(IActivateAudioInterfaceCompletionHandler)]
+    struct Ativado(mpsc::Sender<()>);
+
+    impl IActivateAudioInterfaceCompletionHandler_Impl for Ativado_Impl {
+        fn ActivateCompleted(&self, _op: Ref<IActivateAudioInterfaceAsyncOperation>) -> windows::core::Result<()> {
+            let _ = self.0.send(());
+            Ok(())
+        }
+    }
+
+    struct Cliente {
+        cliente: IAudioClient,
+        captura: IAudioCaptureClient,
+        evento: HANDLE,
+    }
+
+    unsafe fn abrir(pid: u32) -> windows::core::Result<Cliente> {
+        unsafe {
+            let mut params = AUDIOCLIENT_ACTIVATION_PARAMS {
+                ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
+                Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
+                    ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS {
+                        TargetProcessId: pid,
+                        ProcessLoopbackMode: PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE,
+                    },
+                },
+            };
+            // O blob aponta para `params` na pilha: nada de `PropVariantClear` nele.
+            let mut prop = ManuallyDrop::new(PROPVARIANT::default());
+            {
+                let interno = &mut prop.Anonymous.Anonymous;
+                interno.vt = VT_BLOB;
+                interno.Anonymous.blob = BLOB {
+                    cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32,
+                    pBlobData: (&raw mut params).cast(),
+                };
+            }
+            let (tx, rx) = mpsc::channel();
+            let ao_ativar: IActivateAudioInterfaceCompletionHandler = Ativado(tx).into();
+            let op = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(&*prop), &ao_ativar)?;
+            rx.recv_timeout(Duration::from_secs(5)).map_err(|_| windows::core::Error::from(E_FAIL))?;
+            let mut resultado = HRESULT(0);
+            let mut interface: Option<IUnknown> = None;
+            op.GetActivateResult(&mut resultado, &mut interface)?;
+            resultado.ok()?;
+            let cliente: IAudioClient = interface.ok_or_else(|| windows::core::Error::from(E_FAIL))?.cast()?;
+            let formato = WAVEFORMATEX {
+                wFormatTag: FLOAT,
+                nChannels: 2,
+                nSamplesPerSec: TAXA,
+                nAvgBytesPerSec: TAXA * 8,
+                nBlockAlign: 8,
+                wBitsPerSample: 32,
+                cbSize: 0,
+            };
+            cliente.Initialize(
+                AUDCLNT_SHAREMODE_SHARED,
+                AUDCLNT_STREAMFLAGS_LOOPBACK
+                    | AUDCLNT_STREAMFLAGS_EVENTCALLBACK
+                    | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+                    | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+                200_000, // 20 ms
+                0,
+                &formato,
+                None,
+            )?;
+            let evento = CreateEventW(None, false, false, PCWSTR::null())?;
+            cliente.SetEventHandle(evento)?;
+            let captura: IAudioCaptureClient = cliente.GetService()?;
+            cliente.Start()?;
+            Ok(Cliente { cliente, captura, evento })
+        }
+    }
+
+    /// Lê os pacotes até `parar` (o processo só entrega pacotes enquanto toca algo).
+    unsafe fn ler(c: &Cliente, destino: &Mutex<VecDeque<f32>>, parar: &AtomicBool) -> windows::core::Result<()> {
+        unsafe {
+            while !parar.load(Ordering::SeqCst) {
+                WaitForSingleObject(c.evento, 100);
+                while c.captura.GetNextPacketSize()? > 0 {
+                    let mut dados: *mut u8 = std::ptr::null_mut();
+                    let (mut quadros, mut flags) = (0u32, 0u32);
+                    c.captura.GetBuffer(&mut dados, &mut quadros, &mut flags, None, None)?;
+                    {
+                        let mut buffer = travar(destino);
+                        if flags & (AUDCLNT_BUFFERFLAGS_SILENT.0 as u32) != 0 || dados.is_null() {
+                            buffer.extend(std::iter::repeat_n(0.0, quadros as usize * 2));
+                        } else {
+                            buffer.extend(std::slice::from_raw_parts(dados.cast::<f32>(), quadros as usize * 2));
+                        }
+                    }
+                    c.captura.ReleaseBuffer(quadros)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    pub fn iniciar(pid: u32) -> Result<Loopback, String> {
+        let amostras = Arc::new(Mutex::new(VecDeque::<f32>::new()));
+        let parar = Arc::new(AtomicBool::new(false));
+        let (pronto_tx, pronto_rx) = mpsc::channel::<Result<(), String>>();
+        let (destino, sinal) = (amostras.clone(), parar.clone());
+        std::thread::Builder::new()
+            .name("live-som-do-jogo".into())
+            .spawn(move || unsafe {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                match abrir(pid) {
+                    Ok(c) => {
+                        let _ = pronto_tx.send(Ok(()));
+                        if let Err(e) = ler(&c, &destino, &sinal) {
+                            log::warn!("live: o som do jogo parou: {e}");
+                        }
+                        let _ = c.cliente.Stop();
+                        let _ = CloseHandle(c.evento);
+                    }
+                    Err(e) => {
+                        let _ = pronto_tx.send(Err(e.to_string()));
+                    }
+                }
+                CoUninitialize();
+            })
+            .map_err(|e| format!("falha ao criar a thread de áudio: {e}"))?;
+        pronto_rx.recv_timeout(Duration::from_secs(6)).map_err(|_| "o som do jogo não respondeu".to_string())??;
+        Ok(Loopback { taxa: TAXA, amostras, parar })
+    }
+}
+
+#[cfg(test)]
+mod neste_pc {
+    use super::*;
+
+    /// Toca um tom neste processo e confere que o loopback do processo ouve:
+    /// `cargo test -- --ignored som_do_processo --nocapture`.
+    #[test]
+    #[ignore = "depende de som neste PC"]
+    fn som_do_processo() {
+        let lb = processo::iniciar(std::process::id()).unwrap();
+        let tom = std::thread::spawn(|| {
+            use rodio::Source;
+            let (_s, h) = rodio::OutputStream::try_default().unwrap();
+            let sink = rodio::Sink::try_new(&h).unwrap();
+            sink.append(rodio::source::SineWave::new(440.0).take_duration(Duration::from_secs(2)).amplify(0.3));
+            sink.sleep_until_end();
+        });
+        std::thread::sleep(Duration::from_millis(1500));
+        let b = travar(&lb.amostras);
+        let pico = b.iter().fold(0f32, |m, s| m.max(s.abs()));
+        println!("amostras {} pico {pico}", b.len());
+        drop(b);
+        tom.join().unwrap();
+        assert!(pico > 0.1);
+    }
 }

@@ -27,8 +27,8 @@ const PREFIXO_CAPA: &str = "https://www.shmupx.com/catalog/covers/";
 const URL_MAXIMA: usize = 300;
 
 /// Plataformas do catálogo (as mesmas do Lab antigo). Qualquer outro valor é recusado.
-const PLATAFORMAS: [&str; 8] =
-    ["steam", "megadrive", "neogeo", "arcade", "xbox360", "playstation", "switch", "other"];
+const PLATAFORMAS: [&str; 9] =
+    ["steam", "mister", "megadrive", "neogeo", "arcade", "xbox360", "playstation", "switch", "other"];
 /// Formatos competitivos que o jogo suporta: pontuação, 1 crédito e caravana.
 const MODOS: [&str; 3] = ["highscore", "1cc", "caravan"];
 

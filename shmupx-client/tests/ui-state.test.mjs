@@ -85,7 +85,7 @@ test("saved collection preferences reject malformed values and deduplicate favor
 
 const { defaultPreferences, validatePreferences } = await sourceModule("../src/components/settingsState.ts");
 test("interface preferences migrate existing theme and density without inventing a startup mode", () => {
-  assert.deepEqual(validatePreferences({appearance:"dark",compact:true}), {appearance:"dark",compact:true,startup:"home",startupBigPicture:false,language:"pt-BR"});
+  assert.deepEqual(validatePreferences({appearance:"dark",compact:true}), {appearance:"dark",compact:true,startup:"collection",startupBigPicture:false,language:"pt-BR"});
   assert.deepEqual(validatePreferences({appearance:"light",compact:false,startup:"collection",startupBigPicture:true,language:"pt-BR"}), {appearance:"light",compact:false,startup:"collection",startupBigPicture:true,language:"pt-BR"});
 });
 test("invalid startup, theme and boolean settings fall back to safe defaults", () => {

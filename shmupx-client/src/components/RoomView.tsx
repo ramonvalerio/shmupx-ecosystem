@@ -8,6 +8,7 @@ import type { SessionRun } from "../types/submission";
 import type { ChatStatus } from "../data/useRoomChat";
 import { answer as robotxAnswer } from "../data/robotx";
 import { useGameArt } from "../data/gameArt";
+import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 
 export interface RoomViewProps {
@@ -24,6 +25,8 @@ export interface RoomViewProps {
   onSendMessage: (text: string) => void | Promise<void>;
   /** Abre o ranking deste jogo na mesma aba da sala. */
   onOpenRanking: () => void;
+  /** Volta para a Coleção (as abas de cima saíram). */
+  onShowCollection?: () => void;
   /** Run mais recente deste jogo nesta sessão: o aviso mostra o andamento e o desfecho. */
   lastRun?: SessionRun;
   /** Motivo de a última tentativa de gravação não ter começado (ex.: FFmpeg, ficha). */
@@ -85,7 +88,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError }: RoomViewProps) {
+export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, onShowCollection, lastRun, startError }: RoomViewProps) {
   const { t } = useI18n();
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -169,7 +172,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     setLiveError(null);
     try {
       if (liveOn) await live.stop();
-      else await live.start(room.id, `${room.title} · ShmupX`, publicLive);
+      else await live.start(room.id, `${room.title} · ShmupX`, publicLive, room.steamAppId);
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : String(error));
     }
@@ -180,7 +183,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     ? t("Conecte seu canal em Configurações › Integrações para transmitir.")
     : isRecording ? t("Termine a gravação da run antes de começar uma live.")
     : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : undefined;
-  const liveLabel = live.state.status === "preparing" ? t("Criando a live…")
+  const liveLabel = live.state.status === "waiting" ? t("Abrindo o jogo…")
+    : live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
     : live.state.status === "ending" ? t("Encerrando…")
     : liveOn ? t("End live") : t("Start live");
@@ -214,9 +218,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
       <div className="game-room-column">
         <header className="game-room-header">
-          <GameArt room={room} className="game-room-cover" />
+          {/* Experimento: o gabinete arcade no lugar do card da arte. */}
+          <ArcadeCabinet room={room} className="game-room-cabinet" />
           <div className="game-room-main">
             <div className="game-room-title">
+              {onShowCollection && <button type="button" className="game-room-back" onClick={onShowCollection}>{t("← Minhas coleções")}</button>}
               <h1 title={room.title}>{room.title}</h1>
               <p>{t("Chat da sala em tempo real · presença simulada (demonstração)")}</p>
             </div>
@@ -243,7 +249,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           </p>
         )}
         {liveHere && live.state.status === "live" && live.state.silent && <p className="room-banner warning">{t("Não foi possível capturar o som do sistema: a live está sem áudio do jogo.")}</p>}
-        {liveHere && (live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a tela para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
+        {liveHere && (live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "waiting" ? t("Abrindo o jogo pela Steam; a live começa quando a janela do jogo aparecer.") : live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a janela do jogo para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
         {liveHere && live.state.status === "failed" && live.state.error && <p className="room-banner warning" role="alert">{t("A live não continuou: {reason}", { reason: t(live.state.error) })}</p>}
         {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}

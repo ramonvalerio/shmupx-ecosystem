@@ -4,7 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 
 /** Estado da live no YouTube (Rust `live::Estado`), atualizado pelo evento `live://estado`. */
 export interface LiveState {
-  status: "idle" | "preparing" | "connecting" | "live" | "ending" | "failed";
+  /** `waiting`: abrindo o jogo e esperando a janela dele (a live captura só a janela). */
+  status: "idle" | "waiting" | "preparing" | "connecting" | "live" | "ending" | "failed";
   game_id?: string | null;
   watch_url?: string | null;
   public: boolean;
@@ -33,8 +34,8 @@ export function useLive() {
     return () => { alive = false; stop?.(); };
   }, []);
 
-  const start = useCallback((gameId: string, title: string, isPublic: boolean) =>
-    invoke("live_iniciar", { jogoId: gameId, titulo: title, publica: isPublic }), []);
+  const start = useCallback((gameId: string, title: string, isPublic: boolean, steamAppId?: number) =>
+    invoke("live_iniciar", { jogoId: gameId, titulo: title, publica: isPublic, steamAppId: steamAppId && steamAppId > 0 ? steamAppId : null }), []);
   const stop = useCallback(() => invoke("live_encerrar"), []);
   const open = useCallback((url: string) => invoke("live_abrir", { url }), []);
   return { state, start, stop, open };

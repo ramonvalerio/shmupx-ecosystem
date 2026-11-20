@@ -5,15 +5,16 @@ import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
 import ImportGamesDialog from "./ImportGamesDialog";
 import { GameArt } from "./RoomView";
-import { useGameArt } from "../data/gameArt";
+import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
+import { useEmulatorLibrary } from "../data/emulatorLibrary";
 
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }
 
 /** Plataformas do catálogo (as mesmas do Lab/backend). */
 const PLATFORM_LABELS: Record<string, string> = {
-  steam: "Steam", megadrive: "Mega Drive", neogeo: "Neo Geo", arcade: "Arcade", xbox360: "Xbox 360",
+  steam: "Steam", mister: "MiSTer", megadrive: "Mega Drive", neogeo: "Neo Geo", arcade: "Arcade", xbox360: "Xbox 360",
   playstation: "PlayStation", switch: "Switch", other: "Outra",
 };
 /** Plataforma do jogo: a do catálogo; sem ela, Steam quando há app_id. */
@@ -21,13 +22,15 @@ export function platformOf(room: GameRoom): string | undefined {
   return room.platform ?? (room.steamAppId > 0 ? "steam" : undefined);
 }
 
-/** Grupo do filtro de plataforma: Steam ou emulador. */
-export function platformGroup(room: GameRoom): "steam" | "emulator" {
-  return platformOf(room) === "steam" ? "steam" : "emulator";
+/** Grupo do filtro de plataforma: Steam, MiSTer FPGA ou emulador (o resto). */
+export function platformGroup(room: GameRoom): "steam" | "mister" | "emulator" {
+  const platform = platformOf(room);
+  return platform === "steam" ? "steam" : platform === "mister" ? "mister" : "emulator";
 }
 const PLATFORM_FILTERS = [
   { id: "all", label: "Todas" },
   { id: "emulator", label: "Emulador" },
+  { id: "mister", label: "MiSTer" },
   { id: "steam", label: "Steam" },
 ];
 
@@ -58,49 +61,6 @@ function formatDuration(ms: number) {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-/** Gabinete arcade com a capa do jogo na tela. */
-function ArcadeCabinet({ room }: { room: GameRoom }) {
-  const art = useGameArt(room);
-  return (
-    <svg className="arcade-cabinet" viewBox="0 0 320 300" role="img" aria-label={room.title}>
-      {/* Inspirado no Sega Astro City: corpo claro de cantos redondos, marquise iluminada (sem texto),
-          monitor fundo em moldura escura, painel preto largo e porta da ficha embaixo. */}
-      <defs>
-        <clipPath id="cabinet-screen"><rect x="58" y="48" width="204" height="118" rx="5" /></clipPath>
-        <linearGradient id="astro-body" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#b9c0c6" /><stop offset=".18" stopColor="#e9ecef" /><stop offset=".82" stopColor="#e9ecef" /><stop offset="1" stopColor="#b9c0c6" /></linearGradient>
-        <linearGradient id="astro-marquee" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#e9fdff" /><stop offset="1" stopColor="#7fe7ee" /></linearGradient>
-        <linearGradient id="astro-glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffffff" stopOpacity=".1" /><stop offset=".45" stopColor="#ffffff" stopOpacity="0" /></linearGradient>
-      </defs>
-      {/* Corpo de cima: topo bem arredondado */}
-      <path d="M46 4 H274 Q300 4 301 30 L304 182 H16 L19 30 Q20 4 46 4 Z" fill="url(#astro-body)" stroke="#7d878e" strokeWidth="1.5" />
-      {/* Marquise iluminada, sem nome do jogo */}
-      <rect x="40" y="12" width="240" height="22" rx="8" fill="url(#astro-marquee)" stroke="#5fb8c0" strokeWidth="1" />
-      <rect x="40" y="12" width="240" height="22" rx="8" fill="none" stroke="#ffffff" strokeOpacity=".6" strokeWidth="1" transform="translate(0 1)" />
-      {/* Moldura escura e funda do monitor, com os alto-falantes nas laterais */}
-      <path d="M30 42 Q30 38 34 38 H286 Q290 38 290 42 L292 176 H28 Z" fill="#14181b" />
-      <g fill="#3a4248"><circle cx="34" cy="60" r="1.5" /><circle cx="34" cy="66" r="1.5" /><circle cx="34" cy="72" r="1.5" /><circle cx="34" cy="78" r="1.5" /><circle cx="34" cy="84" r="1.5" /><circle cx="40" cy="60" r="1.5" /><circle cx="40" cy="66" r="1.5" /><circle cx="40" cy="72" r="1.5" /><circle cx="40" cy="78" r="1.5" /><circle cx="40" cy="84" r="1.5" /><circle cx="46" cy="60" r="1.5" /><circle cx="46" cy="66" r="1.5" /><circle cx="46" cy="72" r="1.5" /><circle cx="46" cy="78" r="1.5" /><circle cx="46" cy="84" r="1.5" /><circle cx="52" cy="60" r="1.5" /><circle cx="52" cy="66" r="1.5" /><circle cx="52" cy="72" r="1.5" /><circle cx="52" cy="78" r="1.5" /><circle cx="52" cy="84" r="1.5" /><circle cx="262" cy="60" r="1.5" /><circle cx="262" cy="66" r="1.5" /><circle cx="262" cy="72" r="1.5" /><circle cx="262" cy="78" r="1.5" /><circle cx="262" cy="84" r="1.5" /><circle cx="268" cy="60" r="1.5" /><circle cx="268" cy="66" r="1.5" /><circle cx="268" cy="72" r="1.5" /><circle cx="268" cy="78" r="1.5" /><circle cx="268" cy="84" r="1.5" /><circle cx="274" cy="60" r="1.5" /><circle cx="274" cy="66" r="1.5" /><circle cx="274" cy="72" r="1.5" /><circle cx="274" cy="78" r="1.5" /><circle cx="274" cy="84" r="1.5" /><circle cx="280" cy="60" r="1.5" /><circle cx="280" cy="66" r="1.5" /><circle cx="280" cy="72" r="1.5" /><circle cx="280" cy="78" r="1.5" /><circle cx="280" cy="84" r="1.5" /></g>
-      <rect x="52" y="42" width="216" height="130" rx="10" fill="#050708" stroke="#2a3136" strokeWidth="2" />
-      <rect x="58" y="48" width="204" height="118" rx="5" fill="#000" />
-      <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} x="58" y="48" width="204" height="118" preserveAspectRatio="xMidYMid meet" clipPath="url(#cabinet-screen)" onError={art.onError} />
-      <rect x="58" y="48" width="204" height="118" rx="5" fill="url(#astro-glass)" pointerEvents="none" />
-      {/* Painel de controle preto, largo e projetado à frente */}
-      <path d="M12 182 H308 Q316 182 316 191 L317 207 Q317 216 308 216 H12 Q3 216 3 207 L4 191 Q4 182 12 182 Z" fill="#16191c" stroke="#7d878e" strokeWidth="1.5" />
-      <path d="M8 186 H312" stroke="#ffffff" strokeOpacity=".12" strokeWidth="1" />
-      <line x1="111" y1="203" x2="111" y2="191" stroke="#d7e4e8" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="111" cy="189" r="6" fill="#fd4851" />
-      <circle cx="149" cy="199" r="4.5" fill="#fd4851" /><circle cx="165" cy="199" r="4.5" fill="#fd4851" /><circle cx="181" cy="199" r="4.5" fill="#fd4851" />
-      <rect x="197" y="195" width="18" height="8" rx="4" fill="#2f7bff" />
-      <text x="206" y="210" textAnchor="middle" className="arcade-cabinet-label">START</text>
-      {/* Corpo de baixo claro, levemente afunilado, com cantos redondos, porta da ficha e rodapé escuro */}
-      <path d="M24 216 H296 L288 280 Q287 288 279 288 H41 Q33 288 32 280 Z" fill="url(#astro-body)" stroke="#7d878e" strokeWidth="1.5" />
-      <rect x="134" y="228" width="52" height="40" rx="4" fill="#2a2f33" stroke="#5c656b" strokeWidth="1.2" />
-      <rect x="146" y="235" width="7" height="16" rx="1.5" fill="#fd4851" />
-      <rect x="167" y="235" width="7" height="16" rx="1.5" fill="#fd4851" />
-      <rect x="148" y="257" width="24" height="4" rx="1" fill="#14181b" />
-      <rect x="36" y="288" width="248" height="8" rx="3" fill="#14181b" />
-    </svg>
-  );
-}
 
 export default function CollectionPane({ rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, onOpenRoom, onOpenRanking, compact, bigPicture }: {
   rooms: GameRoom[]; runs: SessionRun[]; selectedRoomId: string | null; recordingRoomId: string | null;
@@ -118,10 +78,15 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
+  const emulator = useEmulatorLibrary();
   const [ownedOnly, setOwnedOnly] = useState<"all" | "owned">("all");
   const [refreshing, setRefreshing] = useState(false);
-  /** Na biblioteca importada? `null` = biblioteca não importada ou jogo fora da Steam. */
-  const inLibrary = (room: GameRoom) => (steam.library && room.steamAppId > 0 ? steam.owns(room.steamAppId) : null);
+  /** Na biblioteca importada (Steam ou emulador)? `null` = nenhuma biblioteca importada. */
+  const inLibrary = (room: GameRoom) => {
+    if (room.steamAppId > 0 && steam.library && steam.owns(room.steamAppId)) return true;
+    if (emulator.owns(room)) return true;
+    return steam.library || emulator.library ? false : null;
+  };
   const libraryLabel = (room: GameRoom) => {
     const owned = inLibrary(room);
     return owned === null ? null : owned ? t("Na sua biblioteca") : t("Fora da sua biblioteca");
@@ -163,7 +128,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <span aria-hidden="true">⌕</span>
         </label>
         <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
-        {steam.library && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
+        {(steam.library || emulator.library) && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
         {!bigPicture && <div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>

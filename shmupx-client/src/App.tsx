@@ -111,6 +111,7 @@ export default function App() {
           isRecording={recordingRoomId === room.id}
           playerName={profileName}
           onOpenRanking={actions.openRanking}
+          onShowCollection={actions.showCollection}
           lastRun={runs.find((run) => run.gameId === room.id)}
           startError={startErrors[room.id]}
         />
