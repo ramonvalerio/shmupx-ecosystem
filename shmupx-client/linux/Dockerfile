@@ -1,7 +1,8 @@
-# Ambiente de build do ShmupX Client para Linux (.deb e AppImage). Ubuntu 22.04: glibc 2.35, o
-# pacote roda no Ubuntu 22.04+ / Debian 12+ / Mint 21+ / Fedora 36+.
-# Uso: scripts/bundle-linux.ps1 (monta o repositório em /src e grava os pacotes em /out).
-FROM ubuntu:22.04
+# Ambiente de build do ShmupX Client para Linux (.deb e AppImage). Ubuntu 24.04 (glibc 2.39): o
+# ONNX Runtime estático do `ort` exige glibc 2.38+. O pacote roda no Ubuntu 24.04+ / Mint 22+ /
+# Debian 13+ / Fedora 39+.
+# Uso: scripts/bundle-linux.ps1 ou o workflow client-linux (repositório em /src, pacotes em /out).
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
