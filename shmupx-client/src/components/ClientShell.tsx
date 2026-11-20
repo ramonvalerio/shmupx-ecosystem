@@ -107,7 +107,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       <header className="client-topbar">
         <img src="/img/logo.png" alt="ShmupX Client" />
         {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
-        <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO PARA JOGAR")}</div>
+        <div className="client-status-group">
+          <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
+          <span className="client-status-caption">{recordingRoom ? t("Gravando · {game}", { game: recordingRoom.title }) : t("Pronto para capturar")}</span>
+        </div>
         {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}
         {!autoUpdateActive && !notifications.version?.update_required && notifications.version?.update_available && notifications.version.latest && <p className="update-available">{t("Versão {version} disponível.", { version: notifications.version.latest })}</p>}
         {autoUpdate.state.status === "downloading" && (
