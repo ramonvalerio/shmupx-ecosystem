@@ -4,7 +4,8 @@ import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
 import ImportGamesDialog from "./ImportGamesDialog";
-import { DEFAULT_COVER, GameArt } from "./RoomView";
+import { GameArt } from "./RoomView";
+import { useGameArt } from "../data/gameArt";
 import { useSteamLibrary } from "../data/steamLibrary";
 
 const KEY = "shmupx.client.collection.v1";
@@ -49,25 +50,29 @@ function formatDuration(ms: number) {
 
 /** Gabinete arcade com a capa do jogo na tela. */
 function ArcadeCabinet({ room }: { room: GameRoom }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [room.coverUrl]);
-  const cover = room.coverUrl && !failed ? room.coverUrl : room.id === "dodonpachi" ? "/img/dodonpachi.png" : DEFAULT_COVER;
+  const art = useGameArt(room);
   return (
-    <svg className="arcade-cabinet" viewBox="0 0 320 250" role="img" aria-label={room.title}>
+    <svg className="arcade-cabinet" viewBox="0 0 320 268" role="img" aria-label={room.title}>
       <defs>
-        <clipPath id="cabinet-screen"><rect x="38" y="70" width="244" height="104" rx="2" /></clipPath>
+        <clipPath id="cabinet-screen"><rect x="38" y="20" width="244" height="138" rx="2" /></clipPath>
         <linearGradient id="cabinet-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#152126" /><stop offset="1" stopColor="#0b1013" /></linearGradient>
       </defs>
-      <path d="M22 4 H298 V186 L316 222 V246 H4 V222 L22 186 Z" fill="url(#cabinet-body)" stroke="#49c9c9" strokeWidth="2" strokeLinejoin="round" />
-      <rect x="30" y="12" width="260" height="40" fill="#0d1a1e" stroke="#49c9c9" strokeWidth="1.5" />
-      <text x="160" y="38" textAnchor="middle" className="arcade-cabinet-marquee">{room.title.toUpperCase().slice(0, 26)}</text>
-      <rect x="32" y="64" width="256" height="116" fill="#05080a" stroke="#2c4a50" strokeWidth="2" />
-      <image href={cover} x="38" y="70" width="244" height="104" preserveAspectRatio="xMidYMid slice" clipPath="url(#cabinet-screen)" onError={() => setFailed(true)} />
-      <path d="M22 186 H298 L316 222 H4 Z" fill="#101a1e" stroke="#49c9c9" strokeWidth="2" strokeLinejoin="round" />
-      <line x1="82" y1="204" x2="82" y2="192" stroke="#d7e4e8" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="82" cy="190" r="6" fill="#fd4851" />
-      <circle cx="226" cy="204" r="4.5" fill="#57fcff" /><circle cx="242" cy="204" r="4.5" fill="#57fcff" /><circle cx="258" cy="204" r="4.5" fill="#fd4851" />
-      <line x1="140" y1="236" x2="180" y2="236" stroke="#49c9c9" strokeWidth="2" opacity=".6" />
+      {/* Corpo e tela */}
+      <path d="M22 4 H298 V172 L316 206 V264 H4 V206 L22 172 Z" fill="url(#cabinet-body)" stroke="#49c9c9" strokeWidth="2" strokeLinejoin="round" />
+      <rect x="32" y="14" width="256" height="150" fill="#05080a" stroke="#2c4a50" strokeWidth="2" />
+      <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} x="38" y="20" width="244" height="138" preserveAspectRatio="xMidYMid slice" clipPath="url(#cabinet-screen)" onError={art.onError} />
+      {/* Painel: joystick, 3 botões vermelhos e START azul, juntos e centralizados */}
+      <path d="M22 172 H298 L316 206 H4 Z" fill="#101a1e" stroke="#49c9c9" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="111" y1="196" x2="111" y2="184" stroke="#d7e4e8" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="111" cy="182" r="6" fill="#fd4851" />
+      <circle cx="149" cy="191" r="4.5" fill="#fd4851" /><circle cx="165" cy="191" r="4.5" fill="#fd4851" /><circle cx="181" cy="191" r="4.5" fill="#fd4851" />
+      <rect x="197" y="187" width="18" height="8" rx="4" fill="#2f7bff" />
+      <text x="206" y="202" textAnchor="middle" className="arcade-cabinet-label">START</text>
+      {/* Porta da ficha: duas entradas iluminadas e o retorno de moedas */}
+      <rect x="134" y="216" width="52" height="38" rx="3" fill="#0d1418" stroke="#49c9c9" strokeWidth="1.5" />
+      <rect x="146" y="223" width="6" height="15" rx="1" fill="#fd4851" />
+      <rect x="168" y="223" width="6" height="15" rx="1" fill="#fd4851" />
+      <rect x="148" y="244" width="24" height="4" rx="1" fill="#2c4a50" />
     </svg>
   );
 }

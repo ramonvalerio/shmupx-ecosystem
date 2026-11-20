@@ -7,6 +7,7 @@ import type { ChatMessage, GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import type { ChatStatus } from "../data/useRoomChat";
 import { answer as robotxAnswer } from "../data/robotx";
+import { useGameArt } from "../data/gameArt";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 
 export interface RoomViewProps {
@@ -36,18 +37,15 @@ type SortBy = "score" | "name";
 const ROBOTX = "RobotX";
 const MENCAO_ROBOTX = /@robotx\b/i;
 
-/** Arte padrão do card: jogo sem imagem enviada pelo Lab. */
-export const DEFAULT_COVER = "/img/default-cover.svg";
+export { DEFAULT_COVER } from "../data/gameArt";
 
-/** Capa do jogo: a imagem do Lab, a arte curada antiga ou a arte padrão do ShmupX. */
+/** Capa do jogo (ver `useGameArt`): em preto e branco se o jogo da Steam não está na biblioteca. */
 export function GameArt({ room, className = "", decorative = false, children }: { room: GameRoom; className?: string; decorative?: boolean; children?: ReactNode }) {
   const { t } = useI18n();
-  const [failed, setFailed] = useState(false);
-  const src = room.coverUrl && !failed ? room.coverUrl : room.id === "dodonpachi" ? "/img/dodonpachi.png" : DEFAULT_COVER;
-  const kind = src === DEFAULT_COVER ? "is-default" : src === room.coverUrl ? "has-cover" : "";
+  const art = useGameArt(room);
   return (
-    <div className={`game-art art-${room.id} ${kind} ${className}`}>
-      <img src={src} alt={decorative ? "" : t("Capa de {game}", { game: room.title })} loading="lazy" onError={() => setFailed(true)} />
+    <div className={`game-art art-${room.id} ${art.kind} ${art.grayscale ? "is-not-owned" : ""} ${className}`}>
+      <img src={art.src} alt={decorative ? "" : t("Capa de {game}", { game: room.title })} loading="lazy" onError={art.onError} />
       {children}
     </div>
   );
@@ -187,6 +185,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     : live.state.status === "ending" ? t("Encerrando…")
     : liveOn ? t("End live") : t("Start live");
 
+  const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
+
   let mainLabel = "Iniciar Jogo via Steam";
   let mainAction = handleStartGame;
   let mainDisabled = isLaunching || room.steamAppId === 0;
@@ -214,27 +214,25 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
       <div className="game-room-column">
         <header className="game-room-header">
-          <div className="game-room-identity">
-            <GameArt room={room} className="game-room-cover" />
+          <GameArt room={room} className="game-room-cover" />
+          <div className="game-room-main">
             <div className="game-room-title">
               <h1 title={room.title}>{room.title}</h1>
               <p>{t("Chat da sala em tempo real · presença simulada (demonstração)")}</p>
             </div>
+            <div className="game-room-actions">
+              <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
+              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
+              <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
+                <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
+              </button>
+              <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
+                <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn} onChange={(event) => setPublicLive(event.target.checked)} />
+                {t("Live pública")}
+              </label>
+              <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
+            </div>
           </div>
-          <div className="game-room-actions">
-            <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
-            <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
-            <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
-              <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
-            </button>
-            <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
-              <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn} onChange={(event) => setPublicLive(event.target.checked)} />
-              {t("Live pública")}
-            </label>
-          </div>
-          <p className="game-room-tip">
-            {t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.")}
-          </p>
         </header>
 
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}

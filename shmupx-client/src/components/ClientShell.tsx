@@ -22,7 +22,7 @@ const NAVIGATION: { id: Section; icon: string; label: string; hidden?: boolean }
   { id: "home", icon: "⌂", label: "Início" },
   { id: "collection", icon: "▦", label: "Coleção" },
   { id: "events", icon: "◇", label: "Eventos", hidden: true },
-  { id: "ranking", icon: "☆", label: "Ranking" },
+  { id: "ranking", icon: "☆", label: "Ranking", hidden: true },
   { id: "submissions", icon: "↑", label: "Submissões", hidden: true },
   { id: "settings", icon: "⚙", label: "Configurações" },
   { id: "help", icon: "?", label: "Ajuda", hidden: true },
@@ -155,7 +155,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "help" && <HelpPage />}
       {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
       <div className="client-workspace" hidden={!isLibrary}>
-        <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} />
+        <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} onReorder={setOpenRoomIds} />
         <div className="room-stage">
           {activeRoom === null ? (
             <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => { openGame(id); setRanking(id, true); }} compact={false} bigPicture={bigPicture.active} />

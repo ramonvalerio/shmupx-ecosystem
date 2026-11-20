@@ -181,3 +181,11 @@ test("RobotX responde pela pergunta curada mais parecida e admite quando não sa
   assert.match(unknown.text, /Ainda não sei/);
   assert.deepEqual(robotxFromGame([{ q: "a", a: "b" }, { q: "" }, "x"]), [{ question: "a", answer: "b" }]);
 });
+
+const { moveTab } = await sourceModule("../src/components/tabOrder.ts");
+test("abas reordenam ao arrastar", () => {
+  assert.deepEqual(moveTab(["a", "b", "c"], "a", 2), ["b", "c", "a"]);
+  assert.deepEqual(moveTab(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
+  assert.deepEqual(moveTab(["a", "b", "c"], "b", -1), ["b", "a", "c"]);
+  assert.deepEqual(moveTab(["a", "b", "c"], "b", 9), ["a", "c", "b"]);
+});
