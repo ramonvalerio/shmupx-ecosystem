@@ -22,6 +22,9 @@ const TITULO_MAXIMO: usize = 80;
 const TEXTO_MAXIMO: usize = 80;
 const ANO_MINIMO: i64 = 1970;
 const ANO_MAXIMO: i64 = 2100;
+/// Capas do card no Client: só as que o Lab envia ao bucket do site (CloudFront).
+const PREFIXO_CAPA: &str = "https://www.shmupx.com/catalog/covers/";
+const URL_MAXIMA: usize = 300;
 
 /// Plataformas do catálogo (as mesmas do Lab antigo). Qualquer outro valor é recusado.
 const PLATAFORMAS: [&str; 8] =
@@ -51,6 +54,9 @@ pub struct JogoEntrada {
     pub platform: Option<String>,
     #[serde(default)]
     pub modes: Vec<String>,
+    /// Imagem do card (16:9, WebP), enviada pelo Lab. Ausente = cartão tipográfico.
+    #[serde(default)]
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, PartialEq)]
@@ -71,6 +77,8 @@ pub struct Jogo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     pub modes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_url: Option<String>,
 }
 
 /// Texto opcional aparado: vazio vira `None`; acima do limite é erro.
@@ -115,8 +123,17 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
             modes.push(modo);
         }
     }
+    let cover_url = entrada.cover_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+    if let Some(url) = &cover_url {
+        let nome = url.strip_prefix(PREFIXO_CAPA).unwrap_or("");
+        let nome_ok = !nome.is_empty() && nome.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) && !nome.contains("..");
+        if url.len() > URL_MAXIMA || !nome_ok {
+            return Err(AppError::bad_request(format!("cover_url deve ser uma imagem em {PREFIXO_CAPA}")));
+        }
+    }
     Ok(JogoEntrada {
         title,
+        cover_url,
         developer: texto_opcional(entrada.developer, "developer")?,
         publisher: texto_opcional(entrada.publisher, "publisher")?,
         genre: texto_opcional(entrada.genre, "genre")?,
@@ -128,7 +145,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
 
 /// Campos do catálogo que a gravação controla. Os opcionais ausentes na entrada estão na máscara
 /// mas não nos valores, o que os apaga do documento.
-const MASCARA: [&str; 11] = [
+const MASCARA: [&str; 12] = [
     "title",
     "steamAppId",
     "maxDurationSeconds",
@@ -140,6 +157,7 @@ const MASCARA: [&str; 11] = [
     "year",
     "platform",
     "modes",
+    "coverUrl",
 ];
 
 /// Cria ou atualiza `games/{id}`. Só toca os campos do catálogo, preservando o que outras
@@ -160,6 +178,7 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
         ("publisher", &entrada.publisher),
         ("genre", &entrada.genre),
         ("platform", &entrada.platform),
+        ("coverUrl", &entrada.cover_url),
     ] {
         if let Some(valor) = valor {
             inserir(nome, texto(valor));
@@ -184,6 +203,7 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
         year: entrada.year,
         platform: entrada.platform,
         modes: entrada.modes,
+        cover_url: entrada.cover_url,
     })
 }
 
@@ -203,11 +223,12 @@ fn nomes_dos_modos(modos: &[String]) -> String {
     if nomes.is_empty() { "nenhum".into() } else { nomes.join(", ") }
 }
 
-type DadosDoJogo<'a> = (&'a str, i64, Option<&'a str>, Option<&'a str>, Option<&'a str>, Option<i64>, Option<&'a str>);
+type DadosDoJogo<'a> =
+    (&'a str, i64, Option<&'a str>, Option<&'a str>, Option<&'a str>, Option<i64>, Option<&'a str>, Option<&'a str>);
 
 /// Informações exibidas do jogo, fora regras (duração e modos).
 fn dados_do_jogo(j: &Jogo) -> DadosDoJogo<'_> {
-    (&j.title, j.steam_app_id, j.developer.as_deref(), j.publisher.as_deref(), j.genre.as_deref(), j.year, j.platform.as_deref())
+    (&j.title, j.steam_app_id, j.developer.as_deref(), j.publisher.as_deref(), j.genre.as_deref(), j.year, j.platform.as_deref(), j.cover_url.as_deref())
 }
 
 /// O que uma gravação do jogo muda para os jogadores, em itens para o rascunho da próxima
@@ -268,6 +289,7 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         year: ler_inteiro(campos, "year"),
         platform: ler_texto(campos, "platform"),
         modes: ler_lista_de_textos(campos, "modes"),
+        cover_url: ler_texto(campos, "coverUrl"),
         id,
     }
 }
@@ -292,6 +314,19 @@ mod tests {
     fn entrada_valida_e_normalizada() {
         let ok = validar("earthion", entrada()).unwrap();
         assert_eq!(ok.title, "Earthion");
+    }
+
+    #[test]
+    fn capa_so_do_bucket_do_site() {
+        let com = |u: &str| validar("earthion", JogoEntrada { cover_url: Some(u.into()), ..entrada() });
+        assert_eq!(
+            com("https://www.shmupx.com/catalog/covers/earthion-1.webp").unwrap().cover_url.as_deref(),
+            Some("https://www.shmupx.com/catalog/covers/earthion-1.webp")
+        );
+        assert_eq!(com("  ").unwrap().cover_url, None);
+        assert!(com("https://evil.example/x.webp").is_err());
+        assert!(com("https://www.shmupx.com/catalog/covers/../x.webp").is_err());
+        assert!(com("https://www.shmupx.com/catalog/covers/").is_err());
     }
 
     #[test]

@@ -3,6 +3,9 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
 
+const texto = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
+const COVER_PREFIX = "https://www.shmupx.com/catalog/covers/";
+
 /** Documento `games/{gameId}` publicado pelo Lab (shmupx-backend, rota de admin) -> sala. */
 export function roomFromGame(id: string, data: Record<string, unknown>): GameRoom | null {
   if (typeof data.title !== "string" || !data.title) return null;
@@ -12,6 +15,13 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     // Sem presença em tempo real ainda: as telas rotulam este número como demonstração.
     playersOnline: 0,
     steamAppId: typeof data.steamAppId === "number" ? data.steamAppId : 0,
+    // Só capas do próprio site (o backend já recusa outras origens).
+    coverUrl: typeof data.coverUrl === "string" && data.coverUrl.startsWith(COVER_PREFIX) ? data.coverUrl : undefined,
+    platform: texto(data.platform),
+    developer: texto(data.developer),
+    publisher: texto(data.publisher),
+    genre: texto(data.genre),
+    year: typeof data.year === "number" ? data.year : undefined,
   };
 }
 

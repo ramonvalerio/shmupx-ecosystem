@@ -6,6 +6,7 @@ import { Field, Select, TextInput } from "../../components/ui/Field";
 import { IconAlert, IconClose } from "../../components/ui/Icons";
 import Switch from "../../components/ui/Switch";
 import AiAssist from "./AiAssist";
+import CoverField from "./CoverField";
 import { MODES, PLATFORMS, slugFromName } from "./options";
 
 interface GameEditorProps {
@@ -27,13 +28,14 @@ interface Draft {
   year: string;
   platform: string;
   modes: string[];
+  coverUrl: string;
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function toDraft(game: CatalogGame | null): Draft {
   if (!game) {
-    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", modes: [] };
+    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", modes: [], coverUrl: "" };
   }
   return {
     id: game.id,
@@ -47,6 +49,7 @@ function toDraft(game: CatalogGame | null): Draft {
     year: game.year ? String(game.year) : "",
     platform: game.platform ?? "",
     modes: game.modes,
+    coverUrl: game.cover_url ?? "",
   };
 }
 
@@ -137,6 +140,7 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
         year: draft.year.trim() ? Number(draft.year) : undefined,
         platform: draft.platform || undefined,
         modes: draft.modes,
+        cover_url: draft.coverUrl || undefined,
       });
       onSaved(saved);
     } catch (e) {
@@ -189,6 +193,10 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
                 />
               </Field>
             </div>
+          </Section>
+
+          <Section title="Card no Client">
+            <CoverField gameId={draft.id} title={draft.title.trim()} value={draft.coverUrl} onChange={(coverUrl) => patch({ coverUrl })} />
           </Section>
 
           <AiAssist title={draft.title} onApply={applySuggestion} />

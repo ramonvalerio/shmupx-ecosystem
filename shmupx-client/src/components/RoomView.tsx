@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ChatFeed from "./ChatFeed";
 import ChatInput from "./ChatInput";
@@ -34,12 +34,19 @@ type SortBy = "score" | "name";
 const ROBOTX = "RobotX";
 const MENCAO_ROBOTX = /@robotx\b/i;
 
-/** Capa do jogo: a arte curada quando existe, senão o cartão tipográfico. */
-export function GameArt({ room, className = "" }: { room: GameRoom; className?: string }) {
+/** Arte padrão do card: jogo sem imagem enviada pelo Lab. */
+export const DEFAULT_COVER = "/img/default-cover.svg";
+
+/** Capa do jogo: a imagem do Lab, a arte curada antiga ou a arte padrão do ShmupX. */
+export function GameArt({ room, className = "", decorative = false, children }: { room: GameRoom; className?: string; decorative?: boolean; children?: ReactNode }) {
   const { t } = useI18n();
+  const [failed, setFailed] = useState(false);
+  const src = room.coverUrl && !failed ? room.coverUrl : room.id === "dodonpachi" ? "/img/dodonpachi.png" : DEFAULT_COVER;
+  const kind = src === DEFAULT_COVER ? "is-default" : src === room.coverUrl ? "has-cover" : "";
   return (
-    <div className={`game-art art-${room.id} ${className}`}>
-      {room.id === "dodonpachi" ? <img src="/img/dodonpachi.png" alt={t("Capa de {game}", { game: room.title })} /> : <span>{room.title}</span>}
+    <div className={`game-art art-${room.id} ${kind} ${className}`}>
+      <img src={src} alt={decorative ? "" : t("Capa de {game}", { game: room.title })} loading="lazy" onError={() => setFailed(true)} />
+      {children}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 //! da Anthropic usando a chave do ambiente do PC (`ANTHROPIC_API_KEY`); nada disso passa pelo
 //! backend, pelo Firestore ou pela tela. O cache local evita pagar duas vezes pela mesma consulta.
 
-mod anthropic;
+pub(crate) mod anthropic;
 mod cache;
 pub mod commands;
 mod steam;

@@ -1,7 +1,9 @@
 pub mod ai;
 pub mod auth;
+pub mod capa;
 pub mod instalador;
 pub mod net;
+pub mod notas;
 pub mod validacao;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -13,8 +15,10 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       ai::commands::sugerir_jogo,
       auth::commands::login_google_desktop,
+      capa::publicar_capa,
       instalador::instalador_local,
       instalador::publicar_instalador,
+      notas::notas_do_client,
       validacao::commands::validacao_ambiente,
       validacao::commands::validacao_instalar_ytdlp,
       validacao::commands::validacao_definir_cookies,

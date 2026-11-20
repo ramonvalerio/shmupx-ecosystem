@@ -134,3 +134,4 @@
   .entrance-panel { justify-self: center; }
 }
 @media (max-width: 420px) { .login-screen { padding: 24px 16px; } .entrance-card { padding: 28px 24px; } }
+.game-art.has-cover img, .game-art.is-default img { object-fit: cover; }

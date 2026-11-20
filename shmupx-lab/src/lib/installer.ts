@@ -20,3 +20,14 @@ export function formatSize(bytes: number | undefined): string {
   if (!bytes) return "—";
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** Novidades/correções do Client lidas dos commits desde a versão anterior (git local). */
+export interface ClientNotes {
+  features: string[];
+  fixes: string[];
+  since?: string | null;
+  commits: number;
+  rewritten: boolean;
+  rewrite_error?: string | null;
+}
+export const getClientNotes = (versao: string) => invoke<ClientNotes>("notas_do_client", { versaoAlvo: versao });

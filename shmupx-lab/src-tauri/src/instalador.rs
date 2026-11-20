@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-const BUCKET: &str = "shmupx-frontend-prod-364037626379";
+pub(crate) const BUCKET: &str = "shmupx-frontend-prod-364037626379";
 const URL_DOWNLOADS: &str = "https://www.shmupx.com/downloads";
 
 /// Pasta do `shmupx-client`: `SHMUPX_CLIENT_DIR`, senão (em dev) a vizinha do Lab no ecosystem.
-fn pasta_client() -> Result<PathBuf, String> {
+pub(crate) fn pasta_client() -> Result<PathBuf, String> {
     let pasta = match std::env::var_os("SHMUPX_CLIENT_DIR") {
         Some(pasta) => PathBuf::from(pasta),
         None if cfg!(debug_assertions) => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shmupx-client"),
@@ -84,12 +84,12 @@ struct SegredoDados {
 }
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
-struct CredenciaisAws {
-    AWS_ACCESS_KEY_ID: String,
-    AWS_SECRET_ACCESS_KEY: String,
+pub(crate) struct CredenciaisAws {
+    pub AWS_ACCESS_KEY_ID: String,
+    pub AWS_SECRET_ACCESS_KEY: String,
 }
 
-async fn credenciais_aws() -> Result<CredenciaisAws, String> {
+pub(crate) async fn credenciais_aws() -> Result<CredenciaisAws, String> {
     let saida = Command::new("bao")
         .args(["kv", "get", "-format=json", "-mount=shmupx", "infra/aws"])
         .env("BAO_ADDR", std::env::var("BAO_ADDR").unwrap_or_else(|_| "http://127.0.0.1:8200".into()))

@@ -15,6 +15,8 @@ export interface CatalogGame {
   platform?: string;
   /** Subconjunto de `MODES`. */
   modes: string[];
+  /** Imagem do card no Client (WebP 16:9 em www.shmupx.com/catalog/covers/). */
+  cover_url?: string;
 }
 
 /** Os metadados opcionais substituem os anteriores: o que não for enviado é apagado. */

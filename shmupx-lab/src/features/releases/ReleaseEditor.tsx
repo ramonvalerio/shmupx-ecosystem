@@ -14,7 +14,7 @@ import {
   type ReleaseLead,
   type ReleaseSection,
 } from "../../lib/backend";
-import { formatSize, getLocalInstaller, publishInstaller, type LocalInstaller } from "../../lib/installer";
+import { formatSize, getClientNotes, getLocalInstaller, publishInstaller, type LocalInstaller } from "../../lib/installer";
 import type { ScriptInfo } from "../../lib/validation";
 import { getAmbiente } from "../../auth/firebase";
 import { emailLabel, formatDateTime, fromLines, LEADS, noticePreview, STATUS_LABEL, STATUS_TONE, toLines } from "./options";
@@ -132,6 +132,38 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- salva quando o conteúdo muda
   }, [title, features, fixes, rules, included, mandatory]);
+
+  // Notas pelos commits do Client: preenche sozinho um rascunho vazio; o botão junta o que faltar.
+  const [notesInfo, setNotesInfo] = useState<string | null>(null);
+  const [notesBusy, setNotesBusy] = useState(false);
+  async function fillFromCommits(onlyIfEmpty: boolean) {
+    if (!editable) return;
+    setNotesBusy(true);
+    try {
+      const notes = await getClientNotes(version.trim());
+      if (onlyIfEmpty && (fromLines(features).length || fromLines(fixes).length || fromLines(rules).length)) return;
+      // Gerar de novo substitui novidades e correções (as regras são sempre escritas à mão).
+      setFeatures(toLines(notes.features));
+      setFixes(toLines(notes.fixes));
+      if (!title.trim()) setTitle(`Versão ${version.trim()}`);
+      const total = notes.features.length + notes.fixes.length;
+      setNotesInfo(
+        !notes.rewritten && total > 0
+          ? `Texto dos commits, sem a reescrita para o jogador (${notes.rewrite_error ?? "IA indisponível"}). Revise antes de agendar.`
+          : total === 0
+          ? `Nenhuma novidade ou correção nos commits do Client${notes.since ? ` desde ${notes.since}` : ""}.`
+          : `Resumo para o jogador de ${notes.commits} ${notes.commits === 1 ? "alteração" : "alterações"} do Client. Revise e edite à vontade.`,
+      );
+    } catch (e) {
+      setNotesInfo(`Não foi possível ler os commits do Client: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setNotesBusy(false);
+    }
+  }
+  useEffect(() => {
+    if (!isNew && editable) void fillFromCommits(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só ao abrir o rascunho
+  }, [release?.version]);
 
   // Build local do Client para esta versão (o que "Enviar instalador" vai publicar).
   useEffect(() => {
@@ -264,8 +296,14 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
             </Section>
           )}
 
-          <Section title={editable && !isNew ? "O que muda (escrito por você)" : "O que muda"}>
+          <Section title={editable && !isNew ? "O que muda no Client" : "O que muda"}>
             <div className="space-y-4">
+              {editable && !isNew && (
+                <div className="flex items-start justify-between gap-3 rounded-md border border-white/5 bg-zinc-950/60 px-3 py-2">
+                  <p className="min-w-0 text-xs text-zinc-400">{notesBusy ? "Lendo os commits do Client…" : notesInfo ?? "Gerado a partir das alterações do Client desde a versão anterior, em linguagem para o jogador."}</p>
+                  <Button size="sm" variant="ghost" loading={notesBusy} onClick={() => void fillFromCommits(false)}>Gerar de novo</Button>
+                </div>
+              )}
               <Lines label="Novidades" hint="Uma por linha." value={features} onChange={setFeatures} disabled={!editable} />
               <Lines label="Correções" hint="Uma por linha." value={fixes} onChange={setFixes} disabled={!editable} />
               <Lines label="Mudanças de regra" hint="Uma por linha (tempo limite, revisão, ranking…)." value={rules} onChange={setRules} disabled={!editable} />

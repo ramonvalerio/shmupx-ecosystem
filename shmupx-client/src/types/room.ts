@@ -4,6 +4,14 @@ export interface GameRoom {
   playersOnline: number;
   /** app_id da Steam usado por `inicializar_jogo_steam` (steam://run/<app_id>). */
   steamAppId: number;
+  /** Imagem do card enviada pelo Lab (WebP 16:9); ausente = cartão tipográfico. */
+  coverUrl?: string;
+  /** Metadados do catálogo (Lab); ausentes quando o admin não preencheu. */
+  platform?: string;
+  developer?: string;
+  publisher?: string;
+  genre?: string;
+  year?: number;
 }
 
 export interface ChatMessage {
