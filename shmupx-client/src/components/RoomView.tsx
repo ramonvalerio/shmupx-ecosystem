@@ -6,6 +6,8 @@ import ChatInput from "./ChatInput";
 import type { ChatMessage, GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import type { ChatStatus } from "../data/useRoomChat";
+import { answer as robotxAnswer } from "../data/robotx";
+import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 
 export interface RoomViewProps {
   room: GameRoom;
@@ -92,23 +94,53 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
+  // Respostas do RobotX desta sessão (locais, por sala).
+  const [botReplies, setBotReplies] = useState<ChatMessage[]>([]);
+  const knowledge = room.robotx ?? [];
+  const live = useLive();
+  const youtube = useYouTube();
+  const [publicLive, setPublicLive] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const countdown = useCountdown(live.state.status === "live" ? live.state.ends_at_ms : null);
+  const liveHere = live.state.game_id === room.id;
+  const liveOn = liveActive(live.state);
+  const robotxReady = knowledge.length > 0;
 
   useEffect(() => {
     setLaunchError(null);
     setIsLaunching(false);
     setIsStopping(false);
+    setBotReplies([]);
+    setFilter("everyone");
   }, [room.id]);
 
   // "Só RobotX": mensagens do RobotX e as que o mencionam. É um filtro de leitura; o chat
   // continua o mesmo para todos.
-  const visible = useMemo(
-    () => (filter === "everyone" ? messages : messages.filter((m) => m.author === ROBOTX || MENCAO_ROBOTX.test(m.text))),
-    [filter, messages],
-  );
+  // O mesmo chat em duas visões: "Para todos" mostra tudo; "Só RobotX" mostra só o RobotX
+  // (o que ele disse na sala e o que respondeu reservadamente a você), sem o resto da conversa.
+  const visible = useMemo(() => {
+    const all = [...messages, ...botReplies].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    return filter === "everyone" ? all : all.filter((m) => m.local && m.author === ROBOTX);
+  }, [filter, messages, botReplies]);
 
-  function send(text: string) {
-    // Na aba do RobotX, a mensagem vai endereçada a ele.
-    return onSendMessage(filter === "robotx" && !MENCAO_ROBOTX.test(text) ? `@${ROBOTX} ${text}` : text);
+  function reply(question: string) {
+    const result = robotxAnswer(question, knowledge);
+    const asked = question.replace(MENCAO_ROBOTX, "").trim();
+    // Um instante depois da pergunta, para a resposta aparecer abaixo dela.
+    window.setTimeout(() => {
+      setBotReplies((current) => [...current, { id: `robotx-${Date.now()}`, author: ROBOTX, text: result.text, timestamp: new Date().toISOString(), local: true, inReplyTo: asked }]);
+    }, 350);
+  }
+
+  async function send(text: string) {
+    // "Só RobotX": a pergunta vai só para o RobotX, reservada; nada é publicado na sala.
+    if (filter === "robotx") {
+      if (robotxReady) reply(text);
+      return;
+    }
+    // "Para todos": vai para a sala; se mencionar @RobotX, ele responde reservadamente.
+    await onSendMessage(text);
+    if (robotxReady && MENCAO_ROBOTX.test(text)) reply(text);
   }
 
   async function handleStartGame() {
@@ -134,6 +166,26 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
       setIsStopping(false);
     }
   }
+
+  async function toggleLive() {
+    setLiveError(null);
+    try {
+      if (liveOn) await live.stop();
+      else await live.start(room.id, `${room.title} · ShmupX`, publicLive);
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+  const youtubeConnected = Boolean(youtube.connection?.connected);
+  const liveBlocked = !liveOn && (!youtubeConnected || isRecording || (live.state.status !== "idle" && live.state.status !== "failed"));
+  const liveTitle = !youtubeConnected
+    ? t("Conecte seu canal em Configurações › Integrações para transmitir.")
+    : isRecording ? t("Termine a gravação da run antes de começar uma live.")
+    : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : undefined;
+  const liveLabel = live.state.status === "preparing" ? t("Criando a live…")
+    : live.state.status === "connecting" ? t("Conectando ao YouTube…")
+    : live.state.status === "ending" ? t("Encerrando…")
+    : liveOn ? t("End live") : t("Start live");
 
   let mainLabel = "Iniciar Jogo via Steam";
   let mainAction = handleStartGame;
@@ -171,7 +223,14 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           </div>
           <div className="game-room-actions">
             <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
-            <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled}>{t(mainLabel)}</button>
+            <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
+            <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
+              <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
+            </button>
+            <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
+              <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn} onChange={(event) => setPublicLive(event.target.checked)} />
+              {t("Live pública")}
+            </label>
           </div>
           <p className="game-room-tip">
             {t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.")}
@@ -179,6 +238,17 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         </header>
 
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}
+        {liveHere && live.state.status === "live" && (
+          <p className="room-banner recording" role="status">
+            <span className="status-dot" /> {t("AO VIVO no YouTube")}{countdown && ` · ${t("termina em {time}", { time: countdown })}`}{live.state.public ? ` · ${t("pública")}` : ` · ${t("não listada")}`}
+            {live.state.watch_url && <button type="button" className="text-action" onClick={() => void live.open(live.state.watch_url!)}>{t("Abrir no YouTube")}</button>}
+          </p>
+        )}
+        {liveHere && live.state.status === "live" && live.state.silent && <p className="room-banner warning">{t("Não foi possível capturar o som do sistema: a live está sem áudio do jogo.")}</p>}
+        {liveHere && (live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a tela para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
+        {liveHere && live.state.status === "failed" && live.state.error && <p className="room-banner warning" role="alert">{t("A live não continuou: {reason}", { reason: t(live.state.error) })}</p>}
+        {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
+        {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
         {startError && <p className="room-banner warning" role="alert">{t("A gravação não começou: {reason}", { reason: startError })}</p>}
         {lastRun && <RunOutcome run={lastRun} onOpenRanking={onOpenRanking} />}
@@ -189,17 +259,23 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <button type="button" role="tab" aria-selected={filter === "everyone"} onClick={() => setFilter("everyone")}>
               <IconPlayers /> {t("Para todos")}
             </button>
-            <button type="button" role="tab" aria-selected={filter === "robotx"} onClick={() => setFilter("robotx")}>
-              <IconRobot /> {t("Só RobotX")}
+            <button type="button" role="tab" aria-selected={filter === "robotx"} onClick={() => setFilter("robotx")} title={robotxReady ? t("Pergunte ao RobotX sobre este jogo") : t("O RobotX ainda não chegou a esta sala.")}>
+              <IconRobot /> {t("Só RobotX")}{!robotxReady && <small className="robotx-soon">{t("em breve")}</small>}
             </button>
           </div>
-          <ChatFeed messages={visible} status={chatStatus} error={chatStatus === "error" ? chatError : null} playerId={playerId} />
+          <ChatFeed
+            messages={visible}
+            status={filter === "robotx" ? "ready" : chatStatus}
+            error={chatStatus === "error" && filter === "everyone" ? chatError : null}
+            playerId={playerId}
+            emptyText={filter === "robotx" ? (robotxReady ? t("Pergunte ao RobotX sobre {game}: controles, naves, chefes, dicas…", { game: room.title }) : t("O RobotX ainda não chegou a esta sala.")) : undefined}
+          />
         </div>
         <ChatInput
           onSendMessage={send}
-          disabled={chatStatus === "error"}
-          error={chatStatus === "error" ? null : chatError}
-          placeholder={filter === "robotx" ? t("Mensagem para o RobotX") : t("Mensagem para a sala")}
+          disabled={filter === "robotx" ? !robotxReady : chatStatus === "error"}
+          error={chatStatus === "error" || filter === "robotx" ? null : chatError}
+          placeholder={filter === "robotx" ? (robotxReady ? t("Pergunta reservada para o RobotX") : t("O RobotX ainda não chegou a esta sala.")) : t("Mensagem para a sala")}
         />
       </div>
 
@@ -216,7 +292,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         <ul>
           {sorted.map((player) => (
             <li key={player.id} className="room-player is-you">
-              <span className="room-player-avatar" aria-hidden="true">{player.name.slice(0, 2).toUpperCase()}</span>
+              <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span>
               <span className="room-player-info">
                 <strong>{player.name} {t("(você)")}</strong>
                 <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>
@@ -224,13 +300,15 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               <span className="room-player-state">{isRecording ? t("JOGANDO") : t("ONLINE · DEMO")}</span>
             </li>
           ))}
-          <li className="room-player is-bot">
+          <li className={`room-player is-bot ${robotxReady ? "" : "is-soon"}`} title={robotxReady ? t("Mencione @RobotX no chat para perguntar sobre o jogo.") : t("O RobotX ainda não chegou a esta sala.")}>
             <span className="room-player-avatar bot" aria-hidden="true"><IconRobot size={20} /></span>
-            <span className="room-player-info"><strong>RobotX</strong></span>
-            <span className="room-player-state bot"><IconRobot size={11} /> {t("BOT")}</span>
+            <span className="room-player-info"><strong>RobotX</strong>{robotxReady && <small>{t("Pergunte com @RobotX")}</small>}</span>
+            <span className="room-player-state bot">{robotxReady ? <><IconRobot size={11} /> {t("BOT")}</> : t("EM BREVE")}</span>
           </li>
         </ul>
-        <button type="button" className="room-watch" disabled title={t("Nenhum jogador ao vivo nesta sala.")}>{t("Assistir live")}</button>
+        {liveHere && live.state.status === "live" && live.state.watch_url
+          ? <button type="button" className="room-watch is-live" onClick={() => void live.open(live.state.watch_url!)}>{t("Assistir live")}</button>
+          : <button type="button" className="room-watch" disabled title={t("Nenhum jogador ao vivo nesta sala.")}>{t("Assistir live")}</button>}
       </aside>
     </section>
   );

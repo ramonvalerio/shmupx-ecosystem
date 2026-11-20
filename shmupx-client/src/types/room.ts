@@ -12,6 +12,8 @@ export interface GameRoom {
   publisher?: string;
   genre?: string;
   year?: number;
+  /** Perguntas e respostas do RobotX (Lab); vazio = RobotX ainda indisponível na sala. */
+  robotx?: { question: string; answer: string }[];
 }
 
 export interface ChatMessage {
@@ -23,4 +25,8 @@ export interface ChatMessage {
   timestamp: string;
   /** Ainda não confirmada pelo servidor. */
   pending?: boolean;
+  /** Resposta do RobotX gerada neste PC: só quem perguntou vê, nada vai ao servidor. */
+  local?: boolean;
+  /** Pergunta que a resposta local do RobotX atende (aparece citada acima do texto). */
+  inReplyTo?: string;
 }

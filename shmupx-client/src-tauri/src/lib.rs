@@ -9,6 +9,7 @@ pub mod analysis;
 pub mod auth;
 pub mod capture;
 pub mod input;
+pub mod live;
 pub mod net;
 pub mod session;
 pub mod steam;
@@ -29,6 +30,7 @@ pub fn run() {
         .manage(capture::AnalysisQueue::default())
         .manage(capture::RecordingState::default())
         .manage(session::SessionState::default())
+        .manage(live::LiveState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             capture::commands::iniciar_corrida_safe,
@@ -44,6 +46,13 @@ pub fn run() {
             session::notificacoes::versao_situacao,
             session::mister::mister_enviar_token,
             auth::commands::login_google_desktop,
+            live::commands::youtube_conexao,
+            live::commands::youtube_conectar,
+            live::commands::youtube_desconectar,
+            live::commands::live_estado,
+            live::commands::live_iniciar,
+            live::commands::live_encerrar,
+            live::commands::live_abrir,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

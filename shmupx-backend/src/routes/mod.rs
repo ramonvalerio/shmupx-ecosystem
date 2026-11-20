@@ -11,3 +11,4 @@ pub mod notificacoes;
 pub mod ranking_publico;
 pub mod rankings;
 pub mod runs;
+pub mod youtube;

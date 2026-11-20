@@ -24,6 +24,21 @@ const PAGINA_ERRO: &str = "<!doctype html><meta charset=utf-8><title>ShmupX</tit
 <h1>Login não concluído</h1><p>Volte ao ShmupX e tente novamente.</p>";
 
 pub async fn login(client_id: &str) -> Result<String, String> {
+    let codigo = consentimento(client_id, SCOPES, &[("prompt", "select_account")]).await?;
+    // A troca exige o `client_secret`, que só o backend conhece; o app nunca o carrega.
+    backend::trocar_codigo_google(&codigo.code, &codigo.verifier, &codigo.redirect_uri).await
+}
+
+/// Código de autorização devolvido pelo Google, com o que a troca (no backend) precisa.
+pub struct Codigo {
+    pub code: String,
+    pub verifier: String,
+    pub redirect_uri: String,
+}
+
+/// Consentimento do Google pelo navegador do sistema (loopback + PKCE): abre a página, espera o
+/// retorno e devolve o código. Serve ao login e à conexão do YouTube (escopos diferentes).
+pub async fn consentimento(client_id: &str, escopos: &str, extras: &[(&str, &str)]) -> Result<Codigo, String> {
     if client_id.trim().is_empty() {
         return Err("cliente OAuth do Google não configurado".to_string());
     }
@@ -47,19 +62,20 @@ pub async fn login(client_id: &str) -> Result<String, String> {
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", SCOPES)
+        .append_pair("scope", escopos)
         .append_pair("code_challenge", &challenge)
         .append_pair("code_challenge_method", "S256")
-        .append_pair("state", &state)
-        .append_pair("prompt", "select_account");
+        .append_pair("state", &state);
+    for (chave, valor) in extras {
+        url.query_pairs_mut().append_pair(chave, valor);
+    }
     abrir_navegador(url.as_str())?;
 
     let code = tokio::time::timeout(LOGIN_TIMEOUT, aguardar_codigo(&listener, &state))
         .await
         .map_err(|_| "tempo do login esgotado".to_string())??;
 
-    // A troca exige o `client_secret`, que só o backend conhece; o app nunca o carrega.
-    backend::trocar_codigo_google(&code, &verifier, &redirect_uri).await
+    Ok(Codigo { code, verifier, redirect_uri })
 }
 
 /// Aceita conexões até chegar o redirecionamento do Google. Requisições alheias (favicon,
@@ -139,7 +155,7 @@ fn aleatorio_base64(bytes: usize) -> Result<String, String> {
     Ok(URL_SAFE_NO_PAD.encode(buffer))
 }
 
-fn abrir_navegador(url: &str) -> Result<(), String> {
+pub fn abrir_navegador(url: &str) -> Result<(), String> {
     // `rundll32` recebe a URL como um argumento só; `cmd /C start` quebraria nos `&` da query.
     #[cfg(target_os = "windows")]
     let mut comando = {

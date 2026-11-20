@@ -12,6 +12,7 @@ use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
 use crate::services::catalogo::{self, Jogo, JogoEntrada};
 use crate::services::email::{mensagem_da_versao, Ses};
 use crate::services::notificacoes;
+use crate::services::robotx::{self, ConhecimentoEntrada, ItemRobotx};
 use crate::services::versoes::{self, Instalador, Mudanca, OpcoesAgendamento, Versao, VersaoEntrada};
 
 /// Rotas do Lab. Exigem ID token do Firebase e, além disso, admin (`ADMIN_EMAILS`): o servidor
@@ -23,6 +24,7 @@ where
     Router::new()
         .route("/api/admin/games", get(listar_jogos))
         .route("/api/admin/games/{id}", put(salvar_jogo))
+        .route("/api/admin/games/{id}/robotx", get(obter_robotx).put(salvar_robotx))
         .route("/api/admin/releases", get(listar_versoes))
         .route("/api/admin/releases/draft", get(rascunho_aberto))
         .route("/api/admin/releases/draft/changes", post(registrar_mudanca))
@@ -73,6 +75,35 @@ async fn salvar_jogo(
         }
     }
     Ok(Json(jogo))
+}
+
+/// `GET /api/admin/games/{id}/robotx`: perguntas e respostas curadas do RobotX do jogo.
+async fn obter_robotx(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<ItemRobotx>>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(robotx::obter(&firestore, &id).await?))
+}
+
+/// `PUT /api/admin/games/{id}/robotx`: substitui as perguntas e respostas do jogo.
+async fn salvar_robotx(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+    Json(entrada): Json<ConhecimentoEntrada>,
+) -> Result<Json<Vec<ItemRobotx>>, AppError> {
+    exigir_admin(&usuario)?;
+    let (antes, depois) = robotx::salvar(&firestore, &id, entrada).await?;
+    println!("robotx: {} salvou {} perguntas do jogo {id}", usuario.uid, depois.len());
+    if let Some(jogo) = catalogo::obter(&firestore, &id).await?
+        && let Some(m) = robotx::mudanca(&jogo, &antes, &depois)
+        && let Err(e) = versoes::registrar_mudanca(&firestore, m).await
+    {
+        eprintln!("versões: falha ao registrar o RobotX do jogo {id} no rascunho: {e:?}");
+    }
+    Ok(Json(depois))
 }
 
 /// `GET /api/admin/releases/draft`: rascunho aberto da próxima versão (criado se não houver).

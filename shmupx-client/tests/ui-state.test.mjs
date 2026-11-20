@@ -165,3 +165,19 @@ test("recording is not marked submitted until native submission confirmation", (
   assert.equal(submitted[0].status, "submitted");
   assert.equal(submitted[0].endedAt, 20);
 });
+
+const { answer: robotxAnswer, robotxFromGame } = await sourceModule("../src/data/robotx.ts");
+test("RobotX responde pela pergunta curada mais parecida e admite quando não sabe", () => {
+  const items = [
+    { question: "Quais são os controles?", answer: "Z atira, X bomba." },
+    { question: "Qual a nave mais rápida?", answer: "A Type-B é a mais rápida." },
+    { question: "Como vencer o chefão da fase 3?", answer: "Fique embaixo e mire no núcleo." },
+  ];
+  assert.equal(robotxAnswer("@RobotX Oi qual a nave mais rápida desse jogo?", items).text, "A Type-B é a mais rápida.");
+  assert.equal(robotxAnswer("@robotx controles", items).text, "Z atira, X bomba.");
+  assert.equal(robotxAnswer("como passo do chefao da fase 3", items).text, "Fique embaixo e mire no núcleo.");
+  const unknown = robotxAnswer("@RobotX qual a previsão do tempo amanhã?", items);
+  assert.equal(unknown.matched, undefined);
+  assert.match(unknown.text, /Ainda não sei/);
+  assert.deepEqual(robotxFromGame([{ q: "a", a: "b" }, { q: "" }, "x"]), [{ question: "a", answer: "b" }]);
+});

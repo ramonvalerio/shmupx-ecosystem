@@ -14,6 +14,7 @@ import NotificationBell from "./NotificationBell";
 import NotificationPage from "./NotificationPage";
 import { useNotifications } from "../data/useNotifications";
 import { useAutoUpdate } from "../data/useAutoUpdate";
+import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 
 // `hidden`: fora do menu por enquanto; a tela continua existindo e abre por outros caminhos.
@@ -48,6 +49,9 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const bigPicture = useBigPicture(preferences.startupBigPicture);
   const recordingRoom = rooms.find((room) => room.id === recordingRoomId);
   const notifications = useNotifications();
+  const live = useLive();
+  const liveCountdown = useCountdown(live.state.status === "live" ? live.state.ends_at_ms : null);
+  const liveRoom = rooms.find((room) => room.id === live.state.game_id);
   // Instalar fecha o app: nunca durante uma gravação.
   const autoUpdate = useAutoUpdate(Boolean(recordingRoom));
   const autoUpdateActive = autoUpdate.state.status !== "idle" && autoUpdate.state.status !== "error";
@@ -100,16 +104,22 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       <nav className="navigation-rail" aria-label={t("Navegação principal")}>
         <div className="navigation-tabs">{NAVIGATION.filter((item) => !item.hidden).map((item) => <button type="button" key={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => setSection(item.id)}><span aria-hidden="true">{item.icon}</span> {t(item.label)}</button>)}</div>
         <div className="profile-menu-anchor">
-          <button className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}>{profile.displayName.slice(0, 2).toUpperCase()}</button>
+          <button className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}><img className="avatar-img" src="/img/avatar-default.png" alt="" /></button>
           {profileMenuOpen && <div id="profile-actions" className="profile-menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}><strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span><button onClick={() => { setSection("profile"); setProfileMenuOpen(false); }}>{t("Meu perfil")}</button><button onClick={() => { setSection("subscription"); setProfileMenuOpen(false); }}>{t("Assinatura")}</button><button onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button><button data-menu-close onClick={() => setProfileMenuOpen(false)}>{t("Fechar")}</button></div>}
         </div>
       </nav>
       <header className="client-topbar">
         <img src="/img/logo.png" alt="ShmupX Client" />
         {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
+        {AMBIENTE === "prd" && import.meta.env.DEV && <span className="env-badge is-production" title={t("Versão em desenvolvimento ligada aos dados reais: o que você fizer vale para os jogadores.")}>{t("DEV · PRODUÇÃO")}</span>}
         <div className="client-status-group">
-          <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
-          <span className="client-status-caption">{recordingRoom ? t("Gravando · {game}", { game: recordingRoom.title }) : t("Pronto para capturar")}</span>
+          {live.state.status === "live" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
+            <div className="client-status recording" role="status"><span className="status-dot" />{live.state.status === "live" ? t("AO VIVO") : t("PREPARANDO LIVE")}</div>
+            <span className="client-status-caption">{live.state.status === "live" ? `${liveRoom?.title ?? "YouTube"}${liveCountdown ? ` · ${liveCountdown}` : ""}` : t("Conectando ao YouTube…")}</span>
+          </> : <>
+            <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
+            <span className="client-status-caption">{recordingRoom ? t("Gravando · {game}", { game: recordingRoom.title }) : t("Pronto para capturar")}</span>
+          </>}
         </div>
         {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}
         {!autoUpdateActive && !notifications.version?.update_required && notifications.version?.update_available && notifications.version.latest && <p className="update-available">{t("Versão {version} disponível.", { version: notifications.version.latest })}</p>}

@@ -7,9 +7,11 @@ import { defaultPreferences, type ClientPreferences } from "./settingsState";
 import ConfigureControllerDialog from "./ConfigureControllerDialog";
 import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
+import { useYouTube } from "../data/useLive";
 
 const GROUPS = [
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas e plataformas", icon: "▦" },
+  { id: "integrations", title: "Integrações", detail: "YouTube e serviços", icon: "▷" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
   { id: "storage", title: "Armazenamento", detail: "Destino das gravações", icon: "▣" },
   { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●" },
@@ -20,6 +22,28 @@ const GROUPS = [
 function SettingsCard({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
   const { t } = useI18n();
   return <section className="dashboard-panel settings-card"><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
+}
+
+/** YouTube do jogador: conectar o canal para transmitir ao vivo (START LIVE na sala). */
+function YouTubeCard() {
+  const { t } = useI18n();
+  const { connection, busy, error, connect, disconnect } = useYouTube();
+  const connected = Boolean(connection?.connected);
+  return <SettingsCard title={t("Integrações")} detail={t("Conecte serviços externos à sua conta ShmupX.")}>
+    <div className="integration-row">
+      <span className="integration-icon" aria-hidden="true">▷</span>
+      <div className="integration-info">
+        <strong>{t("YouTube")}</strong>
+        <small>{connection === null ? t("Verificando…") : connected ? t("Conectado como {channel}", { channel: connection?.channel_title ?? "YouTube" }) : t("Não conectado. Conecte para transmitir suas partidas ao vivo.")}</small>
+      </div>
+      {connected
+        ? <button className="secondary-action" disabled={busy} onClick={() => void disconnect()}>{busy ? t("Aguarde…") : t("Desconectar")}</button>
+        : <button className="primary-action" disabled={busy || connection === null} onClick={() => void connect()}>{busy ? t("Aguardando o Google…") : t("Conectar")}</button>}
+    </div>
+    {busy && !connected && <p className="muted" role="status">{t("Conclua a autorização no navegador que foi aberto e volte para o aplicativo.")}</p>}
+    {error && <p className="mode-error" role="alert">{t(error)}</p>}
+    <p className="muted">{t("O ShmupX pede permissão para criar e encerrar transmissões no seu canal. As lives são não listadas, a menos que você marque \"Live pública\" na sala.")}</p>
+  </SettingsCard>;
 }
 
 /** Conectar o MiSTer FPGA (ADR 008): o token vai para o e-mail da conta, nunca para a tela. */
@@ -87,6 +111,7 @@ export default function SettingsPage({ preferences, onPreferences, storageError,
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
         {group === "connections" && <><SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><span className="sample-chip">{t("CATÁLOGO DE DEMONSTRAÇÃO")}</span><p className="muted">{t("O lançamento de jogos pela Steam está disponível no aplicativo desktop. A biblioteca instalada ainda não é sincronizada.")}</p><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard><MisterCard /></>}
+        {group === "integrations" && <YouTubeCard />}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}

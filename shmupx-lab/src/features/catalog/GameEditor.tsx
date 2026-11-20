@@ -7,6 +7,7 @@ import { IconAlert, IconClose } from "../../components/ui/Icons";
 import Switch from "../../components/ui/Switch";
 import AiAssist from "./AiAssist";
 import CoverField from "./CoverField";
+import { RobotxField } from "./RobotxEditor";
 import { MODES, PLATFORMS, slugFromName } from "./options";
 
 interface GameEditorProps {
@@ -245,6 +246,10 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
                 </div>
               </div>
             </div>
+          </Section>
+
+          <Section title="RobotX">
+            <RobotxField gameId={draft.id.trim()} title={draft.title.trim()} isNew={isNew} />
           </Section>
 
           <Section title="Competição">

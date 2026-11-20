@@ -7,6 +7,6 @@
 //! atual valida JWT do Supabase e recusaria (ou, pior, interpretaria mal) esse token.
 
 pub mod commands;
-mod oauth;
+pub mod oauth;
 
 pub use commands::login_google_desktop;

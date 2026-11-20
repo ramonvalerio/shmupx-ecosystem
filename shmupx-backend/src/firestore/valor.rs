@@ -31,6 +31,20 @@ pub fn mapa(campos: Campos) -> Value {
     json!({ "mapValue": { "fields": campos } })
 }
 
+pub fn lista_de_mapas(itens: Vec<Campos>) -> Value {
+    json!({ "arrayValue": { "values": itens.into_iter().map(mapa).collect::<Vec<_>>() } })
+}
+
+/// Lista de mapas; campo ausente ou de outro tipo vira lista vazia. Itens que não são mapa
+/// são ignorados.
+pub fn ler_lista_de_mapas(campos: &Campos, nome: &str) -> Vec<Campos> {
+    campos
+        .get(nome)
+        .and_then(|valor| valor.get("arrayValue")?.get("values")?.as_array())
+        .map(|itens| itens.iter().filter_map(|item| item.get("mapValue")?.get("fields")?.as_object().cloned()).collect())
+        .unwrap_or_default()
+}
+
 pub fn ler_texto(campos: &Campos, nome: &str) -> Option<String> {
     campos.get(nome)?.get("stringValue")?.as_str().map(str::to_string)
 }
@@ -98,6 +112,15 @@ mod tests {
         assert_eq!(ler_lista_de_textos(&c, "modos"), vec!["highscore", "1cc"]);
         assert!(ler_lista_de_textos(&c, "ausente").is_empty());
         assert!(ler_lista_de_textos(&campos(&[("modos", texto("x"))]), "modos").is_empty());
+    }
+
+    #[test]
+    fn lista_de_mapas_ida_e_volta() {
+        let item = campos(&[("q", texto("Quais os controles?"))]);
+        let c = campos(&[("itens", lista_de_mapas(vec![item]))]);
+        let lidos = ler_lista_de_mapas(&c, "itens");
+        assert_eq!(ler_texto(&lidos[0], "q").as_deref(), Some("Quais os controles?"));
+        assert!(ler_lista_de_mapas(&c, "ausente").is_empty());
     }
 
     #[test]

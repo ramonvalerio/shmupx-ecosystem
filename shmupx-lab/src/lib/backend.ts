@@ -60,6 +60,24 @@ export function saveGame(id: string, input: CatalogGameInput): Promise<CatalogGa
   });
 }
 
+/** Pergunta e resposta curadas do RobotX (respondidas no Client, sem IA). */
+export interface RobotxItem {
+  question: string;
+  answer: string;
+}
+
+export function getRobotx(gameId: string): Promise<RobotxItem[]> {
+  return adminRequest<RobotxItem[]>(`/api/admin/games/${encodeURIComponent(gameId)}/robotx`);
+}
+
+/** Substitui as perguntas do jogo; vale na hora para os jogadores (jogo publicado). */
+export function saveRobotx(gameId: string, items: RobotxItem[]): Promise<RobotxItem[]> {
+  return adminRequest<RobotxItem[]>(`/api/admin/games/${encodeURIComponent(gameId)}/robotx`, {
+    method: "PUT",
+    body: JSON.stringify({ items }),
+  });
+}
+
 /** Antecedência entre o aviso e a liberação no Client. */
 export type ReleaseLead = "urgent" | "24h" | "48h" | "7d";
 

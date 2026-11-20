@@ -92,6 +92,12 @@ async fn servidor() {
         eprintln!("aviso: EMAIL_FROM/AWS_SECRETS_ROLE_ARN ausentes (SES não configurado); os avisos de versão não serão enviados por e-mail");
     }
 
+    // YouTube do jogador (conectar canal, transmitir ao vivo): opcional.
+    let youtube = services::youtube::YouTube::do_ambiente().map(Arc::new);
+    if youtube.is_none() {
+        eprintln!("aviso: nenhum cliente OAuth para o YouTube (GOOGLE_YOUTUBE_* ou GOOGLE_DESKTOP_*); START LIVE indisponível");
+    }
+
     let mut app = Router::new()
         .merge(routes::health::router())
         .merge(routes::auth::router(google))
@@ -99,6 +105,7 @@ async fn servidor() {
         .merge(routes::admin::router(firestore.clone(), email.clone()))
         .merge(routes::mister::router(firestore.clone(), email))
         .merge(routes::notificacoes::router(firestore.clone()))
+        .merge(routes::youtube::router(firestore.clone(), youtube))
         .merge(routes::notificacoes::router_publico(firestore.clone()))
         .merge(routes::ranking_publico::router(firestore.clone()))
         .merge(routes::runs::router(firestore));

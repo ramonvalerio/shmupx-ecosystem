@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:prod": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "dev:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1 -Local",
     "build": "tsc && vite build",
     "test:ui": "node --test tests/ui-state.test.mjs",
     "preview": "vite preview",

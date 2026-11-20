@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
+import { robotxFromGame } from "./robotx";
 
 const texto = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
 const COVER_PREFIX = "https://www.shmupx.com/catalog/covers/";
@@ -22,6 +23,7 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     publisher: texto(data.publisher),
     genre: texto(data.genre),
     year: typeof data.year === "number" ? data.year : undefined,
+    robotx: robotxFromGame(data.robotxQa),
   };
 }
 

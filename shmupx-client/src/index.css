@@ -54,7 +54,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outl
 .game-details .text-fuchsia-300, .game-details .text-fuchsia-400 { color: var(--cyan); }
 .game-details .border-fuchsia-400\/40 { border-color: var(--stroke); background: #1f1f1f; }
 .client-footer { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; background: #1f1f1f; border-top: 1px solid var(--stroke); font-size: 10px; color: #aaa; position: relative; }
-.client-footer::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(120deg,#57fcff55 0 6px,transparent 6px 12px); }
 .client-footer > span:first-child { display: flex; align-items: center; gap: 7px; }
 .compact { flex: 0 0 270px; padding: 20px 16px; }
 .compact .game-grid { grid-template-columns: 1fr; }

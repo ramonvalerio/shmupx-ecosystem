@@ -8,4 +8,6 @@ pub mod mister;
 pub mod notificacoes;
 pub mod placar;
 pub mod ranking;
+pub mod robotx;
 pub mod versoes;
+pub mod youtube;

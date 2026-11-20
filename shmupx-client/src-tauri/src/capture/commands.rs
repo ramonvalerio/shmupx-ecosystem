@@ -24,8 +24,13 @@ pub async fn iniciar_corrida_safe(
     app: AppHandle,
     state: State<'_, RunState>,
     session: State<'_, SessionState>,
+    live: State<'_, crate::live::LiveState>,
     jogo_id: String,
 ) -> Result<u32, String> {
+    // A live e a run disputam a captura da tela (spec 033 D-03301): uma de cada vez.
+    if live.ativa() {
+        return Err("Encerre a live antes de iniciar uma run.".into());
+    }
     if !ffmpeg::is_ffmpeg_available() {
         return Err("FFmpeg não encontrado: reinstale o ShmupX Client".into());
     }
