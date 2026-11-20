@@ -89,7 +89,7 @@ static EMPACOTADO: OnceLock<PathBuf> = OnceLock::new();
 /// desenvolvimento ele não existe e vale o do PATH.
 pub fn usar_empacotado(recursos: Option<PathBuf>) {
     if let Some(exe) = recursos
-        .map(|dir| dir.join("ffmpeg").join("ffmpeg.exe"))
+        .map(|dir| dir.join("ffmpeg").join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" }))
         .filter(|p| p.is_file())
     {
         let _ = EMPACOTADO.set(exe);
@@ -123,6 +123,14 @@ pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
     cmd.arg("-y");
 
     // Vídeo: a tela, reduzida para a altura da gravação (ver `filtro_de_video`).
+    // Linux (X11/XWayland): a tela do `DISPLAY` atual pelo `x11grab`.
+    #[cfg(not(windows))]
+    {
+        let tela = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+        cmd.args(["-f", "x11grab", "-framerate", &config.framerate.to_string(), "-i", &tela]);
+        cmd.args(["-vf", &format!("scale=-2:{}:flags=area,format=yuv420p", config.altura)]);
+    }
+    #[cfg(windows)]
     match config.captura {
         Captura::MonitorPrincipal => {
             cmd.args(["-filter_complex", &filtro_de_video(config)]);
@@ -144,13 +152,14 @@ pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
     cmd.args(["-fps_mode", "cfr", "-r", &config.framerate.to_string()]);
 
     // Áudio: mixer do sistema via DirectShow — efeitos sonoros do jogo sem microfone externo.
+    #[cfg(windows)]
     if let Some(audio_device) = &config.audio_device {
         cmd.args(["-f", "dshow", "-i", &format!("audio={audio_device}")]);
     }
 
     cmd.args(["-c:v", "libx264", "-preset", &config.video_preset]);
 
-    if config.audio_device.is_some() {
+    if cfg!(windows) && config.audio_device.is_some() {
         cmd.args(["-c:a", "aac"]);
     }
 
@@ -182,6 +191,7 @@ pub fn spawn_ffmpeg(config: &RecordingConfig) -> io::Result<Child> {
 /// Filtro de vídeo da gravação: reduz para `altura` mantendo a proporção (largura par, exigida pelo
 /// yuv420p). `area` é a melhor interpolação para reduzir texto pequeno (placar). O ddagrab entrega
 /// quadros na GPU: `hwdownload` os traz para a CPU (a redução na GPU não funciona em todo driver).
+#[cfg_attr(not(windows), allow(dead_code))]
 fn filtro_de_video(config: &RecordingConfig) -> String {
     let reduzir = format!("scale=-2:{}:flags=area,format=yuv420p", config.altura);
     match config.captura {

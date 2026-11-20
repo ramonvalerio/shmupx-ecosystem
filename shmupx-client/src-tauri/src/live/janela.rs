@@ -27,7 +27,7 @@ use windows_capture::settings::{
     ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings, MinimumUpdateIntervalSettings,
     SecondaryWindowSettings, Settings,
 };
-use windows_capture::window::Window;
+pub use windows_capture::window::Window;
 
 pub const LARGURA: usize = 1280;
 pub const ALTURA: usize = 720;

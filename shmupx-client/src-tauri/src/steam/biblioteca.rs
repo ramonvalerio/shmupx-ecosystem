@@ -57,6 +57,13 @@ fn pasta_steam() -> Option<PathBuf> {
             }
         }
     }
+    // Linux: instalação nativa (`~/.steam/steam` é um link para ela) ou Flatpak.
+    #[cfg(not(windows))]
+    if let Some(casa) = std::env::var_os("HOME").map(PathBuf::from) {
+        candidatos.push(casa.join(".steam/steam"));
+        candidatos.push(casa.join(".local/share/Steam"));
+        candidatos.push(casa.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+    }
     for var in ["ProgramFiles(x86)", "ProgramFiles"] {
         if let Ok(base) = std::env::var(var) {
             candidatos.push(Path::new(&base).join("Steam"));

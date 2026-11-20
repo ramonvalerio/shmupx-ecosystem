@@ -1,0 +1,43 @@
+# ShmupX Client para Linux (.deb e AppImage), no mesmo contêiner do build local
+# (shmupx-client/linux/Dockerfile + build.sh). Os pacotes ficam como artefato da execução; a
+# publicação no site é manual (S3), como a do instalador do Windows.
+name: client-linux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Imagem de build
+        run: docker build -t shmupx-client-linux shmupx-client/linux
+
+      - name: Cache (Rust e motor de validação)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cache
+          key: client-linux-${{ hashFiles('shmupx-client/src-tauri/Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}
+          restore-keys: client-linux-
+
+      - name: Pacotes
+        env:
+          SHMUPX_BACKEND_URL: https://shmupx-backend-230979440400.us-central1.run.app
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/cache" "$RUNNER_TEMP/out"
+          docker run --rm \
+            -e SHMUPX_BACKEND_URL -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/cache:/cache" \
+            shmupx-client-linux bash /src/shmupx-client/linux/build.sh
+          sudo chown -R "$(id -u)" "$RUNNER_TEMP/cache" "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shmupx-client-linux
+          path: ${{ runner.temp }}/out/*
+          retention-days: 14

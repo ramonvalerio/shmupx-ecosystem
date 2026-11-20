@@ -41,12 +41,15 @@ fn travar<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// Som do processo `pid` (e dos filhos); sem ele, o da saída padrão.
 pub fn iniciar(pid: u32) -> Result<Loopback, String> {
+    #[cfg(windows)]
     if pid != 0 {
         match processo::iniciar(pid) {
             Ok(l) => return Ok(l),
             Err(e) => log::warn!("live: sem o som do processo do jogo ({e}); usando a saída padrão"),
         }
     }
+    #[cfg(not(windows))]
+    let _ = pid;
     iniciar_saida()
 }
 
@@ -173,6 +176,7 @@ pub async fn alimentar<W: tokio::io::AsyncWrite + Unpin>(mut destino: W, loopbac
 }
 
 /// Loopback do processo (`AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK`).
+#[cfg(windows)]
 mod processo {
     use std::mem::ManuallyDrop;
     use std::sync::mpsc;
@@ -326,7 +330,7 @@ mod processo {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod neste_pc {
     use super::*;
 

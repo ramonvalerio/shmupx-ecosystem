@@ -36,7 +36,10 @@ sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.2"
 url = "2.5"
+tauri-plugin-process = "2"
+
 # Captura da janela do jogo para a live (Windows Graphics Capture).
+[target.'cfg(windows)'.dependencies]
 windows-capture = "2.0.1"
 # Área interna da janela (sem a barra de título) e som só do processo do jogo.
 windows = { version = "0.62.2", features = [
@@ -53,7 +56,6 @@ windows = { version = "0.62.2", features = [
 ] }
 # O `#[implement]` do `windows` gera código que usa este crate pelo nome.
 windows-core = "0.62.2"
-tauri-plugin-process = "2"
 
 # A captura da live trata cada quadro na CPU: sem otimização, o `npm run dev` não chega a 60 fps.
 [profile.dev.package.shmupx-client]

@@ -119,7 +119,7 @@ fn localizar_motor(app: &AppHandle) -> Result<(Motor, PathBuf), String> {
     };
     let Some(root) = root else {
         let recursos = app.path().resource_dir().map_err(|e| e.to_string())?;
-        let exe = exe_forcado.unwrap_or_else(|| recursos.join("validator/shmupx-validator.exe"));
+        let exe = exe_forcado.unwrap_or_else(|| recursos.join(if cfg!(windows) { "validator/shmupx-validator.exe" } else { "validator/shmupx-validator" }));
         return Ok((Motor::Exe(exe), recursos.join("games")));
     };
     let root = sem_prefixo_estendido(

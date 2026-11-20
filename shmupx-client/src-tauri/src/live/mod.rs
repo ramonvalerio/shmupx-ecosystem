@@ -11,6 +11,10 @@
 
 mod audio;
 pub mod commands;
+#[cfg(windows)]
+pub mod janela;
+#[cfg(not(windows))]
+#[path = "janela_outros.rs"]
 pub mod janela;
 
 use std::path::PathBuf;
@@ -157,7 +161,10 @@ async fn abrir_envio_janela(ingest: &str, log: &PathBuf, parar_audio: Arc<Atomic
     let porta = porta_livre()?;
     let mut child = spawn_ffmpeg_janela(ingest, taxa, porta, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
     let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de vídeo")?;
+    #[cfg(windows)]
     let stdin = std::fs::File::from(stdin.into_owned_handle().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
+    #[cfg(unix)]
+    let stdin = std::fs::File::from(stdin.into_owned_fd().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
     let parar = Arc::new(AtomicBool::new(false));
     janela::alimentar(stdin, tela, parar.clone());
     // O FFmpeg abre a entrada de áudio depois de ler o vídeo: tenta conectar por até 10 s.
@@ -227,7 +234,7 @@ fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
 }
 
 /// Janela do jogo: a que já está aberta ou, na Steam, abre o jogo e espera a janela (até 90 s).
-async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_app_id: Option<u32>) -> Result<windows_capture::window::Window, String> {
+async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_app_id: Option<u32>) -> Result<janela::Window, String> {
     let procurar = move || {
         let pids = pids_do_jogo(steam_app_id);
         janela::janela_dos_processos(&pids)
@@ -254,6 +261,10 @@ async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_ap
 
 async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, steam_app_id: Option<u32>, log: &PathBuf) -> Result<(), String> {
     let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, ..Default::default() };
+    // Fora do Windows ainda não há captura da janela do jogo.
+    if cfg!(not(windows)) {
+        return Err("a live ainda não está disponível no Linux".to_string());
+    }
     // Primeiro o jogo (a live captura só a janela dele), depois a live no YouTube.
     let janela_do_jogo = achar_janela(app, live, &base, steam_app_id).await?;
     let captura = janela::iniciar(janela_do_jogo)?;

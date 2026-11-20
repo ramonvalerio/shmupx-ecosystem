@@ -130,7 +130,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           <button ref={profileButtonRef} className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}><img className="avatar-img" src="/img/avatar-default.png" alt="" /></button>
           {profileMenuOpen && <div id="profile-actions" ref={profileMenuRef} className="profile-menu" role="menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}>
             <strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span>
-            {([["profile", "Meu perfil"], ["home", "Dashboard"], ["settings", "Configurações"], ["subscription", "Assinatura"]] as [Section, string][]).map(([id, label]) => (
+            {([["profile", "Meu perfil"], ["home", "Dashboard"], ["settings", "Configurações"]] as [Section, string][]).map(([id, label]) => (
               <button key={id} role="menuitem" onClick={() => { setSection(id); setProfileMenuOpen(false); }}>{t(label)}</button>
             ))}
             <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button>
