@@ -151,7 +151,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "home" && <HomePage rooms={rooms} recordingRoomId={recordingRoomId} onNavigate={setSection} onOpenGame={openGame} />}
       {section === "events" && <EventsPage />}
       {section === "ranking" && <RankingPage rooms={rooms} />}
-      {section === "settings" && <SettingsPage preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
+      {section === "settings" && <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
       {section === "help" && <HelpPage />}
       {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
       <div className="client-workspace" hidden={!isLibrary}>

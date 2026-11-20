@@ -89,3 +89,12 @@
   .collection-layout { grid-template-columns: minmax(0, 1fr); }
   .collection-details { display: none; }
 }
+
+/* Biblioteca da Steam importada */
+.collection-layout .not-owned { color: #8fa9b3; }
+.collection-facts.two-columns dd small { display: block; margin-top: 3px; font-size: 11px; color: #3fd98b; }
+.collection-facts.two-columns dd small.not-owned { color: #8fa9b3; }
+.import-availability.is-available { color: #3fd98b; border-color: #3fd98b55; }
+.import-found-list { list-style: none; margin: 6px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.import-found-list .supported { color: #3fd98b; }
+.success-text { color: #3fd98b; }

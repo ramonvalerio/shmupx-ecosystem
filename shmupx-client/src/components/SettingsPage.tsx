@@ -8,6 +8,8 @@ import ConfigureControllerDialog from "./ConfigureControllerDialog";
 import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
 import { useYouTube } from "../data/useLive";
+import { useSteamLibrary } from "../data/steamLibrary";
+import type { GameRoom } from "../types/room";
 
 const GROUPS = [
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas e plataformas", icon: "▦" },
@@ -46,6 +48,15 @@ function YouTubeCard() {
   </SettingsCard>;
 }
 
+/** Situação da biblioteca da Steam importada (lida deste PC). */
+function SteamStatus() {
+  const { t, locale } = useI18n();
+  const { library } = useSteamLibrary();
+  return library
+    ? <p className="muted">{t("{count} jogos importados em {date}.", { count: library.appIds.length, date: new Date(library.importedAt).toLocaleDateString(locale) })}</p>
+    : <p className="muted">{t("Importe sua biblioteca para a coleção mostrar quais jogos você tem.")}</p>;
+}
+
 /** Conectar o MiSTer FPGA (ADR 008): o token vai para o e-mail da conta, nunca para a tela. */
 function MisterCard() {
   const { t } = useI18n();
@@ -67,8 +78,8 @@ function MisterCard() {
   </SettingsCard>;
 }
 
-export default function SettingsPage({ preferences, onPreferences, storageError, onNavigate }: {
-  preferences: ClientPreferences; onPreferences: (value: ClientPreferences) => void; storageError: boolean; onNavigate: (section: Section) => void;
+export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate }: {
+  rooms?: GameRoom[]; preferences: ClientPreferences; onPreferences: (value: ClientPreferences) => void; storageError: boolean; onNavigate: (section: Section) => void;
 }) {
   const { t } = useI18n();
   const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("interface");
@@ -91,7 +102,7 @@ export default function SettingsPage({ preferences, onPreferences, storageError,
     try { setFolder(await appDataDir()); } catch { setFolder("Não foi possível consultar a pasta de dados do aplicativo."); } finally { setFolderBusy(false); }
   }
   return <div className="client-page settings-page">
-    {importOpen && <ImportGamesDialog onClose={()=>setImportOpen(false)} onViewCollection={()=>onNavigate("collection")} />}
+    {importOpen && <ImportGamesDialog rooms={rooms} onClose={()=>setImportOpen(false)} onViewCollection={()=>onNavigate("collection")} />}
     {configureController && <ConfigureControllerDialog onClose={()=>{setConfigureController(false);detectControllers();}} />}
     <PageHeading title={t("Configurações")} detail={t("Biblioteca, captura e preferências do cliente.")} />
     <div className="settings-layout">
@@ -110,7 +121,7 @@ export default function SettingsPage({ preferences, onPreferences, storageError,
           </SettingsCard>
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
-        {group === "connections" && <><SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><span className="sample-chip">{t("CATÁLOGO DE DEMONSTRAÇÃO")}</span><p className="muted">{t("O lançamento de jogos pela Steam está disponível no aplicativo desktop. A biblioteca instalada ainda não é sincronizada.")}</p><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard></>}
+        {group === "connections" && <><SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><SteamStatus /><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard></>}
         {group === "integrations" && <><YouTubeCard /><MisterCard /></>}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}

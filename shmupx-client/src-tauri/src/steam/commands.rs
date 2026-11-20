@@ -100,3 +100,11 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32) {
         }
     });
 }
+
+/// Jogos instalados na Steam deste PC (`libraryfolders.vdf` + `appmanifest_*.acf`).
+#[tauri::command]
+pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {
+    tauri::async_runtime::spawn_blocking(super::biblioteca::ler)
+        .await
+        .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] })
+}

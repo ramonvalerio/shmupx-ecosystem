@@ -5,6 +5,7 @@ import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
 import ImportGamesDialog from "./ImportGamesDialog";
 import { DEFAULT_COVER, GameArt } from "./RoomView";
+import { useSteamLibrary } from "../data/steamLibrary";
 
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }
@@ -86,6 +87,19 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   const [platform, setPlatform] = useState("all");
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const steam = useSteamLibrary();
+  const [ownedOnly, setOwnedOnly] = useState<"all" | "owned">("all");
+  const [refreshing, setRefreshing] = useState(false);
+  /** Na biblioteca importada? `null` = biblioteca não importada ou jogo fora da Steam. */
+  const inLibrary = (room: GameRoom) => (steam.library && room.steamAppId > 0 ? steam.owns(room.steamAppId) : null);
+  const libraryLabel = (room: GameRoom) => {
+    const owned = inLibrary(room);
+    return owned === null ? null : owned ? t("Na sua biblioteca") : t("Fora da sua biblioteca");
+  };
+  async function refreshLibrary() {
+    setRefreshing(true);
+    try { await steam.refresh(); } finally { setRefreshing(false); }
+  }
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(preferences)); setStorageError(false); } catch { setStorageError(true); } }, [preferences]);
 
   // Só as plataformas que existem no catálogo viram filtro.
@@ -93,7 +107,9 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
     const ids = [...new Set(rooms.map(platformOf).filter((id): id is string => Boolean(id)))];
     return [{ id: "all", label: "Todas" }, ...ids.sort().map((id) => ({ id, label: PLATFORM_LABELS[id] ?? id }))];
   }, [rooms]);
-  const visible = selectCollection(rooms, runs, preferences, query, "all").filter((room) => platform === "all" || platformOf(room) === platform);
+  const visible = selectCollection(rooms, runs, preferences, query, "all")
+    .filter((room) => platform === "all" || platformOf(room) === platform)
+    .filter((room) => ownedOnly === "all" || inLibrary(room) === true);
   const selected = rooms.find((room) => room.id === selectedRoomId) ?? null;
   const selectionHidden = selected && !visible.some((room) => room.id === selected.id);
   const view = bigPicture ? "grid" : preferences.view;
@@ -107,7 +123,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
 
   return <div className={`collection-layout ${compact ? "compact" : ""}`}>
     <section className="collection-pane" aria-label={t("Coleção de jogos")}>
-      {importOpen && <ImportGamesDialog onClose={() => setImportOpen(false)} />}
+      {importOpen && <ImportGamesDialog rooms={rooms} onClose={() => setImportOpen(false)} />}
       <header className="collection-heading">
         <h1>{t("Minhas coleções")}</h1>
         <button className="secondary-action" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
@@ -119,6 +135,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <span aria-hidden="true">⌕</span>
         </label>
         <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
+        {steam.library && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
         {!bigPicture && <div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>
@@ -139,7 +156,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
               <GameArt room={room} decorative />
               <div className="game-card-info">
                 <strong>{room.title}</strong>
-                <span className="game-card-meta"><span>{platformId ? t(PLATFORM_LABELS[platformId] ?? platformId) : "—"}</span><span className="supported">✓ {t("Suportado")}</span></span>
+                <span className="game-card-meta"><span className={inLibrary(room) === false ? "not-owned" : ""}>{libraryLabel(room) ?? (platformId ? t(PLATFORM_LABELS[platformId] ?? platformId) : "—")}</span><span className="supported">✓ {t("Suportado")}</span></span>
                 <span className="game-card-runs"><i aria-hidden="true">◇</i>{t("Runs nesta sessão: {count}", { count })}</span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
@@ -153,6 +170,9 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
 
       <footer className="collection-statusbar">
         <span role="status">ⓘ {t("Mostrando {count} de {total} jogos", { count: visible.length, total: rooms.length })}</span>
+        {steam.library
+          ? <button type="button" className="text-action" disabled={refreshing} onClick={() => void refreshLibrary()}>↻ {t(refreshing ? "Atualizando…" : "Atualizar biblioteca")}</button>
+          : <button type="button" className="text-action" onClick={() => setImportOpen(true)}>{t("Importar jogos da Steam")}</button>}
         <span>{t("Clique duas vezes num jogo (ou Enter) para abrir a sala.")}</span>
       </footer>
     </section>
@@ -165,7 +185,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </header>
         <ArcadeCabinet room={selected} />
         <dl className="collection-facts two-columns">
-          <div><dt>{t("Plataforma")}</dt><dd>{platformOf(selected) ? t(PLATFORM_LABELS[platformOf(selected)!] ?? platformOf(selected)!) : "—"}</dd></div>
+          <div><dt>{t("Plataforma")}</dt><dd>{platformOf(selected) ? t(PLATFORM_LABELS[platformOf(selected)!] ?? platformOf(selected)!) : "—"}{libraryLabel(selected) && <small className={inLibrary(selected) ? "" : "not-owned"}>{libraryLabel(selected)}</small>}</dd></div>
           <div><dt>{t("Compatibilidade")}</dt><dd className="supported">✓ {t("Suportado")}</dd></div>
         </dl>
         <dl className="collection-facts">
