@@ -11,7 +11,7 @@ const SOURCES = [
   { id: "local", title: "Jogos locais", icon: "▣", detail: "Jogos instalados no computador", body: "Escolha os jogos instalados no computador que deseja incluir na coleção.", available: false },
 ] as const;
 
-type Scan = { status: "idle" | "scanning" | "done" | "error"; found?: boolean; games?: SteamGame[]; error?: string };
+type Scan = { status: "idle" | "scanning" | "done" | "error"; found?: boolean; games?: SteamGame[]; total?: number; error?: string };
 
 export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [] }: { onClose: () => void; onViewCollection?: () => void; rooms?: GameRoom[] }) {
   const { t } = useI18n();
@@ -27,14 +27,14 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     setScan({ status: "scanning" });
     try {
       const result = await scanSteam();
-      setScan({ status: "done", found: result.found, games: result.games.filter((g) => g.installed) });
+      setScan({ status: "done", found: result.found, games: result.games.filter((g) => g.installed), total: result.games.length });
     } catch (error) {
       setScan({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
   }
   function importSteam() {
     const games = scan.games ?? [];
-    saveSteamLibrary(games.map((g) => g.app_id));
+    saveSteamLibrary(games.map((g) => g.app_id), scan.total ?? games.length);
     setImported(games.length);
   }
 

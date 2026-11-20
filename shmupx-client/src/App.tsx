@@ -56,7 +56,7 @@ export default function App() {
       const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
       if (!room) return;
 
-      invoke<number>("iniciar_corrida_safe", { jogoId: room.id })
+      invoke<number>("iniciar_corrida_safe", { jogoId: room.id, jogoPid: event.payload.pid, steamAppId: event.payload.app_id })
         .then((nativePid) => {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: room.id, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);

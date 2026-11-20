@@ -8,7 +8,7 @@ import ConfigureControllerDialog from "./ConfigureControllerDialog";
 import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
 import { useYouTube } from "../data/useLive";
-import { useSteamLibrary } from "../data/steamLibrary";
+import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import type { GameRoom } from "../types/room";
 
 const GROUPS = [
@@ -48,13 +48,64 @@ function YouTubeCard() {
   </SettingsCard>;
 }
 
-/** Situação da biblioteca da Steam importada (lida deste PC). */
-function SteamStatus() {
+/** Uma biblioteca conectada (Steam, Fightcade, Local): situação, contagem e ações. */
+function LibraryRow({ icon, name, connected, soon, games, installed, syncedAt, busy, onConnect, onSync, onDisconnect }: {
+  icon: ReactNode; name: string; connected: boolean; soon?: boolean; games?: number; installed?: number; syncedAt?: number; busy?: boolean;
+  onConnect?: () => void; onSync?: () => void; onDisconnect?: () => void;
+}) {
   const { t, locale } = useI18n();
-  const { library } = useSteamLibrary();
-  return library
-    ? <p className="muted">{t("{count} jogos importados em {date}.", { count: library.appIds.length, date: new Date(library.importedAt).toLocaleDateString(locale) })}</p>
-    : <p className="muted">{t("Importe sua biblioteca para a coleção mostrar quais jogos você tem.")}</p>;
+  const date = syncedAt ? new Date(syncedAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : null;
+  return <div className="library-row">
+    <div className="library-row-head">
+      <span className="library-row-icon" aria-hidden="true">{icon}</span>
+      <div className="library-row-name">
+        <strong>{name}</strong>
+        <small className={connected ? "is-connected" : ""}>{connected ? `✓ ${t("Conectada")}` : soon ? t("Em breve") : t("Não conectada")}</small>
+      </div>
+      <div className="library-row-actions">
+        {connected
+          ? <><button className="secondary-action" disabled={busy} onClick={onSync}>{t(busy ? "Sincronizando…" : "Sincronizar")}</button><button className="secondary-action" disabled={busy} onClick={onDisconnect}>{t("Desconectar")}</button></>
+          : <button className="secondary-action" disabled={soon || busy} onClick={onConnect} title={soon ? t("A leitura desta biblioteca ainda não está disponível nesta versão.") : undefined}>{t(busy ? "Conectando…" : "Conectar")}</button>}
+      </div>
+    </div>
+    {connected && <div className="library-row-stats">
+      <span>{t("{games} jogos · {installed} instalados", { games: games ?? 0, installed: installed ?? 0 })}</span>
+      {date && <span>{t("Última sincronização")} <span className="muted">{date}</span></span>}
+    </div>}
+  </div>;
+}
+
+const IconGamepad = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8h12a4 4 0 0 1 4 4v1a4 4 0 0 1-7 2.6L14 15h-4l-1 .6A4 4 0 0 1 2 13v-1a4 4 0 0 1 4-4z" /><path d="M7 11v3M5.5 12.5h3" /><circle cx="16" cy="11.5" r=".6" fill="currentColor" /><circle cx="18" cy="13.5" r=".6" fill="currentColor" /></svg>;
+const IconFolder = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.2l2 2.2h8.8A1.5 1.5 0 0 1 21 8.7v9.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" /></svg>;
+
+/** Configurações › Importar jogos: bibliotecas conectadas (como no Client antigo). */
+function ConnectedLibraries({ onImport }: { onImport: () => void }) {
+  const { t } = useI18n();
+  const steam = useSteamLibrary();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function syncSteam() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await steam.refresh();
+      if (!result.found) setError(t("Não encontramos a Steam neste computador. Instale a Steam e tente de novo."));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <SettingsCard title={t("Bibliotecas conectadas")} detail={t("Conecte suas plataformas para importar seus jogos automaticamente.")}>
+    <div className="library-rows">
+      <LibraryRow icon={<IconGamepad />} name="Steam" connected={Boolean(steam.library)} games={steam.library?.total} installed={steam.library?.appIds.length} syncedAt={steam.library?.importedAt} busy={busy}
+        onConnect={() => void syncSteam()} onSync={() => void syncSteam()} onDisconnect={clearSteamLibrary} />
+      <LibraryRow icon={<IconFolder />} name="Fightcade" connected={false} soon />
+      <LibraryRow icon={<IconFolder />} name={t("Local")} connected={false} soon />
+    </div>
+    {error && <p className="mode-error" role="alert">{error}</p>}
+    <button className="primary-action library-import" onClick={onImport}><span aria-hidden="true">+</span> {t("Importar jogos")}</button>
+  </SettingsCard>;
 }
 
 /** Conectar o MiSTer FPGA (ADR 008): o token vai para o e-mail da conta, nunca para a tela. */
@@ -121,7 +172,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
           </SettingsCard>
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
-        {group === "connections" && <><SettingsCard title={t("Conexões de biblioteca")} detail={t("Reúna seus jogos no cliente.")}><div className="platform-connection"><span className="platform-mark">{t("S")}</span><div><h3>{t("Steam")}</h3><SteamStatus /><button className="primary-action" onClick={()=>setImportOpen(true)}>{t("Importar jogos")}</button><button className="text-action" onClick={() => onNavigate("collection")}>{t("Ver coleção")}</button></div></div><p className="muted">{t("Importação de jogos locais e de emuladores ainda não disponível nesta versão.")}</p></SettingsCard></>}
+        {group === "connections" && <ConnectedLibraries onImport={() => setImportOpen(true)} />}
         {group === "integrations" && <><YouTubeCard /><MisterCard /></>}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}

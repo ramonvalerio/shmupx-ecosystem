@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { GameRoom } from "../types/room";
 import { useSteamLibrary } from "./steamLibrary";
 
-/** Arte padrão do card: jogo sem imagem própria. */
-export const DEFAULT_COVER = "/img/default-cover.svg";
+/** Arte padrão do card: jogo sem imagem própria ("NO LOGO", a mesma do Client antigo). */
+export const DEFAULT_COVER = "/img/no_logo.png";
 
 const CURATED = "/img/games/curated";
 const TITLES = "/img/games/emulator/titles";
@@ -72,7 +72,8 @@ export function useGameArt(room: GameRoom) {
   return {
     src,
     kind: src === DEFAULT_COVER ? "is-default" : src === room.coverUrl ? "has-cover" : "is-curated",
-    grayscale: !(room.steamAppId > 0 && owns(room.steamAppId)),
+    // O "NO LOGO" é um aviso, não a arte do jogo: fica sempre colorido (como no Client antigo).
+    grayscale: src !== DEFAULT_COVER && !(room.steamAppId > 0 && owns(room.steamAppId)),
     onError: () => setIndex((current) => Math.min(current + 1, candidates.length - 1)),
   };
 }

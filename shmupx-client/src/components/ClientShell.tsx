@@ -154,7 +154,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "settings" && <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
       {section === "help" && <HelpPage />}
       {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
-      <div className="client-workspace" hidden={!isLibrary}>
+      {/* Sala aberta (sem o ranking): o painel de jogadores sobe até a altura das abas. */}
+      <div className={`client-workspace ${activeRoom && !rankingRoomIds.includes(activeRoom.id) ? "has-room-aside" : ""}`} hidden={!isLibrary}>
         <RoomTabs rooms={rooms} openRoomIds={openRoomIds} activeRoomId={activeRoomId} recordingRoomId={recordingRoomId} onShowCollection={() => setActiveRoomId(null)} onActivate={activateRoom} onClose={closeRoom} onReorder={setOpenRoomIds} />
         <div className="room-stage">
           {activeRoom === null ? (

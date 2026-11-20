@@ -32,6 +32,27 @@ pub fn is_steam_running() -> bool {
     })
 }
 
+/// O processo `pid` ainda existe?
+pub fn processo_vivo(pid: u32) -> bool {
+    let mut system = System::new();
+    let alvo = sysinfo::Pid::from_u32(pid);
+    system.refresh_processes(ProcessesToUpdate::Some(&[alvo]), true);
+    system.process(alvo).is_some()
+}
+
+/// Algum processo rodando de dentro da pasta do jogo (o jogo de verdade, quando quem abriu foi
+/// um launcher que já fechou).
+pub fn processo_na_pasta(pasta: &std::path::Path) -> Option<u32> {
+    let mut system = System::new_all();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let pasta = pasta.to_string_lossy().to_lowercase();
+    system
+        .processes()
+        .iter()
+        .find(|(_, p)| p.exe().is_some_and(|exe| exe.to_string_lossy().to_lowercase().starts_with(pasta.as_str())))
+        .map(|(pid, _)| pid.as_u32())
+}
+
 /// Snapshot dos PIDs ativos no sistema, usado como baseline para detectar o surgimento
 /// do processo do jogo após o disparo via `steam://run/<app_id>`.
 pub fn snapshot_pids() -> HashSet<u32> {

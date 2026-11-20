@@ -26,6 +26,9 @@ pub async fn iniciar_corrida_safe(
     session: State<'_, SessionState>,
     live: State<'_, crate::live::LiveState>,
     jogo_id: String,
+    // Processo do jogo (evento `steam://game-launched`) e app_id: ao fechar o jogo, a gravação para.
+    jogo_pid: Option<u32>,
+    steam_app_id: Option<u32>,
 ) -> Result<u32, String> {
     // A live e a run disputam a captura da tela (spec 033 D-03301): uma de cada vez.
     if live.ativa() {
@@ -104,6 +107,9 @@ pub async fn iniciar_corrida_safe(
     // `max_duration_segundos` negativo é impossível vindo de um backend correto, mas `as u64`
     // em um `i32` negativo faria um número gigante — `.max(0)` evita essa armadilha.
     let limite = std::time::Duration::from_secs(inicio.max_duration_segundos.max(0) as u64);
+    if let Some(jogo_pid) = jogo_pid {
+        spawn_game_watcher(app.clone(), state.0.clone(), jogo_id.clone(), run_id.clone(), jogo_pid, steam_app_id);
+    }
     spawn_safe_timer(app, state.0.clone(), jogo_id, run_id, limite);
 
     Ok(pid)
@@ -244,6 +250,82 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             emit_analysis(app, &job.jogo_id, job.pid, "failed", Some(error));
         }
     }
+}
+
+/// Intervalo entre as conferências do processo do jogo.
+const VIGIA_JOGO: std::time::Duration = std::time::Duration::from_secs(2);
+/// Conferências seguidas sem o jogo antes de parar (evita parar num instante de troca de processo).
+const AUSENCIAS_PARA_PARAR: u32 = 2;
+
+#[derive(Debug, Clone, Serialize)]
+struct GameClosedPayload {
+    jogo_id: String,
+    pid: u32,
+}
+
+/// Fechou a janela do jogo: para a gravação como o STOP (fecha o vídeo, avisa o backend e põe a
+/// análise na fila). Se quem abriu foi um launcher que já fechou, passa a vigiar o processo que
+/// estiver rodando da pasta do jogo.
+fn spawn_game_watcher(
+    app: AppHandle,
+    run_state: std::sync::Arc<tokio::sync::Mutex<Option<RunHandle>>>,
+    jogo_id: String,
+    run_id: String,
+    jogo_pid: u32,
+    steam_app_id: Option<u32>,
+) {
+    tokio::spawn(async move {
+        let pasta = match steam_app_id {
+            Some(app_id) => tauri::async_runtime::spawn_blocking(move || crate::steam::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten(),
+            None => None,
+        };
+        let mut vigiado = jogo_pid;
+        let mut ausencias = 0;
+        loop {
+            tokio::time::sleep(VIGIA_JOGO).await;
+            // A run acabou por outro caminho (STOP, limite da ficha): nada a fazer.
+            if run_state.lock().await.as_ref().is_none_or(|handle| handle.run_id != run_id) {
+                return;
+            }
+            let (pid, pasta_atual) = (vigiado, pasta.clone());
+            let encontrado = tauri::async_runtime::spawn_blocking(move || {
+                if crate::steam::detector::processo_vivo(pid) {
+                    Some(pid)
+                } else {
+                    pasta_atual.as_deref().and_then(crate::steam::detector::processo_na_pasta)
+                }
+            })
+            .await
+            .ok()
+            .flatten();
+            match encontrado {
+                Some(pid) => {
+                    vigiado = pid;
+                    ausencias = 0;
+                }
+                None => {
+                    ausencias += 1;
+                    if ausencias >= AUSENCIAS_PARA_PARAR {
+                        break;
+                    }
+                }
+            }
+        }
+
+        let mut guard = run_state.lock().await;
+        if guard.as_ref().is_none_or(|handle| handle.run_id != run_id) {
+            return;
+        }
+        let Some(mut handle) = guard.take() else { return };
+        drop(guard);
+        log::info!("o jogo fechou: encerrando a gravação da run {run_id}");
+        let _ = app.emit("run://game-closed", GameClosedPayload { jogo_id, pid: handle.pid });
+        if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
+            emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao encerrar captura: {error}")));
+            return;
+        }
+        encerrar_e_enfileirar(&app, handle).await;
+    });
 }
 
 /// O timer pertence a uma run específica, não apenas ao jogo (pode haver outra run depois).
