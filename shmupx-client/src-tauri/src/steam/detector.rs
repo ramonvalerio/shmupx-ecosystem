@@ -44,13 +44,23 @@ pub fn snapshot_pids() -> HashSet<u32> {
 ///
 /// TODO(TASKS.md 1.2–1.4): trocar por casamento exato via `appmanifest_*.acf` (installdir →
 /// app_id) para não confundir o jogo com qualquer outro processo iniciado no intervalo.
-pub fn find_new_process(baseline: &HashSet<u32>) -> Option<(u32, String)> {
+pub fn find_new_process(baseline: &HashSet<u32>, pasta_do_jogo: Option<&std::path::Path>) -> Option<(u32, String)> {
     let mut system = System::new_all();
     system.refresh_processes(ProcessesToUpdate::All, true);
 
+    let pasta = pasta_do_jogo.map(|p| p.to_string_lossy().to_lowercase());
     system
         .processes()
         .iter()
-        .find(|(pid, _)| !baseline.contains(&pid.as_u32()))
+        .filter(|(pid, _)| !baseline.contains(&pid.as_u32()))
+        .find(|(_, process)| match &pasta {
+            // Com a pasta do jogo (biblioteca da Steam): só um executável de dentro dela.
+            Some(pasta) => process.exe().is_some_and(|exe| exe.to_string_lossy().to_lowercase().starts_with(pasta.as_str())),
+            // Sem ela: qualquer processo novo que não seja da própria Steam (que pode estar abrindo).
+            None => {
+                let nome = process.name().to_string_lossy().to_lowercase();
+                !nome.starts_with("steam") && !nome.starts_with("gameoverlay") && !nome.contains("crashhandler")
+            }
+        })
         .map(|(pid, process)| (pid.as_u32(), process.name().to_string_lossy().into_owned()))
 }

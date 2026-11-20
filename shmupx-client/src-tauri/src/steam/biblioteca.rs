@@ -91,6 +91,23 @@ fn jogo_do_manifesto(texto: &str) -> Option<JogoSteam> {
     Some(JogoSteam { app_id, name, installed: flags & 4 != 0 })
 }
 
+/// Pasta de instalação do jogo (`<biblioteca>/steamapps/common/<installdir>`), se instalado.
+pub fn pasta_do_jogo(app_id: u32) -> Option<PathBuf> {
+    let steam = pasta_steam()?;
+    for pasta in pastas_de_biblioteca(&steam) {
+        let manifesto = pasta.join("steamapps").join(format!("appmanifest_{app_id}.acf"));
+        let Ok(texto) = std::fs::read_to_string(&manifesto) else { continue };
+        let pares = pares(&texto);
+        if let Some(dir) = valor(&pares, "installdir").filter(|d| !d.is_empty()) {
+            let caminho = pasta.join("steamapps").join("common").join(dir);
+            if caminho.is_dir() {
+                return Some(caminho);
+            }
+        }
+    }
+    None
+}
+
 /// Jogos instalados na Steam deste PC (ferramentas como o Steamworks Redistributable incluídas;
 /// quem usa filtra pelo catálogo).
 pub fn ler() -> Biblioteca {

@@ -8,6 +8,8 @@ use super::detector;
 
 /// Janela de tempo em que o monitor de lançamento aguarda o processo do jogo aparecer.
 const LAUNCH_MONITOR_TIMEOUT: Duration = Duration::from_secs(60);
+/// Com a Steam fechada, ela abre primeiro (login, atualização) e só depois inicia o jogo.
+const LAUNCH_MONITOR_TIMEOUT_STEAM_FECHADA: Duration = Duration::from_secs(180);
 const LAUNCH_MONITOR_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,16 +32,15 @@ pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32) -> Result
         return Err("steam_app_id inválido (esperado um ID positivo)".into());
     }
 
-    if !detector::is_steam_running() {
-        return Err(
-            "Steam não está em execução. Abra o cliente da Steam antes de iniciar o jogo.".into(),
-        );
-    }
+    // Com a Steam fechada, o `steam://run` a abre e ela inicia o jogo em seguida (como no Client
+    // antigo): só é preciso esperar mais pelo processo do jogo.
+    let steam_aberta = detector::is_steam_running();
 
     launch_steam_uri(steam_app_id)
         .map_err(|e| format!("falha ao disparar steam://run/{steam_app_id}: {e}"))?;
 
-    spawn_launch_monitor(app, steam_app_id);
+    let limite = if steam_aberta { LAUNCH_MONITOR_TIMEOUT } else { LAUNCH_MONITOR_TIMEOUT_STEAM_FECHADA };
+    spawn_launch_monitor(app, steam_app_id, limite);
 
     Ok(())
 }
@@ -51,8 +52,10 @@ fn launch_steam_uri(app_id: u32) -> io::Result<()> {
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(["/C", "start", "", &uri])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW: sem piscar um console
             .spawn()?;
     }
 
@@ -73,16 +76,17 @@ fn launch_steam_uri(app_id: u32) -> io::Result<()> {
 /// faz polling por um novo processo no sistema. Quando a detecção precisa (manifesto `.acf`,
 /// TASKS.md 1.2–1.4) existir, este é o ponto que vai disparar a gravação do FFmpeg
 /// automaticamente ao confirmar que o jogo abriu.
-fn spawn_launch_monitor(app: AppHandle, app_id: u32) {
+fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration) {
     tokio::spawn(async move {
         let baseline = detector::snapshot_pids();
+        let pasta = tauri::async_runtime::spawn_blocking(move || super::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten();
         let mut elapsed = Duration::ZERO;
 
         loop {
             tokio::time::sleep(LAUNCH_MONITOR_POLL_INTERVAL).await;
             elapsed += LAUNCH_MONITOR_POLL_INTERVAL;
 
-            if let Some((pid, name)) = detector::find_new_process(&baseline) {
+            if let Some((pid, name)) = detector::find_new_process(&baseline, pasta.as_deref()) {
                 let _ = app.emit(
                     "steam://game-launched",
                     GameLaunchedPayload { app_id, pid, name },
@@ -90,7 +94,7 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32) {
                 return;
             }
 
-            if elapsed >= LAUNCH_MONITOR_TIMEOUT {
+            if elapsed >= limite {
                 let _ = app.emit(
                     "steam://game-launch-timeout",
                     GameLaunchTimeoutPayload { app_id },
