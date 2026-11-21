@@ -66,6 +66,7 @@ mkdir -p /out
 # O target vem do cache: leva só os pacotes desta versão, não os de builds anteriores.
 versao=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
 cp /cache/target/release/bundle/deb/*_"$versao"_*.deb /out/
+cp /cache/target/release/bundle/deb/*_"$versao"_*.deb.sig /out/ 2>/dev/null || true
 cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage /out/
 cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage.sig /out/ 2>/dev/null || true
 ls -la /out

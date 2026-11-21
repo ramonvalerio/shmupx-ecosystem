@@ -115,8 +115,12 @@ pub struct Versao {
     pub emails_sent: Option<i64>,
     /// Itens gerados pelas alterações no Lab, ainda separados do texto manual (só em rascunho).
     pub auto: Vec<ItemAuto>,
+    /// Instalador do Windows (NSIS).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub installer: Option<Instalador>,
+    /// Pacotes Linux por formato (`appimage`, `deb`), cada um com a assinatura do updater.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub linux_installers: BTreeMap<String, Instalador>,
     /// Liberada, o Client baixa e instala sozinho (exige `installer`).
     pub auto_update: bool,
     /// Versão sem instalador: só notas, não pede atualização do Client.
@@ -234,9 +238,26 @@ fn gravar_auto(itens: &[ItemAuto]) -> serde_json::Value {
     mapa(campos)
 }
 
+fn instalador_de(mapa: &Campos) -> Option<Instalador> {
+    Some(Instalador { url: ler_texto(mapa, "url")?, signature: ler_texto(mapa, "signature")?, size: ler_inteiro(mapa, "size") })
+}
+
 fn ler_instalador(campos: &Campos) -> Option<Instalador> {
-    let mapa = ler_mapa(campos, "installer")?;
-    Some(Instalador { url: ler_texto(&mapa, "url")?, signature: ler_texto(&mapa, "signature")?, size: ler_inteiro(&mapa, "size") })
+    instalador_de(&ler_mapa(campos, "installer")?)
+}
+
+/// `linuxInstallers` (`{formato: {url, signature, size}}`).
+fn ler_instaladores_linux(campos: &Campos) -> BTreeMap<String, Instalador> {
+    ler_mapa(campos, "linuxInstallers")
+        .map(|mapa| {
+            mapa.into_iter()
+                .filter_map(|(formato, valor)| {
+                    let interno = valor.get("mapValue")?.get("fields")?.as_object()?.clone();
+                    Some((formato, instalador_de(&interno)?))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Junta os itens automáticos às listas manuais, sem repetir texto já presente.
@@ -280,6 +301,7 @@ fn versao_de(version: String, campos: &Campos, agora: DateTime<Utc>) -> Versao {
         emails_sent: ler_inteiro(campos, "emailsSent"),
         auto: ler_auto(campos),
         installer: ler_instalador(campos),
+        linux_installers: ler_instaladores_linux(campos),
         auto_update: ler_booleano(campos, "autoUpdate").unwrap_or(false),
         notes_only: ler_booleano(campos, "notesOnly").unwrap_or(false),
         version,
@@ -504,17 +526,43 @@ pub struct Atualizacao {
     pub signature: String,
 }
 
+/// Sistema e formato do Client que pede a atualização (`{{target}}` e `{{bundle_type}}` do updater).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Plataforma {
+    Windows,
+    /// Formato do pacote instalado: `appimage` ou `deb`.
+    Linux(String),
+}
+
+impl Plataforma {
+    /// `None` para sistemas e formatos sem pacote publicado (ex.: macOS, rpm).
+    pub fn de(alvo: &str, formato: Option<&str>) -> Option<Self> {
+        match (alvo, formato) {
+            ("windows", _) => Some(Plataforma::Windows),
+            ("linux", Some(f @ ("appimage" | "deb"))) => Some(Plataforma::Linux(f.to_string())),
+            _ => None,
+        }
+    }
+
+    fn instalador<'a>(&self, versao: &'a Versao) -> Option<&'a Instalador> {
+        match self {
+            Plataforma::Windows => versao.installer.as_ref(),
+            Plataforma::Linux(formato) => versao.linux_installers.get(formato),
+        }
+    }
+}
+
 /// Versão que o Client na versão `atual` deve baixar sozinho: a mais nova liberada, com
-/// instalador e atualização automática, maior que a dele. `None` = nada a fazer (HTTP 204).
-pub fn atualizacao(versoes: &[Versao], atual: &str) -> Option<Atualizacao> {
+/// atualização automática e pacote para a plataforma dele, maior que a dele. `None` = nada a fazer
+/// (HTTP 204).
+pub fn atualizacao(versoes: &[Versao], atual: &str, plataforma: &Plataforma) -> Option<Atualizacao> {
     let atual = ler_versao(atual).unwrap_or((0, 0, 0));
-    let (_, versao) = versoes
+    let (_, versao, instalador) = versoes
         .iter()
         .filter(|v| v.status == "released" && v.auto_update)
-        .filter_map(|v| ler_versao(&v.version).map(|n| (n, v)))
-        .filter(|(n, _)| *n > atual)
-        .max_by_key(|(n, _)| *n)?;
-    let instalador = versao.installer.as_ref()?;
+        .filter_map(|v| Some((ler_versao(&v.version)?, v, plataforma.instalador(v)?)))
+        .filter(|(n, _, _)| *n > atual)
+        .max_by_key(|(n, _, _)| *n)?;
     let mut notas = vec![versao.title.clone()];
     for (rotulo, itens) in [("Novidades", &versao.features), ("Correções", &versao.fixes), ("Regras", &versao.rules)] {
         if !itens.is_empty() {
@@ -704,15 +752,42 @@ mod tests {
             auto_update: true,
             ..versao("0.2.0", "released", false)
         };
-        let a = atualizacao(std::slice::from_ref(&liberada), "0.1.0").unwrap();
+        let win = Plataforma::Windows;
+        let a = atualizacao(std::slice::from_ref(&liberada), "0.1.0", &win).unwrap();
         assert_eq!((a.version.as_str(), a.signature.as_str()), ("0.2.0", "sig"));
         assert!(a.notes.contains("• Sala do Aero Fighters 2"));
 
-        assert!(atualizacao(std::slice::from_ref(&liberada), "0.2.0").is_none(), "já em dia");
+        assert!(atualizacao(std::slice::from_ref(&liberada), "0.2.0", &win).is_none(), "já em dia");
         let agendada = Versao { status: "scheduled".into(), ..liberada };
-        assert!(atualizacao(std::slice::from_ref(&agendada), "0.1.0").is_none(), "antes de releaseAt");
+        assert!(atualizacao(std::slice::from_ref(&agendada), "0.1.0", &win).is_none(), "antes de releaseAt");
         let manual = Versao { status: "released".into(), auto_update: false, ..agendada };
-        assert!(atualizacao(&[manual], "0.1.0").is_none(), "admin não liberou o automático");
+        assert!(atualizacao(&[manual], "0.1.0", &win).is_none(), "admin não liberou o automático");
+    }
+
+    #[test]
+    fn cada_plataforma_recebe_o_proprio_pacote() {
+        let linux = |url: &str| Instalador { url: url.into(), signature: format!("sig-{url}"), size: None };
+        let so_windows = Versao { installer: Some(instalador()), auto_update: true, ..versao("0.2.0", "released", false) };
+        let com_linux = Versao {
+            installer: Some(instalador()),
+            linux_installers: [("appimage".to_string(), linux("a.AppImage")), ("deb".to_string(), linux("a.deb"))].into(),
+            auto_update: true,
+            ..versao("0.1.5", "released", false)
+        };
+        let versoes = [so_windows, com_linux];
+        let appimage = Plataforma::de("linux", Some("appimage")).unwrap();
+        let deb = Plataforma::de("linux", Some("deb")).unwrap();
+
+        assert_eq!(atualizacao(&versoes, "0.1.4", &Plataforma::Windows).unwrap().version, "0.2.0");
+        // A 0.2.0 não tem pacote Linux: o Linux fica na mais nova que tem.
+        let a = atualizacao(&versoes, "0.1.4", &appimage).unwrap();
+        assert_eq!((a.version.as_str(), a.url.as_str()), ("0.1.5", "a.AppImage"));
+        assert_eq!(atualizacao(&versoes, "0.1.4", &deb).unwrap().url, "a.deb");
+        assert!(atualizacao(&versoes, "0.1.5", &deb).is_none());
+
+        assert_eq!(Plataforma::de("linux", None), None, "Linux sem formato (Client antigo)");
+        assert_eq!(Plataforma::de("linux", Some("rpm")), None);
+        assert_eq!(Plataforma::de("darwin", Some("app")), None);
     }
 
     #[test]

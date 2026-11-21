@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
@@ -47,17 +47,26 @@ where
     Router::new().route("/api/client/update/{target}/{arch}/{current}", get(atualizacao)).layer(Extension(firestore))
 }
 
-/// `GET /api/client/update/{target}/{arch}/{current}`: 200 com a versão a instalar ou 204 quando
-/// o Client está em dia. Por ora só há instalador de Windows.
+#[derive(Debug, Deserialize)]
+struct FormatoDoPacote {
+    /// `{{bundle_type}}` do updater (`nsis`, `appimage`, `deb`...). Clients anteriores à 0.1.5
+    /// não enviam: no Linux, ficam sem atualização automática.
+    bundle: Option<String>,
+}
+
+/// `GET /api/client/update/{target}/{arch}/{current}?bundle=...`: 200 com a versão a instalar ou
+/// 204 quando o Client está em dia. Windows recebe o instalador NSIS; Linux, o pacote do mesmo
+/// formato que tem instalado (AppImage ou .deb).
 async fn atualizacao(
     Extension(firestore): Extension<Arc<Firestore>>,
     Path((target, _arch, atual)): Path<(String, String, String)>,
+    Query(formato): Query<FormatoDoPacote>,
 ) -> Result<Response, AppError> {
-    if target != "windows" {
+    let Some(plataforma) = versoes::Plataforma::de(&target, formato.bundle.as_deref()) else {
         return Ok(StatusCode::NO_CONTENT.into_response());
-    }
+    };
     let lista = versoes::listar(&firestore).await?;
-    Ok(match versoes::atualizacao(&lista, &atual) {
+    Ok(match versoes::atualizacao(&lista, &atual, &plataforma) {
         Some(atualizacao) => Json(atualizacao).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     })

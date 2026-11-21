@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 /** Nova checagem enquanto o Client fica aberto (a liberação pode chegar com o app rodando). */
 const CHECAR_A_CADA_MS = 30 * 60_000;
@@ -61,6 +62,9 @@ export function useAutoUpdate(busy: boolean) {
     setState({ status: "installing", version: update.version });
     try {
       await update.install();
+      // No Windows o instalador fecha e reabre o app; no Linux o pacote é trocado com o app aberto
+      // e é preciso reiniciar para entrar na versão nova.
+      await relaunch();
     } catch (e) {
       setState({ status: "error", message: e instanceof Error ? e.message : String(e) });
     }
