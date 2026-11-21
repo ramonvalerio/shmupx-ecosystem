@@ -105,6 +105,25 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration) {
     });
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct EmuladorAbertoPayload {
+    game_id: String,
+    pid: u32,
+    rom: String,
+}
+
+/// Inicializa um jogo de emulador no FBNeo do Fightcade. `roms`: os ROMs que correspondem ao jogo
+/// (a interface cruza com o catálogo); `pasta`: a do Fightcade, se o jogador escolheu uma. Avisa
+/// `emulator://game-launched` com o processo do emulador, que a gravação vigia como na Steam.
+#[tauri::command]
+pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>) -> Result<(), String> {
+    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom });
+    Ok(())
+}
+
 /// Jogos instalados na Steam deste PC (`libraryfolders.vdf` + `appmanifest_*.acf`).
 #[tauri::command]
 pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {

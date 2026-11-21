@@ -11,6 +11,10 @@ import { useGameArt } from "../data/gameArt";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { RoomPresence } from "../data/useRoomPresence";
+import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+
+/** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
+const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
 
 export interface RoomViewProps {
   room: GameRoom;
@@ -147,13 +151,22 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     if (robotxReady && MENCAO_ROBOTX.test(text)) reply(text);
   }
 
+  /** Abre o jogo pela plataforma dele: Steam quando há app_id; senão, o emulador (Fightcade/FBNeo). */
   async function handleStartGame() {
     setLaunchError(null);
+    const roms = romsFor(room);
+    if (room.steamAppId === 0 && roms.length === 0) {
+      setLaunchError(room.platform && OWN_HARDWARE[room.platform]
+        ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
+        : t("O Client ainda não sabe abrir este jogo. Abra-o manualmente."));
+      return;
+    }
     setIsLaunching(true);
     try {
-      await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
+      if (room.steamAppId > 0) await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
+      else await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms, pasta: readEmulatorLibrary()?.root || null });
     } catch (error) {
-      setLaunchError(typeof error === "string" ? error : "Falha ao iniciar o jogo via Steam.");
+      setLaunchError(typeof error === "string" ? error : "Falha ao iniciar o jogo.");
     } finally {
       setIsLaunching(false);
     }
@@ -194,9 +207,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
   const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
 
-  let mainLabel = "Iniciar Jogo via Steam";
+  let mainLabel = "Iniciar jogo";
   let mainAction = handleStartGame;
-  let mainDisabled = isLaunching || room.steamAppId === 0;
+  let mainDisabled = isLaunching;
   let mainVariant = "primary";
   if (isStopping) {
     mainLabel = "Encerrando a gravação...";
@@ -208,7 +221,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     mainDisabled = false;
     mainVariant = "stop";
   } else if (isLaunching) {
-    mainLabel = "Abrindo Steam...";
+    mainLabel = "Abrindo o jogo…";
     mainVariant = "";
   }
 
@@ -261,7 +274,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
         {startError && <p className="room-banner warning" role="alert">{t("A gravação não começou: {reason}", { reason: startError })}</p>}
         {lastRun && <RunOutcome run={lastRun} onOpenRanking={onOpenRanking} />}
-        {room.steamAppId === 0 && <p className="room-banner">{t("Este jogo não tem app_id da Steam no catálogo; o início pela Steam fica indisponível.")}</p>}
 
         <div className="room-chat-panel">
           <div className="room-chat-filters" role="tablist" aria-label={t("Filtro do chat")}>

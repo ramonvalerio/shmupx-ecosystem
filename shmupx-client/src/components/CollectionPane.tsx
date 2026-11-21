@@ -191,7 +191,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </div>
         <section className="collection-last">
           <h3>{t("ÚLTIMA GAMEPLAY")}</h3>
-          <p>{lastRun ? t("{status} · {date}", { status: t(RUN_STATUS[lastRun.status]), date: dateFormat.format(lastRun.startedAt) }) : t("Nenhuma gameplay deste jogo nesta sessão. Abra a sala e inicie pela Steam para gravar.")}</p>
+          <p>{lastRun ? t("{status} · {date}", { status: t(RUN_STATUS[lastRun.status]), date: dateFormat.format(lastRun.startedAt) }) : t("Nenhuma gameplay deste jogo nesta sessão. Abra a sala e clique em Iniciar jogo para gravar.")}</p>
           <dl className="collection-facts">
             <div><dt>{t("Gênero")}</dt><dd>{selected.genre ?? "—"}</dd></div>
             <div><dt>{t("Ano")}</dt><dd>{selected.year ?? "—"}</dd></div>

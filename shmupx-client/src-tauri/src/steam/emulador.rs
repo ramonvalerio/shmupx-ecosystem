@@ -83,6 +83,36 @@ pub fn ler(informada: Option<&str>) -> BibliotecaEmulador {
     BibliotecaEmulador { found: true, root: Some(raiz.to_string_lossy().into_owned()), roms }
 }
 
+/// Nome curto de ROM do FBNeo (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
+/// letras minúsculas, dígitos e `_`.
+fn rom_valido(rom: &str) -> bool {
+    !rom.is_empty() && rom.len() <= 32 && rom.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+/// Abre o jogo no FBNeo do Fightcade (`fcadefbneo.exe <rom>`, a partir da pasta do emulador, como
+/// no Client antigo) com o primeiro ROM da lista que o jogador tem. Devolve o PID e o ROM aberto.
+pub fn abrir(informada: Option<&str>, roms: &[String]) -> Result<(u32, String), String> {
+    let roms: Vec<String> = roms.iter().map(|r| r.trim().to_lowercase()).filter(|r| rom_valido(r)).collect();
+    if roms.is_empty() {
+        return Err("o Client ainda não sabe abrir este jogo no emulador".into());
+    }
+    let Some(raiz) = raiz(informada) else {
+        return Err("Fightcade não encontrado neste computador: instale o Fightcade ou indique a pasta dele em Configurações › Bibliotecas".into());
+    };
+    let pastas = pastas_de_roms(&raiz);
+    let Some(rom) = roms.iter().find(|rom| pastas.iter().any(|p| p.join(format!("{rom}.zip")).is_file())) else {
+        return Err(format!("o ROM deste jogo ({}) não está no Fightcade: baixe-o pelo Fightcade e tente de novo", roms.join(" ou ")));
+    };
+    let exe = executavel(&raiz);
+    let mut comando = std::process::Command::new(&exe);
+    comando.arg(rom);
+    if let Some(pasta) = exe.parent() {
+        comando.current_dir(pasta);
+    }
+    let filho = comando.spawn().map_err(|e| format!("não foi possível abrir o emulador: {e}"))?;
+    Ok((filho.id(), rom.clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +120,16 @@ mod tests {
     #[test]
     fn pasta_informada_sem_fbneo_nao_vale() {
         assert!(raiz(Some("C:\\pasta-que-nao-existe")).is_none());
+    }
+
+    #[test]
+    fn so_nomes_de_rom_viram_argumento() {
+        assert!(rom_valido("sonicwi2"));
+        assert!(rom_valido("md_thunderf4"));
+        assert!(!rom_valido(""));
+        assert!(!rom_valido("../x"));
+        assert!(!rom_valido("ket -w"));
+        assert!(abrir(None, &["../../x".into()]).is_err());
     }
 
     /// Lê o Fightcade deste PC: `cargo test -- --ignored fightcade_deste_pc --nocapture`.

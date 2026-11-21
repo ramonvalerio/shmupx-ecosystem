@@ -36,6 +36,7 @@ pub fn run() {
             capture::commands::iniciar_corrida_safe,
             capture::commands::finalizar_corrida_manual,
             steam::commands::inicializar_jogo_steam,
+            steam::commands::inicializar_jogo_emulador,
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
             session::commands::definir_token_autenticacao,

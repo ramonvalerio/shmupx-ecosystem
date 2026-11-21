@@ -18,6 +18,13 @@ interface GameLaunchedPayload {
   name: string;
 }
 
+/** Jogo aberto no emulador (Rust `inicializar_jogo_emulador`). */
+interface EmulatorLaunchedPayload {
+  game_id: string;
+  pid: number;
+  rom: string;
+}
+
 interface RunExpiredPayload {
   pid: number;
   jogo_id: string;
@@ -53,20 +60,27 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauri()) return;
-    const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
-      const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
-      if (!room) return;
-
-      invoke<number>("iniciar_corrida_safe", { jogoId: room.id, jogoPid: event.payload.pid, steamAppId: event.payload.app_id })
+    // Jogo aberto (Steam ou emulador): começa a run, vigiando o processo dele.
+    const startRun = (roomId: string, pid: number, steamAppId: number | null) => {
+      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId })
         .then((nativePid) => {
-          const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: room.id, startedAt: Date.now(), status: "recording" };
+          const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: roomId, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);
-          setStartErrors(({ [room.id]: _, ...rest }) => rest);
+          setStartErrors(({ [roomId]: _, ...rest }) => rest);
         })
         .catch((error) => {
           console.error("falha ao iniciar a corrida segura:", error);
-          setStartErrors((current) => ({ ...current, [room.id]: typeof error === "string" ? error : String(error) }));
+          setStartErrors((current) => ({ ...current, [roomId]: typeof error === "string" ? error : String(error) }));
         });
+    };
+
+    const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
+      const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
+      if (room) startRun(room.id, event.payload.pid, event.payload.app_id);
+    });
+    const unlistenEmulator = listen<EmulatorLaunchedPayload>("emulator://game-launched", (event) => {
+      const room = roomsRef.current.find((candidate) => candidate.id === event.payload.game_id);
+      if (room) startRun(room.id, event.payload.pid, null);
     });
 
     const unlistenExpired = listen<RunExpiredPayload>("run://expired", (event) => {
@@ -83,6 +97,7 @@ export default function App() {
     return () => {
       unlistenAnalysis.then((unlisten) => unlisten());
       unlistenLaunched.then((unlisten) => unlisten());
+      unlistenEmulator.then((unlisten) => unlisten());
       unlistenExpired.then((unlisten) => unlisten());
     };
   }, []);
