@@ -26,12 +26,14 @@ jobs:
       - name: Pacotes
         env:
           SHMUPX_BACKEND_URL: https://shmupx-backend-230979440400.us-central1.run.app
+          # Cliente OAuth "Desktop" do login Google (shmupx/client no OpenBao, copiado para o secret).
+          VITE_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.VITE_GOOGLE_DESKTOP_CLIENT_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p "$RUNNER_TEMP/cache" "$RUNNER_TEMP/out"
           docker run --rm \
-            -e SHMUPX_BACKEND_URL -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            -e SHMUPX_BACKEND_URL -e VITE_GOOGLE_DESKTOP_CLIENT_ID -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/cache:/cache" \
             shmupx-client-linux bash /src/shmupx-client/linux/build.sh
           sudo chown -R "$(id -u)" "$RUNNER_TEMP/cache" "$RUNNER_TEMP/out"

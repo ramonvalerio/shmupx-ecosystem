@@ -3,6 +3,11 @@
 # builds do Windows), monta o que o pacote leva (motor de validação, scripts aceitos, FFmpeg) e gera
 # o .deb e o AppImage assinados em /out. Equivalente Linux do scripts/prepare-bundle.ps1 + bundle.
 set -euo pipefail
+# Embutida na interface pelo Vite: sem ela o botão "Entrar com Google" não funciona.
+if [ -z "${VITE_GOOGLE_DESKTOP_CLIENT_ID:-}" ]; then
+    echo "erro: VITE_GOOGLE_DESKTOP_CLIENT_ID não definida (shmupx/client no OpenBao)" >&2
+    exit 1
+fi
 mkdir -p /work/shmupx-client /work/shmupx-lab/validators
 
 rsync -a --delete \
