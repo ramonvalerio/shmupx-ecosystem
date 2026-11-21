@@ -63,7 +63,9 @@ export LD_LIBRARY_PATH
 npx tauri build --verbose --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
 
 mkdir -p /out
-cp /cache/target/release/bundle/deb/*.deb /out/
-cp /cache/target/release/bundle/appimage/*.AppImage /out/
-cp /cache/target/release/bundle/appimage/*.AppImage.sig /out/ 2>/dev/null || true
+# O target vem do cache: leva só os pacotes desta versão, não os de builds anteriores.
+versao=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+cp /cache/target/release/bundle/deb/*_"$versao"_*.deb /out/
+cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage /out/
+cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage.sig /out/ 2>/dev/null || true
 ls -la /out
