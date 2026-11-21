@@ -7,6 +7,7 @@ import RoomView, { type RoomViewProps } from "./components/RoomView";
 import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
 import { useRoomChat } from "./data/useRoomChat";
+import { useRoomPresence } from "./data/useRoomPresence";
 import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
@@ -139,7 +140,7 @@ export default function App() {
   );
 }
 
-type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "chatStatus" | "chatError" | "playerId"> & {
+type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "chatStatus" | "chatError" | "playerId" | "others"> & {
   author: { uid: string; displayName: string };
 };
 
@@ -147,9 +148,11 @@ type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "cha
 function LiveRoomView({ author, ...props }: LiveRoomViewProps) {
   const { locale } = useI18n();
   const chat = useRoomChat(props.room.id, author, locale);
+  const others = useRoomPresence(props.room.id, author, props.isRecording);
   return (
     <RoomView
       {...props}
+      others={others}
       messages={chat.messages}
       chatStatus={chat.status}
       chatError={chat.error}

@@ -10,6 +10,7 @@ import { answer as robotxAnswer } from "../data/robotx";
 import { useGameArt } from "../data/gameArt";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
+import type { RoomPresence } from "../data/useRoomPresence";
 
 export interface RoomViewProps {
   room: GameRoom;
@@ -31,6 +32,8 @@ export interface RoomViewProps {
   lastRun?: SessionRun;
   /** Motivo de a última tentativa de gravação não ter começado (ex.: FFmpeg, ficha). */
   startError?: string;
+  /** Outros jogadores presentes na sala agora (presença em tempo real). */
+  others?: RoomPresence[];
 }
 
 /** Filtros do chat (não confundir com as abas de sala): todos ou só a conversa com o RobotX. */
@@ -88,7 +91,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, onShowCollection, lastRun, startError }: RoomViewProps) {
+export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, onShowCollection, lastRun, startError, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -209,10 +212,12 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     mainVariant = "";
   }
 
-  // Jogador conectado sempre primeiro; o RobotX vem no fim e não conta como jogador. Hi-Score
-  // da sala ainda não existe: fica "—" em vez de um número inventado.
-  const players = [{ id: "you", name: playerName, score: null as number | null }];
-  const sorted = sortBy === "name" ? [...players].sort((a, b) => a.name.localeCompare(b.name)) : players;
+  // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
+  // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, you: true };
+  const rest = others.map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, you: false }));
+  const sorted = [me, ...(sortBy === "name" ? [...rest].sort((a, b) => a.name.localeCompare(b.name)) : rest)];
+  const players = sorted;
 
   return (
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
@@ -224,7 +229,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <div className="game-room-title">
               {onShowCollection && <button type="button" className="game-room-back" onClick={onShowCollection}>{t("← Minhas coleções")}</button>}
               <h1 title={room.title}>{room.title}</h1>
-              <p>{t("Chat da sala em tempo real · presença simulada (demonstração)")}</p>
+              <p>{t("Chat e presença em tempo real")}</p>
             </div>
             <div className="game-room-actions">
               <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
@@ -285,7 +290,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
       <aside className="game-room-players" aria-label={t("Jogadores na sala")}>
         <h2>{t("Jogadores na sala ({count})", { count: String(players.length) })}</h2>
-        <p className="muted">{t("Presença em tempo real ainda não disponível.")}</p>
         <label className="room-sort">
           <span>{t("Ordenar por")}</span>
           <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)}>
@@ -295,13 +299,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         </label>
         <ul>
           {sorted.map((player) => (
-            <li key={player.id} className="room-player is-you">
+            <li key={player.id} className={`room-player ${player.you ? "is-you" : ""}`}>
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span>
               <span className="room-player-info">
-                <strong>{player.name} {t("(você)")}</strong>
+                <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
                 <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>
               </span>
-              <span className="room-player-state">{isRecording ? t("JOGANDO") : t("ONLINE · DEMO")}</span>
+              <span className="room-player-state">{player.playing ? t("JOGANDO") : t("ONLINE")}</span>
             </li>
           ))}
           <li className={`room-player is-bot ${robotxReady ? "" : "is-soon"}`} title={robotxReady ? t("Mencione @RobotX no chat para perguntar sobre o jogo.") : t("O RobotX ainda não chegou a esta sala.")}>

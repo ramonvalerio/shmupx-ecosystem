@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, test } from "node:test";
 import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteField,
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, deleteField,
   query, where, orderBy, limit, serverTimestamp, Timestamp } from "firebase/firestore";
 
 let environment;
@@ -135,4 +135,22 @@ test("room chat: players read and post in published rooms only, as themselves", 
   await assertFails(setDoc(doc(alice, "rooms/earthion/messages/m8"), message({ pinned: true })));
   await assertFails(updateDoc(doc(alice, "rooms/earthion/messages/m1"), { text: "editado" }));
   await assertFails(setDoc(doc(db("bob"), "rooms/earthion/messages/m9"), message({ authorId: "bob", authorName: "Bob" })));
+});
+
+test("room presence: each player writes only their own entry, with profile name and server time", async () => {
+  const presence = (extra = {}) => ({ name: "Alice", state: "online", lastSeen: serverTimestamp(), ...extra });
+  const alice = db("alice");
+  await assertFails(getDocs(collection(db(), "rooms/earthion/presence")));
+  await assertSucceeds(getDocs(collection(alice, "rooms/earthion/presence")));
+  await assertFails(getDocs(collection(alice, "rooms/draft/presence")));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence()));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/bob"), presence()));
+  await assertFails(setDoc(doc(alice, "rooms/draft/presence/alice"), presence()));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ name: "Admin" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "away" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ lastSeen: now })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ score: 1 })));
+  await assertFails(deleteDoc(doc(db("bob"), "rooms/earthion/presence/alice")));
+  await assertSucceeds(deleteDoc(doc(alice, "rooms/earthion/presence/alice")));
 });

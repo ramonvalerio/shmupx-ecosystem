@@ -15,6 +15,9 @@ service cloud.firestore {
     // rooms/{gameId}/messages/{id}: game-room chat. Signed-in players read and post in
     //   published games' rooms; authorId/authorName must match the caller's own profile,
     //   createdAt is the server time, messages are immutable (no edit/delete by clients).
+    // rooms/{gameId}/presence/{uid}: who is in the room now. Each player writes only their own
+    //   doc (name = profile displayName, state online|playing, lastSeen = server time) every 30 s
+    //   and deletes it on leaving; clients drop entries older than 75 s.
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
@@ -40,6 +43,13 @@ service cloud.firestore {
         && data.text is string
         && data.text.size() >= 1 && data.text.size() <= 500
         && data.createdAt == request.time;
+    }
+    function validPresence(data) {
+      return data.keys().hasAll(['name', 'state', 'lastSeen'])
+        && data.keys().hasOnly(['name', 'state', 'lastSeen'])
+        && data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && data.state in ['online', 'playing']
+        && data.lastSeen == request.time;
     }
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;
@@ -83,6 +93,11 @@ service cloud.firestore {
       allow read: if signedIn() && publishedGame(gameId);
       allow create: if signedIn() && publishedGame(gameId) && validMessage(request.resource.data);
       allow update, delete: if false;
+    }
+    match /rooms/{gameId}/presence/{uid} {
+      allow read: if signedIn() && publishedGame(gameId);
+      allow create, update: if owns(uid) && publishedGame(gameId) && validPresence(request.resource.data);
+      allow delete: if owns(uid);
     }
     match /gameplays/{runId} {
       allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
