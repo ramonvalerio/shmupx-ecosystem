@@ -1,7 +1,9 @@
-//! Biblioteca do MiSTer FPGA pela rede: lê por FTP (o MiSTer vem com o ProFTPD, usuário `root`)
-//! os jogos de arcade (`.mra` em `/media/fat/_*`, um nível de subpastas) e os ROMs de MAME
-//! (`games/mame` e `games/hbmame`). Só lista nomes; nada é baixado nem alterado no MiSTer. Quem
-//! cruza com o catálogo é a interface.
+//! MiSTer FPGA pela rede, por FTP (o MiSTer vem com o ProFTPD, usuário `root`):
+//! - Biblioteca: os jogos de arcade (`.mra` em `/media/fat/_*`, um nível de subpastas) e os ROMs
+//!   de MAME (`games/mame` e `games/hbmame`). Só lista nomes; quem cruza com o catálogo é a
+//!   interface.
+//! - Conexão com a conta: grava `token.<username> = sxm_...` no `/media/fat/shmupx/shmupx.ini`
+//!   (o mesmo arquivo do agente `shmupx-mister`), com cópia de segurança antes. É a única escrita.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
@@ -104,6 +106,36 @@ impl Ftp {
         Ok(SocketAddr::new(self.endereco.ip(), numeros[4] * 256 + numeros[5]))
     }
 
+    /// Conteúdo de um arquivo; `None` se ele não existe.
+    fn baixar(&mut self, caminho: &str) -> Result<Option<Vec<u8>>, String> {
+        self.comando("TYPE I", &[200])?;
+        let dados = self.porta_de_dados()?;
+        let mut canal = TcpStream::connect_timeout(&dados, TEMPO).map_err(|e| format!("falha no canal de dados do FTP: {e}"))?;
+        canal.set_read_timeout(Some(TEMPO)).ok();
+        let (codigo, _) = self.comando(&format!("RETR {caminho}"), &[125, 150, 450, 550])?;
+        if codigo >= 400 {
+            return Ok(None);
+        }
+        let mut conteudo = Vec::new();
+        canal.read_to_end(&mut conteudo).map_err(|e| format!("falha ao ler {caminho} do MiSTer: {e}"))?;
+        drop(canal);
+        self.esperar(&[226, 250])?;
+        Ok(Some(conteudo))
+    }
+
+    /// Grava (substitui) um arquivo.
+    fn enviar(&mut self, caminho: &str, conteudo: &[u8]) -> Result<(), String> {
+        self.comando("TYPE I", &[200])?;
+        let dados = self.porta_de_dados()?;
+        let mut canal = TcpStream::connect_timeout(&dados, TEMPO).map_err(|e| format!("falha no canal de dados do FTP: {e}"))?;
+        self.comando(&format!("STOR {caminho}"), &[125, 150])
+            .map_err(|e| format!("o MiSTer não deixou gravar {caminho}: {e}"))?;
+        canal.write_all(conteudo).map_err(|e| format!("falha ao gravar {caminho} no MiSTer: {e}"))?;
+        drop(canal);
+        self.esperar(&[226, 250])?;
+        Ok(())
+    }
+
     /// Nomes dentro de uma pasta (só o nome, sem o caminho). Pasta que não existe: lista vazia.
     fn listar(&mut self, caminho: &str) -> Result<Vec<String>, String> {
         let dados = self.porta_de_dados()?;
@@ -128,6 +160,108 @@ impl Ftp {
 /// Pasta (sem extensão) de jogos/cores do MiSTer: `_Arcade`, `_Shmups`, `_Vertical`…
 fn pasta_de_jogos(nome: &str) -> bool {
     nome.starts_with('_') && !nome.contains('.')
+}
+
+const INI: &str = "/media/fat/shmupx/shmupx.ini";
+const INI_BACKUP: &str = "/media/fat/shmupx/shmupx.ini.bak";
+
+/// Nome de jogador do MiSTer: letras, dígitos, `_` e `-` (vira chave no `shmupx.ini`).
+fn username_valido(nome: &str) -> bool {
+    !nome.is_empty() && nome.len() <= 32 && nome.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Jogadores da linha `username = [a, b, c]` do `shmupx.ini`.
+pub fn usuarios_do_ini(texto: &str) -> Vec<String> {
+    texto
+        .lines()
+        .find_map(|linha| {
+            let (chave, valor) = linha.split_once('=')?;
+            (chave.trim() == "username").then(|| valor.trim().trim_start_matches('[').trim_end_matches(']').to_string())
+        })
+        .map(|lista| lista.split(',').map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+/// `shmupx.ini` com o jogador na lista `username`, o endereço do ShmupX (`api`, sem ele o agente
+/// guarda as partidas só no ranking local) e a linha `token.<username>` nova (substitui a anterior
+/// do mesmo jogador). O resto do arquivo fica como estava.
+pub fn ini_com_token(texto: &str, username: &str, token: &str, api: &str) -> String {
+    let mut usuarios = usuarios_do_ini(texto);
+    if !usuarios.iter().any(|u| u == username) {
+        usuarios.push(username.to_string());
+    }
+    let linha_usuarios = format!("username = [{}]", usuarios.join(", "));
+    let linha_token = format!("token.{username} = {token}");
+    let linha_api = format!("api = {api}");
+    let chave_token = format!("token.{username}");
+    let mut linhas: Vec<String> = Vec::new();
+    let (mut tem_usuarios, mut tem_token, mut tem_api) = (false, false, false);
+    for linha in texto.lines() {
+        let chave = linha.split_once('=').map(|(c, _)| c.trim()).unwrap_or("");
+        if chave == "username" {
+            linhas.push(linha_usuarios.clone());
+            tem_usuarios = true;
+        } else if chave == "api" {
+            if !tem_api {
+                linhas.push(linha_api.clone());
+                tem_api = true;
+            }
+        } else if chave == chave_token {
+            if !tem_token {
+                linhas.push(linha_token.clone());
+                tem_token = true;
+            }
+        } else {
+            linhas.push(linha.to_string());
+        }
+    }
+    if !tem_usuarios {
+        linhas.insert(0, linha_usuarios);
+    }
+    if !tem_api {
+        linhas.insert(1, linha_api);
+    }
+    if !tem_token {
+        linhas.push(linha_token);
+    }
+    let mut saida = linhas.join("\n");
+    saida.push('\n');
+    saida
+}
+
+/// Jogadores já configurados no MiSTer (para escolher qual ligar à conta).
+pub fn usuarios(host: &str, senha: Option<&str>) -> Result<Vec<String>, String> {
+    let host = host.trim();
+    if !host_valido(host) {
+        return Err("informe o IP do MiSTer (ex.: 192.168.0.23)".into());
+    }
+    let mut ftp = Ftp::conectar(host, "root", senha.filter(|s| !s.is_empty()).unwrap_or("1"))?;
+    let texto = ftp.baixar(INI)?.map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    let _ = ftp.comando("QUIT", &[221]);
+    Ok(usuarios_do_ini(&texto))
+}
+
+/// Grava o token do jogador no `shmupx.ini` do MiSTer (guarda a versão anterior em `.bak`).
+pub fn gravar_token(host: &str, senha: Option<&str>, username: &str, token: &str, api: &str) -> Result<(), String> {
+    let host = host.trim();
+    if !host_valido(host) {
+        return Err("informe o IP do MiSTer (ex.: 192.168.0.23)".into());
+    }
+    if !username_valido(username) {
+        return Err("nome de jogador inválido: use letras, números, _ e -".into());
+    }
+    let mut ftp = Ftp::conectar(host, "root", senha.filter(|s| !s.is_empty()).unwrap_or("1"))?;
+    let atual = ftp.baixar(INI)?;
+    if ftp.listar("/media/fat/shmupx")?.is_empty() && atual.is_none() {
+        return Err("o ShmupX não está instalado neste MiSTer (falta /media/fat/shmupx)".into());
+    }
+    let texto = atual.as_deref().map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+    if let Some(original) = &atual {
+        ftp.enviar(INI_BACKUP, original)?;
+    }
+    ftp.enviar(INI, ini_com_token(&texto, username, token, api).as_bytes())?;
+    let _ = ftp.comando("QUIT", &[221]);
+    Ok(())
 }
 
 pub fn ler(host: &str, senha: Option<&str>) -> Result<BibliotecaMister, String> {
@@ -182,6 +316,21 @@ mod tests {
         assert!(host_valido("mister.local"));
         assert!(!host_valido(""));
         assert!(!host_valido("1.2.3.4; rm -rf"));
+    }
+
+    #[test]
+    fn ini_ganha_o_token_e_mantem_o_resto() {
+        let ini = "username = [ramonvalerio, kwayd]\ntoken.ramonvalerio = sxm_velho\n# comentario\n";
+        assert_eq!(usuarios_do_ini(ini), vec!["ramonvalerio", "kwayd"]);
+        let api = "https://api.shmupx";
+        let novo = ini_com_token(ini, "ramonvalerio", "sxm_novo", api);
+        assert_eq!(novo, "username = [ramonvalerio, kwayd]\napi = https://api.shmupx\ntoken.ramonvalerio = sxm_novo\n# comentario\n");
+        let outro = ini_com_token(&novo, "dantrius", "sxm_d", api);
+        assert!(outro.starts_with("username = [ramonvalerio, kwayd, dantrius]\napi = https://api.shmupx\n"));
+        assert!(outro.contains("token.ramonvalerio = sxm_novo") && outro.ends_with("token.dantrius = sxm_d\n"));
+        assert_eq!(outro.matches("api =").count(), 1);
+        assert_eq!(ini_com_token("", "ramon", "sxm_x", api), "username = [ramon]\napi = https://api.shmupx\ntoken.ramon = sxm_x\n");
+        assert!(!username_valido("a b") && !username_valido("") && username_valido("ramon_valerio"));
     }
 
     #[test]

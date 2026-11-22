@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// `shmupx-backend` (Axum). O build de distribuição define `SHMUPX_BACKEND_URL` com o endereço
 /// publicado; sem ela, aponta para o backend local de desenvolvimento.
-const BACKEND_BASE_URL: &str = match option_env!("SHMUPX_BACKEND_URL") {
+pub const BACKEND_BASE_URL: &str = match option_env!("SHMUPX_BACKEND_URL") {
     Some(url) => url,
     None => "http://localhost:3000",
 };

@@ -1,10 +1,11 @@
 //! Tokens do MiSTer FPGA (ADR 008): o agente `shmupx-mister` não tem como fazer login com
 //! Google, então envia partidas com um token longo, ligado a uma conta.
 //!
-//! - O jogador logado no Client pede um token; o servidor gera, guarda só o **hash** em
-//!   `misterTokens/{sha256}` e manda o token **por e-mail** para o endereço verificado da conta.
-//!   O token nunca volta na resposta da API nem aparece na tela.
-//! - O jogador cola o token no `shmupx.ini` do MiSTer (`token.<username> = sxm_...`).
+//! - O jogador logado no Client pede um token; o servidor gera e guarda só o **hash** em
+//!   `misterTokens/{sha256}`. Duas entregas: **por e-mail** (o jogador cola no `shmupx.ini`) ou
+//!   **direto** (`/api/mister/tokens/direct`): o token volta ao Client da própria conta, que o grava
+//!   no `shmupx.ini` do MiSTer pela rede (FTP) sem mostrá-lo na tela.
+//! - No `shmupx.ini`, uma linha por jogador do MiSTer: `token.<username> = sxm_...`.
 //! - Nas rotas de partida, `Authorization: Bearer sxm_...` vale como o jogador dono do token.
 //!   Revogar = `revoked: true` no documento.
 

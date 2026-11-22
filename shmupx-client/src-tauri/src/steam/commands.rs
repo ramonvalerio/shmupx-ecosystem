@@ -140,6 +140,32 @@ pub async fn emulador_biblioteca(pasta: Option<String>) -> super::emulador::Bibl
         .unwrap_or(super::emulador::BibliotecaEmulador { found: false, root: None, roms: vec![] })
 }
 
+/// Jogadores já configurados no `shmupx.ini` do MiSTer.
+#[tauri::command]
+pub async fn mister_usuarios(host: String, senha: Option<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || super::mister::usuarios(&host, senha.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Conecta o MiSTer à conta: pede um token novo ao backend e o grava direto no `shmupx.ini` do
+/// MiSTer para o jogador `username`. O token não volta para a interface.
+#[tauri::command]
+pub async fn mister_conectar(
+    sessao: tauri::State<'_, crate::session::SessionState>,
+    host: String,
+    senha: Option<String>,
+    username: String,
+) -> Result<(), String> {
+    let login = sessao.snapshot().token.ok_or_else(|| "entre na sua conta para conectar o MiSTer".to_string())?;
+    let resposta = crate::net::backend::chamar_json(&login, reqwest::Method::POST, "/api/mister/tokens/direct", None).await?;
+    let token = resposta["token"].as_str().filter(|t| t.starts_with("sxm_")).ok_or("o servidor não devolveu o token do MiSTer")?.to_string();
+    let api = crate::net::backend::BACKEND_BASE_URL;
+    tauri::async_runtime::spawn_blocking(move || super::mister::gravar_token(&host, senha.as_deref(), &username, &token, api))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Jogos do MiSTer FPGA na rede (FTP, usuário root). `senha`: a do MiSTer, se não for a padrão.
 #[tauri::command]
 pub async fn mister_biblioteca(host: String, senha: Option<String>) -> Result<super::mister::BibliotecaMister, String> {

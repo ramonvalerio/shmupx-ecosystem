@@ -144,7 +144,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
           </>}
           <div className="import-platform-heading"><h3>{t("Partidas do MiSTer no ranking")}</h3></div>
           <p className="muted">{t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.")}</p>
-          <MisterConnect />
+          <MisterConnect host={mister.host || undefined} password={mister.password} />
         </>}
 
         {source && !source.available && <><div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">{source.icon}</span><h3>{t(source.title)}</h3></div><p className="muted">{t(source.body)}</p><div className="integration-notice" role="status"><strong>{t("Em breve")}</strong><p>{t("A leitura desta biblioteca ainda não está disponível nesta versão.")}</p></div></>}

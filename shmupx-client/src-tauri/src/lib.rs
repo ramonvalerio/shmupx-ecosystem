@@ -40,6 +40,8 @@ pub fn run() {
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
             steam::commands::mister_biblioteca,
+            steam::commands::mister_usuarios,
+            steam::commands::mister_conectar,
             session::commands::definir_token_autenticacao,
             session::commands::limpar_token_autenticacao,
             session::commands::definir_sala_ativa,

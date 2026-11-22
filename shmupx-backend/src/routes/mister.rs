@@ -18,9 +18,27 @@ where
 {
     Router::new()
         .route("/api/mister/tokens", post(enviar_token))
+        .route("/api/mister/tokens/direct", post(token_direto))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
         .layer(Extension(firestore))
         .layer(Extension(email))
+}
+
+/// `POST /api/mister/tokens/direct`: gera um token e o devolve ao Client da própria conta, que o
+/// grava direto no `shmupx.ini` do MiSTer pela rede (FTP). O Client não mostra o token: ele vai
+/// da memória do app para o MiSTer. O aviso no sininho registra que um token novo foi criado.
+async fn token_direto(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Value>, AppError> {
+    let token = mister::gerar_token();
+    mister::registrar(&firestore, &usuario.uid, &token).await?;
+    let resumo = "O ShmupX Client gravou um token novo do MiSTer no seu MiSTer. Se não foi você, avise o suporte.";
+    if let Err(erro) = notificacoes::notificar_jogador(&firestore, &usuario.uid, "mister", "MiSTer conectado", resumo).await {
+        eprintln!("falha ao registrar o aviso do token do MiSTer no sininho: {erro:?}");
+    }
+    println!("mister: {} gerou um token para gravar direto no MiSTer", usuario.uid);
+    Ok(Json(json!({ "token": token })))
 }
 
 /// Gera um token do MiSTer e manda para o e-mail verificado da conta. A resposta diz só para
