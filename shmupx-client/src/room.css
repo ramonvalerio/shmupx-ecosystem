@@ -333,3 +333,10 @@
 /* Live no ar: microfone desligado + pílula LIVE vermelha */
 .live-indicator { display: flex; align-items: center; gap: 8px; color: #e6e6e6; }
 .live-pill { padding: 2px 9px; border-radius: 999px; background: #e5242b; color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .04em; line-height: 1.3; }
+
+/* Tema claro: avisos com texto escuro (amarelo/verde claros somem no fundo gelo); a cor do tipo
+   fica na borda à esquerda. */
+.theme-light .room-banner { color: #334155; background: var(--surface-raised); border-color: var(--stroke); border-left: 3px solid #94a3b8; }
+.theme-light .room-banner.warning { color: #7a2e0e; background: #f5e6d3; border-color: #d9770633; border-left-color: #d97706; }
+.theme-light .room-banner.recording { color: #b4232c; background: #fbe3e4; border-color: #b4232c33; border-left-color: #b4232c; }
+.theme-light .room-banner.success { color: #15703f; background: #dff2e6; border-color: #15703f33; border-left-color: #15703f; }
