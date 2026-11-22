@@ -1,5 +1,5 @@
 import { useI18n } from "./i18n";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isTauri, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ClientShell from "./components/ClientShell";
@@ -8,6 +8,7 @@ import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
 import { useRoomChat } from "./data/useRoomChat";
 import { useRoomPresence } from "./data/useRoomPresence";
+import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
@@ -161,7 +162,9 @@ type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "cha
 
 /** Sala com o chat em tempo real (Firestore `rooms/{gameId}/messages`). */
 function LiveRoomView({ author, ...props }: LiveRoomViewProps) {
-  const chat = useRoomChat(props.room.id, author);
+  // O chat mostra só desde a entrada na sala; sair pela aba recomeça (ClientShell.closeRoom).
+  const since = useMemo(() => roomJoinedAt(author.uid, props.room.id), [author.uid, props.room.id]);
+  const chat = useRoomChat(props.room.id, author, since);
   const others = useRoomPresence(props.room.id, author.uid);
   return (
     <RoomView

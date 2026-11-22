@@ -55,7 +55,9 @@ export default function Room({ room, profile, onBack }: { room: GameRoom; profil
   const [tab, setTab] = useState<"chat" | "players">("chat");
   const [watching, setWatching] = useState<{ uid: string; name: string } | null>(null);
   const author = useMemo(() => ({ uid: profile.uid, displayName: profile.displayName }), [profile.uid, profile.displayName]);
-  const chat = useRoomChat(room.id, author);
+  // Só as mensagens desde que entrou: sair pela seta e voltar começa com o chat limpo.
+  const [since] = useState(() => Date.now());
+  const chat = useRoomChat(room.id, author, since);
   const others = useRoomPresence(room.id, profile.uid);
   // Presença: online com o app em primeiro plano nesta sala; ausente com o app em segundo plano.
   usePresenceHeartbeat(author, [room.id], room.id, null, null);

@@ -19,6 +19,7 @@ import { useAutoUpdate } from "../data/useAutoUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 import { leaveRoomPresence, usePresenceHeartbeat, videoIdFromUrl } from "../data/useRoomPresence";
+import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { visibleDialog } from "./navigationInput";
 
@@ -113,6 +114,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   }, [rooms]);
 
   function openGame(id: string) {
+    roomJoinedAt(profile.uid, id);
     setOpenRoomIds((current) => (current.includes(id) ? current : [...current, id]));
     setActiveRoomId(id);
     onSelectRoom(id);
@@ -121,6 +123,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   function activateRoom(id: string) { setActiveRoomId(id); onSelectRoom(id); }
   function closeRoom(id: string) {
     void leaveRoomPresence(id, profile.uid);
+    // Saiu da sala: ao voltar, o chat começa limpo.
+    clearRoomSession(profile.uid, id);
     const index = openRoomIds.indexOf(id);
     const remaining = openRoomIds.filter((roomId) => roomId !== id);
     setOpenRoomIds(remaining);

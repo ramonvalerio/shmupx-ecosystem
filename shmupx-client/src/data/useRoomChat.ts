@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, type Timestamp } from "firebase/firestore";
+import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { ChatMessage } from "../types/room";
 
@@ -10,12 +10,15 @@ export const MAX_MESSAGE_LENGTH = 500;
 
 export type ChatStatus = "loading" | "ready" | "error";
 
+/** Folga para relógio do PC adiantado: a própria mensagem logo após entrar não some. */
+const CLOCK_SLACK_MS = 30_000;
+
 /**
  * Chat da sala em tempo real: `rooms/{gameId}/messages` no Firestore (Security Rules: só jogadores
  * logados, em jogos publicados, postando com o próprio uid e nome). Funciona igual com várias
  * instâncias do backend, porque não passa por ele.
  */
-export function useRoomChat(roomId: string, author: { uid: string; displayName: string }) {
+export function useRoomChat(roomId: string, author: { uid: string; displayName: string }, since?: number) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +27,11 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
     setMessages([]);
     setStatus("loading");
     setError(null);
-    const recent = query(collection(db, "rooms", roomId, "messages"), orderBy("createdAt", "desc"), limit(HISTORY));
+    // `since`: só as mensagens desde que o jogador entrou na sala (ver data/roomSession).
+    const messages = collection(db, "rooms", roomId, "messages");
+    const recent = since
+      ? query(messages, where("createdAt", ">=", Timestamp.fromMillis(since - CLOCK_SLACK_MS)), orderBy("createdAt", "desc"), limit(HISTORY))
+      : query(messages, orderBy("createdAt", "desc"), limit(HISTORY));
     return onSnapshot(
       recent,
       (snapshot) => {
@@ -53,7 +60,7 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         setError(failure.code === "permission-denied" ? "Sem permissão para ler o chat desta sala." : "Não foi possível conectar ao chat da sala.");
       },
     );
-  }, [roomId]);
+  }, [roomId, since]);
 
   const send = useCallback(
     async (text: string) => {
