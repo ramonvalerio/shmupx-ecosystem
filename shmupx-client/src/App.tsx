@@ -161,9 +161,8 @@ type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "cha
 
 /** Sala com o chat em tempo real (Firestore `rooms/{gameId}/messages`). */
 function LiveRoomView({ author, ...props }: LiveRoomViewProps) {
-  const { locale } = useI18n();
-  const chat = useRoomChat(props.room.id, author, locale);
-  const others = useRoomPresence(props.room.id, author, props.isRecording);
+  const chat = useRoomChat(props.room.id, author);
+  const others = useRoomPresence(props.room.id, author.uid);
   return (
     <RoomView
       {...props}

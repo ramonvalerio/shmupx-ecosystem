@@ -10,16 +10,12 @@ export const MAX_MESSAGE_LENGTH = 500;
 
 export type ChatStatus = "loading" | "ready" | "error";
 
-function formatTime(date: Date | null, locale: string): string {
-  return (date ?? new Date()).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-}
-
 /**
  * Chat da sala em tempo real: `rooms/{gameId}/messages` no Firestore (Security Rules: só jogadores
  * logados, em jogos publicados, postando com o próprio uid e nome). Funciona igual com várias
  * instâncias do backend, porque não passa por ele.
  */
-export function useRoomChat(roomId: string, author: { uid: string; displayName: string }, locale: string) {
+export function useRoomChat(roomId: string, author: { uid: string; displayName: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +38,8 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
               author: typeof data.authorName === "string" ? data.authorName : "Jogador",
               authorId: typeof data.authorId === "string" ? data.authorId : undefined,
               text: typeof data.text === "string" ? data.text : "",
-              timestamp: formatTime(createdAt, locale),
+              // ISO: ordena entre dias e a tela formata no idioma do jogador.
+              timestamp: (createdAt ?? new Date()).toISOString(),
               pending: doc.metadata.hasPendingWrites,
             } satisfies ChatMessage;
           })
@@ -56,7 +53,7 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         setError(failure.code === "permission-denied" ? "Sem permissão para ler o chat desta sala." : "Não foi possível conectar ao chat da sala.");
       },
     );
-  }, [roomId, locale]);
+  }, [roomId]);
 
   const send = useCallback(
     async (text: string) => {

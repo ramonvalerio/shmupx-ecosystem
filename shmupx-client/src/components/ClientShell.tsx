@@ -1,5 +1,7 @@
 import { useI18n } from "../i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { EventsPage, HelpPage, HomePage, RankingPage, type Section } from "./ClientPages";
 import { ProfilePage, SubmissionsPage, SubscriptionPage } from "./AccountPages";
@@ -16,6 +18,19 @@ import { useNotifications } from "../data/useNotifications";
 import { useAutoUpdate } from "../data/useAutoUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
+import { leaveRoomPresence, usePresenceHeartbeat } from "../data/useRoomPresence";
+import { useDialogFocus } from "./useDialogFocus";
+
+/** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
+const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
+function readOpenRooms(uid: string): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(openRoomsKey(uid)) ?? "[]");
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 interface ClientShellProps {
   rooms: GameRoom[];
@@ -68,15 +83,27 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   }, [preferences]);
 
   // Salas abertas em abas; `activeRoomId` null mostra a grade da coleção.
-  const [openRoomIds, setOpenRoomIds] = useState<string[]>([]);
+  const [openRoomIds, setOpenRoomIds] = useState<string[]>(() => readOpenRooms(profile.uid));
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [rankingRoomIds, setRankingRoomIds] = useState<string[]>([]);
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
   // Menu lateral = os jogos abertos, na mesma ordem das abas; arrastar ali reordena as abas também.
   const railDrag = useDragReorder({ ids: openRoomIds, onReorder: setOpenRoomIds, axis: "y" });
 
-  // Um jogo despublicado sai do catálogo: a aba dele fecha.
   useEffect(() => {
+    try { localStorage.setItem(openRoomsKey(profile.uid), JSON.stringify(openRoomIds)); } catch { /* fica só nesta sessão */ }
+  }, [profile.uid, openRoomIds]);
+  // Presença em todas as salas abertas: online na que está na tela, away nas outras.
+  usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId);
+  // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
+  const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
+  const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;
+  const closeDialogRef = useDialogFocus(closingRoom !== null, () => setClosingRoomId(null));
+
+  // Um jogo despublicado sai do catálogo: a aba dele fecha. Catálogo ainda vazio (carregando) não
+  // fecha nada: as abas guardadas voltariam vazias.
+  useEffect(() => {
+    if (rooms.length === 0) return;
     const valid = (id: string) => rooms.some((room) => room.id === id);
     setOpenRoomIds((current) => (current.every(valid) ? current : current.filter(valid)));
     setActiveRoomId((current) => (current === null || valid(current) ? current : null));
@@ -90,6 +117,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   }
   function activateRoom(id: string) { setActiveRoomId(id); onSelectRoom(id); }
   function closeRoom(id: string) {
+    void leaveRoomPresence(id, profile.uid);
     const index = openRoomIds.indexOf(id);
     const remaining = openRoomIds.filter((roomId) => roomId !== id);
     setOpenRoomIds(remaining);
@@ -104,6 +132,19 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     setRankingRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
   }
   const isLibrary = section === "collection";
+  // Versão instalada (tauri.conf.json), no rodapé: acompanha cada atualização sozinha.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => { if (isTauri()) getVersion().then(setVersion).catch(() => {}); }, []);
+
+  // Menu de navegação no topo: "Minhas coleções" fixo; na sala, o jogo; no ranking do jogo, "Ranking".
+  function showCollection() { setSection("collection"); setActiveRoomId(null); }
+  function showRoom(id: string) { setSection("collection"); setRanking(id, false); activateRoom(id); }
+  const crumbRoom = isLibrary ? activeRoom : null;
+  const crumbs: { label: string; onClick?: () => void }[] = [{ label: t("Minhas coleções"), onClick: showCollection }];
+  if (crumbRoom) {
+    crumbs.push({ label: crumbRoom.title, onClick: () => showRoom(crumbRoom.id) });
+    if (rankingRoomIds.includes(crumbRoom.id)) crumbs.push({ label: t("Ranking") });
+  }
 
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
@@ -122,7 +163,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
                 {recordingRoomId === id && <span className="rail-room-recording" aria-label={t("Gravando")} />}
                 <span className="rail-room-title">{room.title}</span>
               </button>
-              <button type="button" className="rail-room-close" aria-label={t("Fechar sala de {game}", { game: room.title })} title={t("Fechar")} onClick={() => closeRoom(id)}>×</button>
+              <button type="button" className="rail-room-close" aria-label={t("Fechar sala de {game}", { game: room.title })} title={t("Fechar")} onClick={() => setClosingRoomId(id)}>×</button>
             </div>;
           })}
         </div>
@@ -138,7 +179,20 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         </div>
       </nav>
       <header className="client-topbar">
-        <img src="/img/logo.png" alt="ShmupX Client" />
+        <nav className="topbar-breadcrumb" aria-label={t("Você está em")}>
+          <ol>
+            {crumbs.map((crumb, index) => {
+              const last = index === crumbs.length - 1;
+              return (
+                <li key={index}>
+                  {last || !crumb.onClick
+                    ? <span aria-current={last ? "page" : undefined} title={crumb.label}>{crumb.label}</span>
+                    : <button type="button" onClick={crumb.onClick} title={crumb.label}>{crumb.label}</button>}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
         {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
         {AMBIENTE === "prd" && import.meta.env.DEV && <span className="env-badge is-production" title={t("Versão em desenvolvimento ligada aos dados reais: o que você fizer vale para os jogadores.")}>{t("DEV · PRODUÇÃO")}</span>}
         <div className="client-status-group">
@@ -201,7 +255,24 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         </div>
       </div>
       </div>
-      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active ? bigPicture.controller : t("ShmupX Client")} <span className="footer-demo">{t("· dados de demonstração")}</span></span></footer>
+      {closingRoom && (
+        <div className="controller-dialog-backdrop">
+          <div ref={closeDialogRef} role="dialog" aria-modal="true" aria-labelledby="close-room-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+            <header>
+              <div>
+                <h2 id="close-room-title">{t("Sair da sala de {game}?", { game: closingRoom.title })}</h2>
+                <p>{t("Você sai do chat e da lista de jogadores desta sala. Para voltar, abra o jogo de novo na coleção.")}</p>
+                {recordingRoomId === closingRoom.id && <p className="mode-error" role="alert">{t("Há uma run sendo gravada nesta sala: a gravação continua até você parar.")}</p>}
+              </div>
+            </header>
+            <footer>
+              <button type="button" className="secondary-action" onClick={() => setClosingRoomId(null)}>{t("Cancelar")}</button>
+              <button type="button" className="primary-action" onClick={() => { closeRoom(closingRoom.id); setClosingRoomId(null); }}>{t("Sair da sala")}</button>
+            </footer>
+          </div>
+        </div>
+      )}
+      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );
 }

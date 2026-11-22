@@ -13,10 +13,16 @@ interface ChatFeedProps {
   emptyText?: string;
 }
 
-/** Hora curta da mensagem (o timestamp vem em ISO); texto que não é data aparece como veio. */
-function hora(timestamp: string, locale: string): string {
+/**
+ * Horário da mensagem no formato do idioma: só a hora quando é de hoje; de outro dia, hora e data
+ * (pt-BR: "15:55 20/11/2026"; en: "03:55 PM 11/20/2026"). Texto que não é data aparece como veio.
+ */
+function horario(timestamp: string, locale: string, agora = new Date()): string {
   const data = new Date(timestamp);
-  return Number.isNaN(data.getTime()) ? timestamp : data.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  if (Number.isNaN(data.getTime())) return timestamp;
+  const hora = data.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  if (data.toDateString() === agora.toDateString()) return hora;
+  return `${hora} ${data.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" })}`;
 }
 
 export default function ChatFeed({ messages, status = "ready", error, playerId, emptyText }: ChatFeedProps) {
@@ -44,7 +50,7 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
                 <strong>{message.author}{mine ? ` ${t("(você)")}` : ""}</strong>
                 {bot && <small className="chat-tag">{t("BOT")}</small>}
                 {bot && <small className="chat-tag is-private">🔒 {t("Reservado para você")}</small>}
-                <time dateTime={message.timestamp}>{hora(message.timestamp, locale)}</time>
+                <time dateTime={message.timestamp}>{horario(message.timestamp, locale)}</time>
               </header>
               {message.inReplyTo && <blockquote className="chat-reply-to">{message.inReplyTo}</blockquote>}
               <p>{message.text}</p>

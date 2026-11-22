@@ -145,10 +145,11 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertFails(getDocs(collection(alice, "rooms/draft/presence")));
   await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence()));
   await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing" })));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "away" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "offline" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/bob"), presence()));
   await assertFails(setDoc(doc(alice, "rooms/draft/presence/alice"), presence()));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ name: "Admin" })));
-  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "away" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ lastSeen: now })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ score: 1 })));
   await assertFails(deleteDoc(doc(db("bob"), "rooms/earthion/presence/alice")));

@@ -10,7 +10,7 @@ import { answer as robotxAnswer } from "../data/robotx";
 import { useGameArt } from "../data/gameArt";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
-import type { RoomPresence } from "../data/useRoomPresence";
+import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
@@ -45,6 +45,20 @@ type ChatFilter = "everyone" | "robotx";
 type SortBy = "score" | "name";
 
 const ROBOTX = "RobotX";
+
+/** Conversa reservada com o RobotX, por jogador e sala: continua ao sair e voltar à sala. */
+const robotxKey = (playerId: string | undefined, roomId: string) => `shmupx.client.robotx.v1.${playerId ?? "anon"}.${roomId}`;
+function readRobotxReplies(playerId: string | undefined, roomId: string): ChatMessage[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(robotxKey(playerId, roomId)) ?? "[]");
+    return Array.isArray(value) ? value.filter((m): m is ChatMessage => m && typeof m.id === "string" && typeof m.text === "string" && typeof m.timestamp === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+const STATUS_ORDER: Record<PresenceStatus, number> = { online: 0, away: 1, offline: 2 };
+const STATUS_LABEL: Record<PresenceStatus, string> = { online: "Online", away: "Ausente", offline: "Offline" };
 const MENCAO_ROBOTX = /@robotx\b/i;
 
 export { DEFAULT_COVER } from "../data/gameArt";
@@ -103,7 +117,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
   // Respostas do RobotX desta sessão (locais, por sala).
-  const [botReplies, setBotReplies] = useState<ChatMessage[]>([]);
+  const [botReplies, setBotReplies] = useState<ChatMessage[]>(() => readRobotxReplies(playerId, room.id));
   const knowledge = room.robotx ?? [];
   const live = useLive();
   const youtube = useYouTube();
@@ -118,9 +132,17 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     setLaunchError(null);
     setIsLaunching(false);
     setIsStopping(false);
-    setBotReplies([]);
+    setBotReplies(readRobotxReplies(playerId, room.id));
     setFilter("everyone");
-  }, [room.id]);
+  }, [room.id, playerId]);
+
+  function addBotReply(message: ChatMessage) {
+    setBotReplies((current) => {
+      const next = [...current, message].slice(-50);
+      try { localStorage.setItem(robotxKey(playerId, room.id), JSON.stringify(next)); } catch { /* fica só nesta sessão */ }
+      return next;
+    });
+  }
 
   // "Só RobotX": mensagens do RobotX e as que o mencionam. É um filtro de leitura; o chat
   // continua o mesmo para todos.
@@ -136,7 +158,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     const asked = question.replace(MENCAO_ROBOTX, "").trim();
     // Um instante depois da pergunta, para a resposta aparecer abaixo dela.
     window.setTimeout(() => {
-      setBotReplies((current) => [...current, { id: `robotx-${Date.now()}`, author: ROBOTX, text: result.text, timestamp: new Date().toISOString(), local: true, inReplyTo: asked }]);
+      addBotReply({ id: `robotx-${Date.now()}`, author: ROBOTX, text: result.text, timestamp: new Date().toISOString(), local: true, inReplyTo: asked });
     }, 350);
   }
 
@@ -227,9 +249,12 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
   // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
   // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, you: true };
-  const rest = others.map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, you: false }));
-  const sorted = [me, ...(sortBy === "name" ? [...rest].sort((a, b) => a.name.localeCompare(b.name)) : rest)];
+  // Os outros: online, depois ausentes, depois offline; por nome quando essa é a ordem escolhida.
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: "online" as PresenceStatus, you: true };
+  const rest = others
+    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, you: false }))
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
+  const sorted = [me, ...rest];
   const players = sorted;
 
   return (
@@ -317,7 +342,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                 <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
                 <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>
               </span>
-              <span className="room-player-state">{player.playing ? t("JOGANDO") : t("ONLINE")}</span>
+              <span className="room-player-state">
+                {player.playing && t("JOGANDO")}
+                <span className={`presence-dot is-${player.status}`} role="img" aria-label={t(STATUS_LABEL[player.status])} title={t(STATUS_LABEL[player.status])} />
+              </span>
             </li>
           ))}
           <li className={`room-player is-bot ${robotxReady ? "" : "is-soon"}`} title={robotxReady ? t("Mencione @RobotX no chat para perguntar sobre o jogo.") : t("O RobotX ainda não chegou a esta sala.")}>

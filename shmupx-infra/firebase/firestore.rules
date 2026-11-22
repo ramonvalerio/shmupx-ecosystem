@@ -15,9 +15,9 @@ service cloud.firestore {
     // rooms/{gameId}/messages/{id}: game-room chat. Signed-in players read and post in
     //   published games' rooms; authorId/authorName must match the caller's own profile,
     //   createdAt is the server time, messages are immutable (no edit/delete by clients).
-    // rooms/{gameId}/presence/{uid}: who is in the room now. Each player writes only their own
-    //   doc (name = profile displayName, state online|playing, lastSeen = server time) every 30 s
-    //   and deletes it on leaving; clients drop entries older than 75 s.
+    // rooms/{gameId}/presence/{uid}: who joined the room. Each player writes only their own
+    //   doc (name = profile displayName, state online|away|playing, lastSeen = server time) every
+    //   30 s and deletes it on leaving the room; entries older than 75 s show as offline.
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
@@ -48,7 +48,7 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'state', 'lastSeen'])
         && data.keys().hasOnly(['name', 'state', 'lastSeen'])
         && data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
-        && data.state in ['online', 'playing']
+        && data.state in ['online', 'away', 'playing']
         && data.lastSeen == request.time;
     }
     function publishedSeason(id) {

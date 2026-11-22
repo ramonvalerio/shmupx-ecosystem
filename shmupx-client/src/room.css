@@ -297,3 +297,22 @@
 .navigation-rail .rail-room-close { top: 6px; }
 /* Sem a linha ciano vertical à esquerda do cabeçalho da sala. */
 .game-room-header { border-left: 1px solid #ffffff1f; }
+
+/* Status do jogador na sala: verde online, vermelho ausente, cinza offline. */
+.presence-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.presence-dot.is-online { background: #3fd98b; box-shadow: 0 0 6px #3fd98b99; }
+.presence-dot.is-away { background: #fd4851; box-shadow: 0 0 6px #fd485199; }
+.presence-dot.is-offline { background: #6b757c; }
+.close-room-dialog { width: min(460px, 100%); }
+
+/* Menu de navegação no topo (no lugar do logo): Minhas coleções › jogo › Ranking. */
+.topbar-breadcrumb { min-width: 0; }
+.topbar-breadcrumb ol { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+.topbar-breadcrumb li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topbar-breadcrumb li + li::before { content: "›"; color: #6b757c; font-weight: 400; font-size: 16px; }
+.topbar-breadcrumb button, .topbar-breadcrumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.topbar-breadcrumb button { padding: 4px 2px; border: 0; background: none; color: var(--cyan); font: inherit; cursor: pointer; }
+.topbar-breadcrumb button:hover { text-decoration: underline; }
+.topbar-breadcrumb [aria-current] { color: #f0fcff; }
+.theme-light .topbar-breadcrumb [aria-current] { color: #10233f; }
+.client-footer .footer-version { letter-spacing: .08em; font-weight: 600; }

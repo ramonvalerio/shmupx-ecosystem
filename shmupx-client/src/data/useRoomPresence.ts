@@ -2,53 +2,80 @@ import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, type Timestamp } from "firebase/firestore";
 import { db } from "../auth/firebase";
 
-/** De quanto em quanto tempo o Client confirma que continua na sala. */
+/** De quanto em quanto tempo o Client confirma que continua conectado. */
 const HEARTBEAT_MS = 30_000;
-/** Sem confirmação há mais que isso (app fechado à força, sem rede), o jogador some da lista. */
+/** Sem confirmação há mais que isso (app fechado, sem rede), o jogador aparece offline. */
 const STALE_MS = 75_000;
 /** Reavalia quem ficou sem confirmar, mesmo sem mudança no Firestore. */
 const TICK_MS = 15_000;
 
+/** Verde: na sala, com o Client em primeiro plano. Vermelho: Client aberto, mas em outra tela ou
+ * janela. Cinza: Client fechado ou sem conexão (continua na sala até sair pela aba). */
+export type PresenceStatus = "online" | "away" | "offline";
+
 export interface RoomPresence {
   uid: string;
   name: string;
+  status: PresenceStatus;
   playing: boolean;
 }
 
-/**
- * Presença em tempo real na sala: `rooms/{gameId}/presence/{uid}` no Firestore (Security Rules: só
- * o próprio jogador grava o seu documento, com o nome do perfil e o horário do servidor). O Client
- * confirma a presença a cada 30 s enquanto a sala está aberta e apaga o documento ao sair; quem
- * fica 75 s sem confirmar sai da lista.
- */
-export function useRoomPresence(roomId: string, me: { uid: string; displayName: string }, playing: boolean) {
-  const [entries, setEntries] = useState<Array<RoomPresence & { lastSeen: number }>>([]);
-  const [now, setNow] = useState(() => Date.now());
+function presenceRef(roomId: string, uid: string) {
+  return doc(db, "rooms", roomId, "presence", uid);
+}
 
-  // Própria presença: grava ao entrar, a cada 30 s e quando muda o estado (jogando ou não).
+/** Sair da sala pela aba: o jogador deixa a lista. Fechar o app ou cair a conexão não tira. */
+export function leaveRoomPresence(roomId: string, uid: string) {
+  return deleteDoc(presenceRef(roomId, uid)).catch((failure) => console.warn("falha ao sair da sala:", failure));
+}
+
+/** Client em primeiro plano (janela com foco e visível). */
+function useForeground() {
+  const [foreground, setForeground] = useState(() => document.visibilityState === "visible" && document.hasFocus());
   useEffect(() => {
-    if (!me.uid) return;
-    const ref = doc(db, "rooms", roomId, "presence", me.uid);
-    const beat = () =>
-      setDoc(ref, { name: me.displayName, state: playing ? "playing" : "online", lastSeen: serverTimestamp() }).catch((failure) =>
-        console.warn("falha ao registrar a presença na sala:", failure),
-      );
-    void beat();
+    const update = () => setForeground(document.visibilityState === "visible" && document.hasFocus());
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  return foreground;
+}
+
+/**
+ * Presença do jogador em todas as salas abertas nas abas: `rooms/{gameId}/presence/{uid}` no
+ * Firestore (Security Rules: só o próprio jogador grava o seu, com o nome do perfil e o horário do
+ * servidor). Confirma a cada 30 s e quando o estado muda: jogando, na sala em primeiro plano
+ * (online) ou com o Client aberto em outro lugar (away).
+ */
+export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null) {
+  const foreground = useForeground();
+  const rooms = openRoomIds.join("\n");
+  useEffect(() => {
+    if (!me.uid || !rooms) return;
+    const ids = rooms.split("\n");
+    const beat = () => {
+      for (const roomId of ids) {
+        const state = recordingRoomId === roomId ? "playing" : foreground && visibleRoomId === roomId ? "online" : "away";
+        setDoc(presenceRef(roomId, me.uid), { name: me.displayName, state, lastSeen: serverTimestamp() }).catch((failure) =>
+          console.warn("falha ao registrar a presença na sala:", failure),
+        );
+      }
+    };
+    beat();
     const timer = window.setInterval(beat, HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [roomId, me.uid, me.displayName, playing]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground]);
+}
 
-  // Ao sair da sala (ou fechar o app), apaga a presença.
-  useEffect(() => {
-    if (!me.uid) return;
-    const ref = doc(db, "rooms", roomId, "presence", me.uid);
-    const leave = () => void deleteDoc(ref).catch(() => undefined);
-    window.addEventListener("beforeunload", leave);
-    return () => {
-      window.removeEventListener("beforeunload", leave);
-      leave();
-    };
-  }, [roomId, me.uid]);
+/** Os outros jogadores da sala (quem entrou e não saiu pela aba), com o status de cada um. */
+export function useRoomPresence(roomId: string, myUid: string): RoomPresence[] {
+  const [entries, setEntries] = useState<Array<{ uid: string; name: string; state: string; lastSeen: number }>>([]);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setEntries([]);
@@ -61,7 +88,7 @@ export function useRoomPresence(roomId: string, me: { uid: string; displayName: 
             return {
               uid: d.id,
               name: typeof data.name === "string" ? data.name : "Jogador",
-              playing: data.state === "playing",
+              state: typeof data.state === "string" ? data.state : "online",
               lastSeen: (data.lastSeen as Timestamp | null)?.toMillis() ?? Date.now(),
             };
           }),
@@ -75,6 +102,12 @@ export function useRoomPresence(roomId: string, me: { uid: string; displayName: 
     return () => window.clearInterval(timer);
   }, []);
 
-  // Os outros jogadores ativos; o próprio jogador a tela mostra sempre, pelo estado local.
-  return entries.filter((e) => e.uid !== me.uid && now - e.lastSeen < STALE_MS).map(({ uid, name, playing }) => ({ uid, name, playing }));
+  // O próprio jogador a tela mostra sempre, pelo estado local.
+  return entries
+    .filter((e) => e.uid !== myUid)
+    .map(({ uid, name, state, lastSeen }) => {
+      const offline = now - lastSeen >= STALE_MS;
+      const status: PresenceStatus = offline ? "offline" : state === "away" ? "away" : "online";
+      return { uid, name, status, playing: !offline && state === "playing" };
+    });
 }
