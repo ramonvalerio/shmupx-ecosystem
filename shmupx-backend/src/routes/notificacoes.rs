@@ -44,7 +44,10 @@ pub fn router_publico<S>(firestore: Arc<Firestore>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    Router::new().route("/api/client/update/{target}/{arch}/{current}", get(atualizacao)).layer(Extension(firestore))
+    Router::new()
+        .route("/api/client/update/{target}/{arch}/{current}", get(atualizacao))
+        .route("/api/client/downloads", get(downloads))
+        .layer(Extension(firestore))
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +73,12 @@ async fn atualizacao(
         Some(atualizacao) => Json(atualizacao).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     })
+}
+
+/// `GET /api/client/downloads` (público): instaladores da página de Download do site, da versão
+/// mais nova liberada de cada sistema.
+async fn downloads(Extension(firestore): Extension<Arc<Firestore>>) -> Result<Json<versoes::Downloads>, AppError> {
+    Ok(Json(versoes::downloads(&versoes::listar(&firestore).await?)))
 }
 
 /// `GET /api/notifications`: avisos com o contador de não lidos. Registra o jogador (e-mail e

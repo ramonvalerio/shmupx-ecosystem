@@ -578,6 +578,40 @@ pub fn atualizacao(versoes: &[Versao], atual: &str, plataforma: &Plataforma) -> 
     })
 }
 
+/// Instalador para baixar no site.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Download {
+    pub version: String,
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+}
+
+/// O que a página de Download do site oferece: por sistema, o instalador da versão mais nova já
+/// liberada que tem pacote para ele. Muda sozinho quando um agendamento do Lab é liberado.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Downloads {
+    pub windows: Option<Download>,
+    pub appimage: Option<Download>,
+    pub deb: Option<Download>,
+}
+
+pub fn downloads(versoes: &[Versao]) -> Downloads {
+    let mais_nova = |plataforma: Plataforma| {
+        versoes
+            .iter()
+            .filter(|v| v.status == "released")
+            .filter_map(|v| Some((ler_versao(&v.version)?, v, plataforma.instalador(v)?)))
+            .max_by_key(|(n, _, _)| *n)
+            .map(|(_, v, i)| Download { version: v.version.clone(), url: i.url.clone(), size: i.size })
+    };
+    Downloads {
+        windows: mais_nova(Plataforma::Windows),
+        appimage: mais_nova(Plataforma::Linux("appimage".into())),
+        deb: mais_nova(Plataforma::Linux("deb".into())),
+    }
+}
+
 /// Cancela um agendamento que ainda não foi liberado.
 pub async fn cancelar(fs: &Firestore, versao: &str) -> Result<Versao, AppError> {
     let atual = obter(fs, versao).await?;
@@ -788,6 +822,23 @@ mod tests {
         assert_eq!(Plataforma::de("linux", None), None, "Linux sem formato (Client antigo)");
         assert_eq!(Plataforma::de("linux", Some("rpm")), None);
         assert_eq!(Plataforma::de("darwin", Some("app")), None);
+    }
+
+    #[test]
+    fn download_do_site_e_a_mais_nova_liberada_com_pacote_por_sistema() {
+        let linux = |url: &str| Instalador { url: url.into(), signature: "s".into(), size: Some(10) };
+        let agendada = Versao { installer: Some(instalador()), ..versao("0.3.0", "scheduled", false) };
+        let so_windows = Versao { installer: Some(instalador()), ..versao("0.2.0", "released", false) };
+        let com_linux = Versao {
+            installer: Some(instalador()),
+            linux_installers: [("appimage".to_string(), linux("a.AppImage")), ("deb".to_string(), linux("a.deb"))].into(),
+            ..versao("0.1.5", "released", false)
+        };
+        let d = downloads(&[agendada, so_windows, com_linux]);
+        assert_eq!(d.windows.unwrap().version, "0.2.0", "a agendada ainda não aparece");
+        assert_eq!(d.appimage.unwrap().url, "a.AppImage");
+        assert_eq!(d.deb.unwrap().version, "0.1.5");
+        assert_eq!(downloads(&[]), Downloads { windows: None, appimage: None, deb: None });
     }
 
     #[test]
