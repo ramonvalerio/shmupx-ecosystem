@@ -76,7 +76,9 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <ellipse cx="123" cy="200" rx="7" ry="5" fill="#0b0d0f" />
       <circle cx="122" cy="196" r="7" fill="#fd4851" />
       <circle cx="120" cy="193.5" r="2" fill="#ffffff" fillOpacity=".35" />
-      <rect x="139" y="185" width="13" height="6" rx="3" fill="#2f7bff" />
+      {/* Crédito (START): botão redondo azul, como os vermelhos */}
+      <circle cx="145.5" cy="188" r="3.6" fill="#2f7bff" />
+      <circle cx="144.6" cy="187" r="1" fill="#ffffff" fillOpacity=".35" />
       <circle cx="163" cy="204" r="4.6" fill="#fd4851" />
       <circle cx="179" cy="197.5" r="4.6" fill="#fd4851" />
       <circle cx="195" cy="197.5" r="4.6" fill="#fd4851" />
