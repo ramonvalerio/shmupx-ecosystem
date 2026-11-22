@@ -79,8 +79,8 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <circle cx="163" cy="204" r="4.6" fill="#fd4851" />
       <circle cx="179" cy="197.5" r="4.6" fill="#fd4851" />
       <circle cx="195" cy="197.5" r="4.6" fill="#fd4851" />
-      {/* Corpo de baixo claro, levemente afunilado, com cantos redondos e rodapé escuro */}
-      <path d="M44 216 H276 L269 280 Q268 288 260 288 H60 Q52 288 51 280 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
+      {/* Corpo de baixo claro, reto: mesma largura do corpo de cima, laterais verticais até o chão */}
+      <path d="M39 216 H281 V288 H39 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
       {/* Esquerda: tampa de manutenção (só o recorte e a fechadura) */}
       <rect x="70" y="224" width="92" height="54" rx="4" fill="none" stroke="#a3abb1" strokeWidth="1.2" />
       <circle cx="152" cy="251" r="2.6" fill="#8a939a" />
@@ -92,7 +92,8 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <rect x="215" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
       <rect x="224" y="238" width="2" height="12" rx="1" fill="#2b3035" />
       <rect x="199" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />
-      <rect x="56" y="288" width="208" height="8" rx="3" fill="#14181b" />
+      {/* Rodapé escuro, na largura do corpo */}
+      <rect x="39" y="288" width="242" height="8" fill="#14181b" />
       </g>
     </svg>
   );
