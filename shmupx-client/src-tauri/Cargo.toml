@@ -63,6 +63,12 @@ windows-core = "0.62.2"
 [profile.dev.package.shmupx-client]
 opt-level = 2
 
+# Otimizado + incremental quebra o link no Windows (LNK2019 "unresolved external symbol
+# anon...llvm..."): o cache incremental deixa símbolos internos entre as partes do código sem
+# correspondência. Sem incremental (as dependências já não usam), o build de dev volta a linkar.
+[profile.dev]
+incremental = false
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 
