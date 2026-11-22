@@ -581,4 +581,4 @@ button:disabled { opacity: .5; cursor: default; }
 .youtube-help-actions { justify-content: flex-end !important; }
 
 /* Tema claro: no hover o menu lateral fica escuro, então o texto fica branco para contrastar. */
-.theme-light .room-tab:hover > button[role=tab], .theme-light .room-tab:hover .room-tab-close, .theme-light .navigation-rail button:hover { color: #fff; }
+.theme-light .room-tab:hover > button[role=tab], .theme-light .room-tab:hover .room-tab-close, .theme-light .navigation-rail > button:hover { color: #fff; }
