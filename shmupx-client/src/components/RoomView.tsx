@@ -11,18 +11,10 @@ import { useGameArt } from "../data/gameArt";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
-import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import { readMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { openWatchWindow } from "./WatchWindow";
-import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
-import { useDialogFocus } from "./useDialogFocus";
-import type { PlayOn } from "../types/room";
+import { useGameLauncher } from "./useGameLauncher";
 
-/** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
-const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
 
-/** Nome comparável (sem acento, minúsculas, hífens): o menu do MiSTer usa o título do jogo. */
-const slug = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export interface RoomViewProps {
   room: GameRoom;
@@ -119,19 +111,8 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, onShowCollection, lastRun, startError, others = [] }: RoomViewProps) {
   const { t } = useI18n();
-  const [launchError, setLaunchError] = useState<string | null>(null);
-  const [isLaunching, setIsLaunching] = useState(false);
-  const [launchNotice, setLaunchNotice] = useState<string | null>(null);
-  /** Plataformas para escolher ao iniciar (o jogador tem o jogo em mais de uma). */
-  const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
-  const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
-  /** Modos do jogo no menu ShmupX do MiSTer, para escolher qual abrir na TV. */
-  const [misterModes, setMisterModes] = useState<MisterMenuGame[] | null>(null);
-  const misterDialogRef = useDialogFocus(misterModes !== null, () => setMisterModes(null));
-  /** Jogo desinstalado (ou sem o ROM) na plataforma escolhida. */
-  const [notFound, setNotFound] = useState<PlayOn | null>(null);
-  const notFoundDialogRef = useDialogFocus(notFound !== null, () => setNotFound(null));
-  const playable = usePlatformOwnership();
+  // INICIAR JOGO e MODO TREINO (plataforma, jogo instalado, MiSTer): ver useGameLauncher.
+  const launcher = useGameLauncher(room);
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
@@ -148,12 +129,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const robotxReady = knowledge.length > 0;
 
   useEffect(() => {
-    setLaunchError(null);
-    setLaunchNotice(null);
-    setChoosing(null);
-    setMisterModes(null);
-    setNotFound(null);
-    setIsLaunching(false);
     setIsStopping(false);
     setBotReplies(readRobotxReplies(playerId, room.id));
     setFilter("everyone");
@@ -196,96 +171,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     if (robotxReady && MENCAO_ROBOTX.test(text)) reply(text);
   }
 
-  /**
-   * Plataformas por onde dá para iniciar: as em que o jogador tem o jogo (bibliotecas importadas).
-   * Sem nenhuma importada, o que o Client sabe abrir (Steam pelo app_id, emulador pelo ROM).
-   */
-  function startOptions(): PlayOn[] {
-    const owned = playable.tags(room).filter((tag) => tag.owned).map((tag) => tag.id);
-    if (owned.length > 0) return owned;
-    const known: PlayOn[] = [];
-    if (room.steamAppId > 0) known.push("steam");
-    if (romsFor(room).length > 0) known.push("emulator");
-    return known;
-  }
-
-  /** INICIAR JOGO: uma plataforma inicia direto; mais de uma pergunta por qual. */
-  function handleStartGame() {
-    setLaunchError(null);
-    setLaunchNotice(null);
-    const options = startOptions();
-    if (options.length === 0) {
-      setLaunchError(room.platform && OWN_HARDWARE[room.platform]
-        ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
-        : t("O Client ainda não sabe abrir este jogo. Importe o jogo de uma plataforma em Importar jogos."));
-      return;
-    }
-    if (options.length > 1) { setChoosing(options); return; }
-    void launchOn(options[0]);
-  }
-
-  /** Abre o jogo no MiSTer pela rede (SSH): no menu ShmupX, com o jogador da conta e o modo. */
-  async function openOnMister(game?: MisterMenuGame) {
-    const player = readMisterPlayer();
-    if (!player) {
-      setLaunchError(t("Ligue seu MiSTer à conta em Importar jogos › MiSTer FPGA (Conectar ao meu MiSTer) para abrir o jogo nele."));
-      return;
-    }
-    setIsLaunching(true);
-    try {
-      let target = game;
-      if (!target) {
-        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, senha: player.password ?? null, username: player.username });
-        const names = new Set([slug(room.title), slug(room.id)]);
-        const modes = games.filter((g) => names.has(slug(g.jogo)));
-        if (modes.length === 0) {
-          setLaunchError(t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
-          return;
-        }
-        if (modes.length > 1) { setMisterModes(modes); return; }
-        target = modes[0];
-      }
-      setMisterModes(null);
-      await invoke("mister_iniciar", { host: player.host, senha: player.password ?? null, caminho: target.caminho });
-      setLaunchNotice(t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
-    } catch (error) {
-      setLaunchError(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao abrir o jogo no MiSTer.");
-    } finally {
-      setIsLaunching(false);
-    }
-  }
-
-  async function launchOn(platform: PlayOn) {
-    setChoosing(null);
-    setLaunchError(null);
-    setLaunchNotice(null);
-    if (platform === "mister") {
-      await openOnMister();
-      return;
-    }
-    setIsLaunching(true);
-    try {
-      if (!(await stillInstalled(room, platform))) { setNotFound(platform); return; }
-      if (platform === "steam") {
-        if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
-        await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
-      } else {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null });
-      }
-    } catch (error) {
-      setLaunchError(typeof error === "string" ? error : "Falha ao iniciar o jogo.");
-    } finally {
-      setIsLaunching(false);
-    }
-  }
-
   async function handleStopGame() {
-    setLaunchError(null);
+    launcher.setError(null);
     setIsStopping(true);
     try {
       await invoke("finalizar_corrida_manual");
     } catch (error) {
-      setLaunchError(typeof error === "string" ? error : "Falha ao interromper a run manualmente.");
+      launcher.setError(typeof error === "string" ? error : "Falha ao interromper a run manualmente.");
     } finally {
       setIsStopping(false);
     }
@@ -315,8 +207,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
 
   let mainLabel = "Iniciar jogo";
-  let mainAction = handleStartGame;
-  let mainDisabled = isLaunching;
+  let mainAction = () => launcher.start(false);
+  let mainDisabled = launcher.isLaunching;
   let mainVariant = "primary";
   if (isStopping) {
     mainLabel = "Encerrando a gravação...";
@@ -327,7 +219,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     mainAction = handleStopGame;
     mainDisabled = false;
     mainVariant = "stop";
-  } else if (isLaunching) {
+  } else if (launcher.isLaunching) {
     mainLabel = "Abrindo o jogo…";
     mainVariant = "";
   }
@@ -358,6 +250,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <div className="game-room-actions">
               <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
               <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
+              {!isRecording && !isStopping && (
+                <button type="button" className="room-action practice-action" onClick={() => launcher.start(true)} disabled={launcher.isLaunching || liveOn}
+                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>{t("Modo treino")}</button>
+              )}
               <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
                 <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
               </button>
@@ -382,65 +278,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         {liveHere && live.state.status === "failed" && live.state.error && <p className="room-banner warning" role="alert">{t("A live não continuou: {reason}", { reason: t(live.state.error) })}</p>}
         {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}
-        {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
-        {launchNotice && <p className="room-banner" role="status">{launchNotice}</p>}
-        {misterModes && (
-          <div className="controller-dialog-backdrop">
-            <div ref={misterDialogRef} role="dialog" aria-modal="true" aria-labelledby="mister-mode-title" tabIndex={-1} className="controller-dialog close-room-dialog">
-              <header>
-                <div>
-                  <h2 id="mister-mode-title">{t("{game} no MiSTer", { game: room.title })}</h2>
-                  <p>{t("Escolha o modo. O jogo abre na TV, já com o seu jogador.")}</p>
-                </div>
-              </header>
-              <div className="controller-dialog-body choose-platform-list">
-                {misterModes.map((game) => (
-                  <button key={game.caminho} type="button" className="import-source-option" onClick={() => void openOnMister(game)}>
-                    <span className="platform-mark" aria-hidden="true">M</span>
-                    <span><strong>{game.modo}</strong><small>{game.jogo}</small></span>
-                  </button>
-                ))}
-              </div>
-              <footer><span /><button type="button" className="secondary-action" onClick={() => setMisterModes(null)}>{t("Cancelar")}</button></footer>
-            </div>
-          </div>
-        )}
-        {notFound && (
-          <div className="controller-dialog-backdrop">
-            <div ref={notFoundDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="not-found-title" tabIndex={-1} className="controller-dialog close-room-dialog">
-              <header>
-                <div>
-                  <h2 id="not-found-title">{t("Jogo não encontrado")}</h2>
-                  <p>{notFound === "steam"
-                    ? t("{game} não está instalado na Steam deste computador. Instale o jogo na Steam e tente de novo.", { game: room.title })
-                    : t("O ROM de {game} não está no Fightcade deste computador. Baixe o jogo pelo Fightcade e tente de novo.", { game: room.title })}</p>
-                </div>
-              </header>
-              <footer><span /><button type="button" className="primary-action" onClick={() => setNotFound(null)}>{t("Entendi")}</button></footer>
-            </div>
-          </div>
-        )}
-        {choosing && (
-          <div className="controller-dialog-backdrop">
-            <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog">
-              <header>
-                <div>
-                  <h2 id="choose-platform-title">{t("Iniciar {game}", { game: room.title })}</h2>
-                  <p>{t("Você tem este jogo em mais de uma plataforma. Por qual quer jogar?")}</p>
-                </div>
-              </header>
-              <div className="controller-dialog-body choose-platform-list">
-                {PLAY_ON.filter((p) => choosing.includes(p.id)).map((p) => (
-                  <button key={p.id} type="button" className="import-source-option" onClick={() => void launchOn(p.id)}>
-                    <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
-                    <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
-                  </button>
-                ))}
-              </div>
-              <footer><span /><button type="button" className="secondary-action" onClick={() => setChoosing(null)}>{t("Cancelar")}</button></footer>
-            </div>
-          </div>
-        )}
+        {launcher.banners}
+        {launcher.dialogs}
         {startError && <p className="room-banner warning" role="alert">{t("A gravação não começou: {reason}", { reason: startError })}</p>}
         {lastRun && <RunOutcome run={lastRun} onOpenRanking={onOpenRanking} />}
 

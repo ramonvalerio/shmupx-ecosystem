@@ -4,6 +4,7 @@ import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
 import ImportGamesDialog from "./ImportGamesDialog";
+import { useGameLauncher } from "./useGameLauncher";
 import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
@@ -71,6 +72,19 @@ function SupportBadge({ room }: { room: GameRoom }) {
   return isSupported(room)
     ? <span className="supported">✓ {t("Suportado")}</span>
     : <span className="unsupported" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Não suportado")}</span>;
+}
+
+/** MODO TREINO no painel: abre o jogo sem gravar run nem gastar ficha (as mesmas regras da sala). */
+function PracticeButton({ room }: { room: GameRoom }) {
+  const { t } = useI18n();
+  const launcher = useGameLauncher(room);
+  return <>
+    <button type="button" className="collection-secondary-action practice-action" disabled={launcher.isLaunching} onClick={() => launcher.start(true)} title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
+      ⟳ {t(launcher.isLaunching ? "Abrindo o jogo…" : "MODO TREINO")}
+    </button>
+    {launcher.banners}
+    {launcher.dialogs}
+  </>;
 }
 
 function formatDuration(ms: number) {
@@ -191,6 +205,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </dl>
         <div className="collection-actions">
           <button type="button" className="collection-main-action" onClick={() => onOpenRoom(selected.id)}>▷ {t("ABRIR SALA")}</button>
+          <PracticeButton room={selected} />
           {onOpenRanking && <button type="button" className="collection-secondary-action" onClick={() => onOpenRanking(selected.id)}>☆ {t("RANKING")}</button>}
         </div>
         <section className="collection-last">

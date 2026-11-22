@@ -17,6 +17,8 @@ interface GameLaunchedPayload {
   app_id: number;
   pid: number;
   name: string;
+  /** Modo treino: o jogo abriu sem run (sem gravar nem gastar ficha). */
+  treino?: boolean;
 }
 
 /** Jogo aberto no emulador (Rust `inicializar_jogo_emulador`). */
@@ -24,6 +26,7 @@ interface EmulatorLaunchedPayload {
   game_id: string;
   pid: number;
   rom: string;
+  treino?: boolean;
 }
 
 interface RunExpiredPayload {
@@ -77,11 +80,11 @@ export default function App() {
 
     const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
-      if (room) startRun(room.id, event.payload.pid, event.payload.app_id);
+      if (room && !event.payload.treino) startRun(room.id, event.payload.pid, event.payload.app_id);
     });
     const unlistenEmulator = listen<EmulatorLaunchedPayload>("emulator://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.id === event.payload.game_id);
-      if (room) startRun(room.id, event.payload.pid, null);
+      if (room && !event.payload.treino) startRun(room.id, event.payload.pid, null);
     });
 
     const unlistenExpired = listen<RunExpiredPayload>("run://expired", (event) => {

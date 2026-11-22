@@ -17,6 +17,8 @@ struct GameLaunchedPayload {
     app_id: u32,
     pid: u32,
     name: String,
+    /// Modo treino: o jogo abriu, mas a interface não inicia a run (nem gasta ficha).
+    treino: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -27,7 +29,7 @@ struct GameLaunchTimeoutPayload {
 /// Inicializa um jogo via protocolo oficial da Steam (`steam://run/<app_id>`), garantindo que
 /// overlay e conquistas funcionem normalmente (ver docs/adr/001, bounded context "Sessão de Jogo").
 #[tauri::command]
-pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32) -> Result<(), String> {
+pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32, treino: Option<bool>) -> Result<(), String> {
     if steam_app_id == 0 {
         return Err("steam_app_id inválido (esperado um ID positivo)".into());
     }
@@ -40,7 +42,7 @@ pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32) -> Result
         .map_err(|e| format!("falha ao disparar steam://run/{steam_app_id}: {e}"))?;
 
     let limite = if steam_aberta { LAUNCH_MONITOR_TIMEOUT } else { LAUNCH_MONITOR_TIMEOUT_STEAM_FECHADA };
-    spawn_launch_monitor(app, steam_app_id, limite);
+    spawn_launch_monitor(app, steam_app_id, limite, treino.unwrap_or(false));
 
     Ok(())
 }
@@ -76,7 +78,7 @@ pub(crate) fn launch_steam_uri(app_id: u32) -> io::Result<()> {
 /// faz polling por um novo processo no sistema. Quando a detecção precisa (manifesto `.acf`,
 /// TASKS.md 1.2–1.4) existir, este é o ponto que vai disparar a gravação do FFmpeg
 /// automaticamente ao confirmar que o jogo abriu.
-fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration) {
+fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration, treino: bool) {
     tokio::spawn(async move {
         let baseline = detector::snapshot_pids();
         let pasta = tauri::async_runtime::spawn_blocking(move || super::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten();
@@ -89,7 +91,7 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration) {
             if let Some((pid, name)) = detector::find_new_process(&baseline, pasta.as_deref()) {
                 let _ = app.emit(
                     "steam://game-launched",
-                    GameLaunchedPayload { app_id, pid, name },
+                    GameLaunchedPayload { app_id, pid, name, treino },
                 );
                 return;
             }
@@ -110,17 +112,19 @@ struct EmuladorAbertoPayload {
     game_id: String,
     pid: u32,
     rom: String,
+    /// Modo treino: sem run nem ficha.
+    treino: bool,
 }
 
 /// Inicializa um jogo de emulador no FBNeo do Fightcade. `roms`: os ROMs que correspondem ao jogo
 /// (a interface cruza com o catálogo); `pasta`: a do Fightcade, se o jogador escolheu uma. Avisa
 /// `emulator://game-launched` com o processo do emulador, que a gravação vigia como na Steam.
 #[tauri::command]
-pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>) -> Result<(), String> {
+pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>) -> Result<(), String> {
     let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms))
         .await
         .map_err(|e| e.to_string())??;
-    let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom });
+    let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino: treino.unwrap_or(false) });
     Ok(())
 }
 

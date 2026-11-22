@@ -138,3 +138,4 @@
 .import-source-row.is-connected .import-source-option small { color: #8fc0ff; }
 .import-source-actions { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 .import-source-actions .secondary-action { white-space: nowrap; }
+.collection-details .room-banner { margin: 0; font-size: 12px; }
