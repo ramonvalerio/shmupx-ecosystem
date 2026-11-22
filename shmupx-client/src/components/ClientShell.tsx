@@ -273,7 +273,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         <div className="client-topbar-actions">
           {/* Fichas: cada INICIAR JOGO gasta 1 (PC e MiSTer); o treino não gasta. */}
           <div className={`credits-badge ${credits !== null && credits <= 5 ? "is-low" : ""}`} title={t("Fichas: cada partida valendo ranking gasta 1. O modo treino não gasta.")}>
-            <span className="credits-coin" aria-hidden="true">◎</span>
+            <img className="credits-coin" src="/img/coin.png" alt="" aria-hidden="true" />
             <strong>{credits ?? "—"}</strong>
             <span>{t("fichas")}</span>
           </div>
@@ -302,7 +302,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         </div>
       )}
       {section === "help" && <HelpPage />}
-      {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
+      {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onRead={notifications.reload} />}
       {/* Sala aberta (sem o ranking): o painel de jogadores sobe até a altura das abas. */}
       <div className="client-workspace" hidden={!isLibrary}>
         {/* As abas de cima saíram por enquanto: os jogos abertos ficam no menu lateral. */}

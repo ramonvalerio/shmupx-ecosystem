@@ -9,7 +9,6 @@ interface NotificationPageProps {
   /** Todas as notificações do jogador, lidas ou não (`GET /api/notifications`). */
   items: NotificationSummary[];
   onSelect: (id: string) => void;
-  onBack: () => void;
   /** Abrir marca como lida: o sininho relê o contador. */
   onRead: () => void;
 }
@@ -18,7 +17,7 @@ interface NotificationPageProps {
  * Histórico de notificações: todas, lidas ou não (o sininho mostra só as novas), e o detalhe da
  * selecionada (ex.: o que muda na próxima versão do Client).
  */
-export default function NotificationPage({ id, items, onSelect, onBack, onRead }: NotificationPageProps) {
+export default function NotificationPage({ id, items, onSelect, onRead }: NotificationPageProps) {
   const { t, locale } = useI18n();
   const [detail, setDetail] = useState<NotificationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +61,6 @@ export default function NotificationPage({ id, items, onSelect, onBack, onRead }
 
   return (
     <section className="client-page notification-page" aria-busy={Boolean(id) && !detail && !error}>
-      <button type="button" className="secondary-action" onClick={onBack}>{t("← Voltar")}</button>
       <header className="page-heading"><h1>{t("Histórico de notificações")}</h1></header>
       {items.length === 0 ? (
         <p className="muted">{t("Nenhuma notificação por enquanto.")}</p>

@@ -536,3 +536,25 @@ button:disabled { opacity: .5; cursor: default; }
 .navigation-rail .notification-bell:hover { color: var(--cyan); background: #57fcff12; }
 .navigation-rail .notification-count { top: -4px; right: -6px; }
 .navigation-rail .notification-panel { position: fixed; left: 48px; right: auto; top: auto; bottom: 60px; }
+
+/* Moeda das fichas */
+.credits-badge .credits-coin { width: 22px; height: 22px; filter: drop-shadow(0 0 3px #0008); }
+
+/* Acabamento das janelas e dos menus do canto inferior esquerdo: os elementos técnicos do
+   ShmupX (tech_element6 no canto superior direito, tech_element7 no inferior esquerdo), em ciano. */
+.controller-dialog, .profile-menu, .notification-panel { position: relative; }
+.navigation-rail .profile-menu, .navigation-rail .notification-panel { position: fixed; }
+.controller-dialog::before, .profile-menu::before, .notification-panel::before,
+.controller-dialog::after, .profile-menu::after, .notification-panel::after {
+  content: ""; position: absolute; z-index: 1; pointer-events: none; background: var(--cyan);
+  width: min(235px, 60%); height: 62px;
+}
+.controller-dialog::before, .profile-menu::before, .notification-panel::before {
+  top: -1px; right: -1px;
+  -webkit-mask: url(/img/tech_element6.png) right top / 100% auto no-repeat; mask: url(/img/tech_element6.png) right top / 100% auto no-repeat;
+}
+.controller-dialog::after, .profile-menu::after, .notification-panel::after {
+  bottom: -1px; left: -1px;
+  -webkit-mask: url(/img/tech_element7.png) left bottom / 100% auto no-repeat; mask: url(/img/tech_element7.png) left bottom / 100% auto no-repeat;
+}
+.notification-panel { overflow: hidden auto; }
