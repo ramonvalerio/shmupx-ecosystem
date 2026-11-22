@@ -313,7 +313,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           </p>
         )}
         {liveHere && live.state.status === "live" && live.state.silent && <p className="room-banner warning">{t("Não foi possível capturar o som do sistema: a live está sem áudio do jogo.")}</p>}
-        {liveHere && (live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "waiting" ? t("Abrindo o jogo pela Steam; a live começa quando a janela do jogo aparecer.") : live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a janela do jogo para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
+        {liveHere && (live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "waiting" ? t("Abrindo o jogo; a live começa quando a janela do jogo aparecer.") : live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a janela do jogo para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
         {liveHere && live.state.status === "failed" && live.state.error && <p className="room-banner warning" role="alert">{t("A live não continuou: {reason}", { reason: t(live.state.error) })}</p>}
         {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}

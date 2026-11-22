@@ -52,8 +52,8 @@ impl Ssh {
         let config = Arc::new(client::Config { inactivity_timeout: Some(Duration::from_secs(180)), ..Default::default() });
         let mut sessao = tokio::time::timeout(Duration::from_secs(12), client::connect(config, (host, 22), Cliente))
             .await
-            .map_err(|_| format!("o MiSTer em {host} não respondeu ao SSH: confira o IP e se ele está ligado"))?
-            .map_err(|e| format!("não foi possível abrir o SSH no MiSTer em {host}: {e}"))?;
+            .map_err(|_| format!("o MiSTer em {host} não respondeu ao SSH: {}", crate::descoberta::motivo_sem_conexao(host)))?
+            .map_err(|e| format!("não foi possível abrir o SSH no MiSTer em {host} ({e}): {}", crate::descoberta::motivo_sem_conexao(host)))?;
         let resultado = sessao.authenticate_password(usuario, senha).await.map_err(|e| format!("falha no login SSH do MiSTer: {e}"))?;
         if !resultado.success() {
             return Err(format!("o MiSTer recusou o usuário {usuario} e a senha (padrão: root / 1)"));

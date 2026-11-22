@@ -21,6 +21,22 @@ pub fn ip_local() -> Option<Ipv4Addr> {
     }
 }
 
+/// Por que este aparelho não alcançou o MiSTer em `host`, para a mensagem de erro: fora de uma rede
+/// local, numa sub-rede diferente da do MiSTer, ou na mesma (aí é o roteador ou o MiSTer).
+pub fn motivo_sem_conexao(host: &str) -> String {
+    let Some(proprio) = ip_local() else {
+        return "este aparelho não está numa rede Wi-Fi local; ligue o Wi-Fi da mesma rede do MiSTer".into();
+    };
+    match host.trim().parse::<Ipv4Addr>() {
+        Ok(alvo) if alvo.octets()[..3] != proprio.octets()[..3] => format!(
+            "este aparelho está na rede {proprio}, e o MiSTer em {alvo} é de outra rede; ligue o Wi-Fi da mesma rede do MiSTer (redes de convidados e algumas redes 5 GHz/mesh ficam separadas)"
+        ),
+        _ => format!(
+            "este aparelho ({proprio}) está na mesma rede, mas o MiSTer não respondeu; confira se ele está ligado e se o roteador não isola os aparelhos do Wi-Fi (\"isolamento de AP\"/\"client isolation\")"
+        ),
+    }
+}
+
 /// Endereços da mesma /24, sem o deste aparelho.
 fn vizinhos(ip: Ipv4Addr) -> Vec<Ipv4Addr> {
     let [a, b, c, proprio] = ip.octets();

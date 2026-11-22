@@ -42,7 +42,7 @@ impl Ftp {
             .next()
             .ok_or("endereço do MiSTer inválido")?;
         let fluxo = TcpStream::connect_timeout(&endereco, TEMPO)
-            .map_err(|_| format!("não foi possível conectar ao MiSTer em {host}: confira o IP e se ele está ligado na mesma rede"))?;
+            .map_err(|e| format!("não foi possível conectar ao MiSTer em {host} ({e}): {}", crate::descoberta::motivo_sem_conexao(host)))?;
         fluxo.set_read_timeout(Some(TEMPO)).ok();
         fluxo.set_write_timeout(Some(TEMPO)).ok();
         let mut ftp = Ftp { controle: BufReader::new(fluxo), endereco };

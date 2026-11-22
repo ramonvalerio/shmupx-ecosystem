@@ -233,7 +233,9 @@ fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
     }
 }
 
-/// Janela do jogo: a que já está aberta ou, na Steam, abre o jogo e espera a janela (até 90 s).
+/// Janela do jogo: a que já está aberta ou espera ela aparecer. Na Steam, abre o jogo (até 90 s);
+/// no emulador, a interface acabou de abrir o FBNeo e a janela leva uns segundos (até 60 s), como
+/// o `WaitingForGame` do Client antigo.
 async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_app_id: Option<u32>) -> Result<janela::Window, String> {
     let procurar = move || {
         let pids = pids_do_jogo(steam_app_id);
@@ -242,18 +244,29 @@ async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_ap
     if let Some(janela) = tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten() {
         return Ok(janela);
     }
-    let Some(app_id) = steam_app_id.filter(|id| *id > 0) else {
-        return Err("abra o jogo no emulador antes de começar a live".to_string());
-    };
     live.definir(app, Estado { status: "waiting", ..base.clone() });
-    crate::steam::commands::launch_steam_uri(app_id).map_err(|e| format!("não foi possível abrir o jogo pela Steam: {e}"))?;
-    let prazo = tokio::time::Instant::now() + Duration::from_secs(90);
+    let espera = match steam_app_id.filter(|id| *id > 0) {
+        Some(app_id) => {
+            crate::steam::commands::launch_steam_uri(app_id).map_err(|e| format!("não foi possível abrir o jogo pela Steam: {e}"))?;
+            Duration::from_secs(90)
+        }
+        None => Duration::from_secs(60),
+    };
+    let inicio = tokio::time::Instant::now();
+    let prazo = inicio + espera;
     while tokio::time::Instant::now() < prazo {
         tokio::time::sleep(Duration::from_secs(2)).await;
         if let Some(janela) = tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten() {
             // Dá um instante para o jogo terminar de montar a janela.
             tokio::time::sleep(Duration::from_secs(2)).await;
             return Ok(tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten().unwrap_or(janela));
+        }
+        // Emulador que nem chegou a abrir (ROM ruim, FBNeo fechado): não espera o prazo todo.
+        if steam_app_id.filter(|id| *id > 0).is_none() && inicio.elapsed() > Duration::from_secs(15) {
+            let vivo = tauri::async_runtime::spawn_blocking(move || !pids_do_jogo(None).is_empty()).await.unwrap_or(false);
+            if !vivo {
+                return Err("o emulador não abriu o jogo; confira o ROM no Fightcade e tente de novo".to_string());
+            }
         }
     }
     Err("a janela do jogo não apareceu; abra o jogo e tente de novo".to_string())
