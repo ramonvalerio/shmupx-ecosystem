@@ -51,3 +51,15 @@ atual = open(proguard, encoding="utf-8").read() if os.path.exists(proguard) else
 if "ShmupX Lite: login nativo" not in atual:
     open(proguard, "w", encoding="utf-8").write(atual + REGRAS)
 print("regras do ProGuard em", proguard)
+
+# Rede local (MiSTer pelo Wi-Fi): no Android 17, apps com targetSdk 37 só falam com aparelhos da
+# rede local com a permissão de acesso à rede local; sem ela, o sistema descarta a conexão e o FTP/SSH
+# do MiSTer dá "connection timed out". Com targetSdk 36 o bloqueio não se aplica. Para subir para 37,
+# declarar e pedir em tempo de execução a permissão de rede local antes de tirar este ajuste.
+import re
+gradle = open(caminho, encoding="utf-8").read()
+novo, trocas = re.subn(r"targetSdk\s*=\s*\d+", "targetSdk = 36", gradle)
+if trocas != 1:
+    raise SystemExit(f"targetSdk não encontrado (ou repetido: {trocas}) em {caminho}")
+open(caminho, "w", encoding="utf-8").write(novo)
+print("targetSdk = 36 em", caminho)
