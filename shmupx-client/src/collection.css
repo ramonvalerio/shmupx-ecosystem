@@ -123,11 +123,11 @@
 .mister-connect-form button { grid-column: 1 / -1; justify-self: start; }
 
 /* Etiquetas de plataforma no card e no painel: azul = o jogador tem o jogo nela. */
-.platform-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.platform-tag { padding: 1px 6px; border: 1px solid #ffffff26; border-radius: 3px; color: #8a959b; font-size: 10px; font-weight: 600; letter-spacing: .03em; white-space: nowrap; }
-.platform-tag.is-owned { border-color: #3b8bff; background: #3b8bff26; color: #8fc0ff; }
-.theme-light .platform-tag { color: #64748b; border-color: #cbd5e1; }
-.theme-light .platform-tag.is-owned { color: #1d4ed8; border-color: #3b82f6; background: #dbeafe; }
+.play-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.play-tag { padding: 1px 6px; border: 1px solid #ffffff26; border-radius: 3px; color: #8a959b; font-size: 10px; font-weight: 600; letter-spacing: .03em; white-space: nowrap; }
+.play-tag.is-owned { border-color: #3b8bff; background: #3b8bff26; color: #8fc0ff; }
+.theme-light .play-tag { color: #64748b; border-color: #cbd5e1; }
+.theme-light .play-tag.is-owned { color: #1d4ed8; border-color: #3b82f6; background: #dbeafe; }
 
 .choose-platform-list { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; }
 

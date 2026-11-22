@@ -24,11 +24,11 @@ function readPreferences() { try { return validateCollection(JSON.parse(localSto
  */
 function PlatformTags({ tags }: { tags: PlatformTag[] }) {
   const { t } = useI18n();
-  if (tags.length === 0) return <span className="platform-tags muted">—</span>;
+  if (tags.length === 0) return <span className="play-tags muted">—</span>;
   return (
-    <span className="platform-tags">
+    <span className="play-tags">
       {tags.map((tag) => (
-        <span key={tag.id} className={`platform-tag ${tag.owned ? "is-owned" : ""}`} title={t(tag.owned ? "Você tem este jogo no {platform}" : "Roda no {platform}; você ainda não tem o jogo nele", { platform: t(tag.label) })}>
+        <span key={tag.id} className={`play-tag ${tag.owned ? "is-owned" : ""}`} title={t(tag.owned ? "Você tem este jogo no {platform}" : "Roda no {platform}; você ainda não tem o jogo nele", { platform: t(tag.label) })}>
           {t(tag.label)}
         </span>
       ))}
