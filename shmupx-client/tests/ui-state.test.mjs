@@ -72,10 +72,11 @@ test("collection search ignores accents and favorite filters do not mutate selec
   assert.deepEqual(selectCollection(collectionRooms, [], preferences, "", "favorites").map(r => r.id), ["beta"]);
   assert.deepEqual(collectionRooms.map(r => r.id), ["alpha", "beta", "gamma"]);
 });
-test("recent recordings use real session timestamps and name order is deterministic", () => {
-  const preferences = { ...defaultCollection(), sort: "recorded" };
-  const runs = [{ gameId: "beta", startedAt: 200 }, { gameId: "alpha", startedAt: 100 }, { gameId: "alpha", startedAt: 300 }];
-  assert.deepEqual(selectCollection(collectionRooms, runs, preferences, "", "recorded").map(r => r.id), ["alpha", "beta"]);
+test("developer order puts games without developer last and name order is deterministic", () => {
+  const rooms = [{ ...collectionRooms[0], developer: "Toaplan" }, { ...collectionRooms[1] }, { ...collectionRooms[2], developer: "Cave" }];
+  assert.deepEqual(selectCollection(rooms, [], { ...defaultCollection(), sort: "developer" }, "", "all").map(r => r.id), ["gamma", "alpha", "beta"]);
+  const runs = [{ gameId: "beta", startedAt: 200 }, { gameId: "alpha", startedAt: 100 }];
+  assert.deepEqual(selectCollection(collectionRooms, runs, defaultCollection(), "", "recorded").map(r => r.id), ["alpha", "beta"]);
   assert.deepEqual(selectCollection(collectionRooms, [], {...defaultCollection(), descending: true}, "", "all").map(r => r.id), ["gamma", "beta", "alpha"]);
 });
 test("saved collection preferences reject malformed values and deduplicate favorite ids", () => {

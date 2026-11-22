@@ -114,3 +114,5 @@
 .collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid #ffffff1a; border-radius: 0; background: #141414; color: #d7e4e8; font-size: 11.5px; white-space: nowrap; }
 .collection-layout .collection-import:hover { border-color: var(--cyan); color: var(--cyan); }
 .theme-light .collection-layout .collection-import { background: var(--surface-recessed); color: #10233f; }
+.collection-layout .unsupported { color: #f2c14e; white-space: nowrap; }
+.theme-light .unsupported { color: #865315; }

@@ -8,6 +8,12 @@ import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
 import { useEmulatorLibrary } from "../data/emulatorLibrary";
+// Scripts de validação que o instalador leva (só os aprovados no Lab): o mesmo arquivo do build.
+import scriptsAceitos from "../../src-tauri/scripts-aceitos.json";
+
+/** Suportado: o Client tem o script de validação do jogo, então a run é validada e entra no ranking. */
+const SUPPORTED = new Set(scriptsAceitos.map((script) => script.game));
+export const isSupported = (room: GameRoom) => SUPPORTED.has(room.id);
 
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }
@@ -32,11 +38,12 @@ const PLATFORM_FILTERS = [
   { id: "emulator", label: "Emulador" },
   { id: "mister", label: "MiSTer" },
   { id: "steam", label: "Steam" },
+  { id: "unsupported", label: "Não suportados" },
 ];
 
 const SORTS: { id: CollectionPreferences["sort"]; label: string }[] = [
   { id: "name", label: "Nome" },
-  { id: "recorded", label: "Gameplay gravada" },
+  { id: "developer", label: "Desenvolvedora" },
   { id: "favorites", label: "Favoritos" },
 ];
 
@@ -54,6 +61,14 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
       </div>
     </div>
   );
+}
+
+/** Selo de compatibilidade: validado pelo Client ou ainda não (a run não entra no ranking). */
+function SupportBadge({ room }: { room: GameRoom }) {
+  const { t } = useI18n();
+  return isSupported(room)
+    ? <span className="supported">✓ {t("Suportado")}</span>
+    : <span className="unsupported" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Não suportado")}</span>;
 }
 
 function formatDuration(ms: number) {
@@ -101,7 +116,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   // Filtro por origem: Steam ou emulador (arcade, Neo Geo, consoles… tudo o que não é Steam).
   const platforms = PLATFORM_FILTERS;
   const visible = selectCollection(rooms, runs, preferences, query, "all")
-    .filter((room) => platform === "all" || platformGroup(room) === platform)
+    .filter((room) => platform === "all" || (platform === "unsupported" ? !isSupported(room) : platformGroup(room) === platform))
     .filter((room) => ownedOnly === "all" || inLibrary(room) === true);
   const selected = rooms.find((room) => room.id === selectedRoomId) ?? null;
   const selectionHidden = selected && !visible.some((room) => room.id === selected.id);
@@ -145,7 +160,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
               <GameArt room={room} decorative />
               <div className="game-card-info">
                 <strong>{room.title}</strong>
-                <span className="game-card-meta"><span className={inLibrary(room) === false ? "not-owned" : ""}>{libraryLabel(room) ?? (platformId ? t(PLATFORM_LABELS[platformId] ?? platformId) : "—")}</span><span className="supported">✓ {t("Suportado")}</span></span>
+                <span className="game-card-meta"><span className={inLibrary(room) === false ? "not-owned" : ""}>{libraryLabel(room) ?? (platformId ? t(PLATFORM_LABELS[platformId] ?? platformId) : "—")}</span><SupportBadge room={room} /></span>
                 <span className="game-card-runs"><i aria-hidden="true">◇</i>{t("Runs nesta sessão: {count}", { count })}</span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
@@ -175,7 +190,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         <ArcadeCabinet room={selected} />
         <dl className="collection-facts two-columns">
           <div><dt>{t("Plataforma")}</dt><dd>{platformOf(selected) ? t(PLATFORM_LABELS[platformOf(selected)!] ?? platformOf(selected)!) : "—"}{libraryLabel(selected) && <small className={inLibrary(selected) ? "" : "not-owned"}>{libraryLabel(selected)}</small>}</dd></div>
-          <div><dt>{t("Compatibilidade")}</dt><dd className="supported">✓ {t("Suportado")}</dd></div>
+          <div><dt>{t("Compatibilidade")}</dt><dd><SupportBadge room={selected} /></dd></div>
         </dl>
         <dl className="collection-facts">
           <div><dt>{t("Desenvolvedora")}</dt><dd>{selected.developer ?? "—"}</dd></div>
