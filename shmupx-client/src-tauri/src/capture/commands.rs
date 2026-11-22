@@ -50,11 +50,8 @@ pub async fn iniciar_corrida_safe(
         "sem sessão: entre com sua conta Google antes de iniciar uma run".to_string()
     })?;
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))?;
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    // Pasta escolhida em Configurações › Armazenamento (padrão: dados do app).
+    let data_dir = super::destino::pasta_das_gravacoes(&app)?;
 
     // Cada run preserva seu vídeo mesmo se outra começar durante a análise. O nome é local (a
     // captura começa antes de o backend devolver o id da run).

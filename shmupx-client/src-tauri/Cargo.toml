@@ -37,6 +37,8 @@ base64 = "0.22"
 getrandom = "0.2"
 url = "2.5"
 tauri-plugin-process = "2"
+# Janela do sistema para escolher a pasta das gravações.
+tauri-plugin-dialog = "=2.8.4"
 # SSH em Rust puro (criptografia ring): instala o ShmupX no MiSTer pela rede.
 russh = { version = "=0.65.1", default-features = false, features = ["ring", "flate2", "rsa"] }
 

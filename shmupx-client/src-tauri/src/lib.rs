@@ -25,6 +25,7 @@ fn app_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(capture::RunState::default())
         .manage(capture::AnalysisQueue::default())
@@ -35,6 +36,9 @@ pub fn run() {
             app_version,
             capture::commands::iniciar_corrida_safe,
             capture::commands::finalizar_corrida_manual,
+            capture::destino::gravacoes_destino,
+            capture::destino::gravacoes_definir_destino,
+            capture::destino::gravacoes_abrir_pasta,
             steam::commands::inicializar_jogo_steam,
             steam::commands::inicializar_jogo_emulador,
             steam::commands::steam_biblioteca,

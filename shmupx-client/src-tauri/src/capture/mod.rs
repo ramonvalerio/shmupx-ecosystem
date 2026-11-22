@@ -3,6 +3,7 @@
 
 pub mod audio;
 pub mod commands;
+pub mod destino;
 pub mod ffmpeg;
 pub mod run_timer;
 pub mod state;

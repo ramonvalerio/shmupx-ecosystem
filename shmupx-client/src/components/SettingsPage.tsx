@@ -1,7 +1,5 @@
 import { useI18n } from "../i18n";
 import { useState, type ReactNode } from "react";
-import { isTauri } from "@tauri-apps/api/core";
-import { appDataDir } from "@tauri-apps/api/path";
 import { PageHeading, type Section } from "./ClientPages";
 import { defaultPreferences, type ClientPreferences } from "./settingsState";
 import ConfigureControllerDialog from "./ConfigureControllerDialog";
@@ -9,6 +7,7 @@ import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
 import MisterConnect from "./MisterConnect";
 import ProfileSettings from "./ProfileSettings";
+import StorageSettings from "./StorageSettings";
 import type { PlayerProfile } from "../auth/firebase";
 import { useYouTube } from "../data/useLive";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
@@ -137,8 +136,6 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
 }) {
   const { t } = useI18n();
   const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("profile");
-  const [folder, setFolder] = useState("");
-  const [folderBusy, setFolderBusy] = useState(false);
   const [controllers, setControllers] = useState<{ id: string; standard: boolean }[]>([]);
   const [controllerMessage, setControllerMessage] = useState("");
   const [configureController,setConfigureController] = useState(false);
@@ -149,11 +146,6 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
       setControllers(devices.map((pad) => ({id:pad.id, standard:pad.mapping === "standard" || readMappings().some((mapping)=>mapping.deviceId===pad.id)})));
       setControllerMessage(devices.length ? "controllers-detected" : "Nenhum controle detectado. Conecte-o e pressione um botão antes de consultar novamente.");
     } catch { setControllers([]); setControllerMessage("A leitura de controles não está disponível neste ambiente."); }
-  }
-  async function locateFolder() {
-    if (!isTauri()) { setFolder("A pasta de gravações só pode ser consultada no aplicativo desktop."); return; }
-    setFolderBusy(true);
-    try { setFolder(await appDataDir()); } catch { setFolder("Não foi possível consultar a pasta de dados do aplicativo."); } finally { setFolderBusy(false); }
   }
   return <div className="client-page settings-page">
     {importOpen && <ImportGamesDialog rooms={rooms} onClose={()=>setImportOpen(false)} onViewCollection={()=>onNavigate("collection")} />}
@@ -178,7 +170,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect /></SettingsCard></>}
         {group === "integrations" && <YouTubeCard />}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
-        {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}
+        {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("Pasta onde os vídeos das runs são gravados.")}><StorageSettings onShowRuns={() => onNavigate("submissions")} /></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}
         {group === "capture" && <SettingsCard title={t("Fonte de captura")} detail={t("O gravador atual captura a tela inteira do Windows.")}><div className="capture-source-preview" aria-hidden="true"><span>{t("SHMUPX")}</span><span>{t("Captura da tela inteira")}</span></div><dl className="settings-facts"><dt>{t("Origem")}</dt><dd>{t("Tela inteira")}</dd><dt>{t("Início")}</dt><dd>{t("Após autorização da run")}</dd><dt>{t("Encerramento")}</dt><dd>{t("Manual ou pelo limite da ficha")}</dd></dl><p className="muted">{t("A seleção de janela do cliente original ainda não está disponível.")}</p></SettingsCard>}
       </div>
