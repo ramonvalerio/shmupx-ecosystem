@@ -190,3 +190,20 @@ test("abas reordenam ao arrastar", () => {
   assert.deepEqual(moveTab(["a", "b", "c"], "b", -1), ["b", "a", "c"]);
   assert.deepEqual(moveTab(["a", "b", "c"], "b", 9), ["a", "c", "b"]);
 });
+
+const { censor } = await sourceModule("../src/data/profanity.ts");
+test("chat profanity filter masks pt/en/ja bad words without false positives", () => {
+  assert.equal(censor("vai tomar no cu, porra!").text, "vai tomar no **, *****!");
+  assert.equal(censor("PORRAAAA que jogo").text, "******** que jogo");
+  assert.equal(censor("que f0da, filho da PUTA").text, "que ****, filho da ****");
+  assert.equal(censor("Caralho, é FODA demais").text, "*******, é **** demais");
+  assert.equal(censor("what the fuck, you motherfucker").text, "what the ****, you ************");
+  assert.equal(censor("sh1t happens, @sshole").text, "**** happens, *******");
+  assert.equal(censor("お前は死ねクソ野郎").text, "お前は＊＊＊＊野郎");
+  assert.equal(censor("Ganhei!").changed, false);
+  // Palavras comuns que contêm um termo continuam intactas.
+  for (const text of ["vou assistir o cockpit no curso", "as naves e a casa", "retardar o chefe", "que desgraça de fase",
+    "pass the class", "Scunthorpe", "楽しいしね、約束だよ", "やくそく", "カスタム"]) {
+    assert.deepEqual(censor(text), { text, changed: false }, text);
+  }
+});

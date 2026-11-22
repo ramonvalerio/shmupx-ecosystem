@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
 import type { ChatMessage } from "../types/room";
 import type { ChatStatus } from "../data/useRoomChat";
+import { censor } from "../data/profanity";
 
 interface ChatFeedProps {
   messages: ChatMessage[];
@@ -53,7 +54,8 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
                 <time dateTime={message.timestamp}>{horario(message.timestamp, locale)}</time>
               </header>
               {message.inReplyTo && <blockquote className="chat-reply-to">{message.inReplyTo}</blockquote>}
-              <p>{message.text}</p>
+              {/* Mascara de novo na exibição: mensagens antigas ou de quem burlou o envio. */}
+              <p>{bot ? message.text : censor(message.text).text}</p>
             </div>
           </article>
         );

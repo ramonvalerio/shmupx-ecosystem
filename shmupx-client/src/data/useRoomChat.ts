@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { ChatMessage } from "../types/room";
+import { censor } from "./profanity";
 
 /** Mensagens mais recentes mantidas na tela. */
 const HISTORY = 100;
@@ -64,7 +65,8 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
 
   const send = useCallback(
     async (text: string) => {
-      const trimmed = text.trim().slice(0, MAX_MESSAGE_LENGTH);
+      // Palavrões viram `*` antes de gravar: todo mundo recebe a mensagem já limpa.
+      const trimmed = censor(text.trim().slice(0, MAX_MESSAGE_LENGTH)).text;
       if (!trimmed) return;
       setError(null);
       try {
