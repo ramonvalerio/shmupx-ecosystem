@@ -29,6 +29,8 @@ pub async fn iniciar_corrida_safe(
     // Processo do jogo (evento `steam://game-launched`) e app_id: ao fechar o jogo, a gravação para.
     jogo_pid: Option<u32>,
     steam_app_id: Option<u32>,
+    // Modo escolhido no Play Ranked (`highscore`, `1cc`, `caravan`): vai para a gameplay.
+    modo: Option<String>,
 ) -> Result<u32, String> {
     // A live e a run disputam a captura da tela (spec 033 D-03301): uma de cada vez.
     if live.ativa() {
@@ -81,7 +83,7 @@ pub async fn iniciar_corrida_safe(
 
     // Débito de ficha + abertura da "ficha ativa" no backend com a captura já confirmada. Se o
     // backend recusar (sem saldo, jogo não publicado, token inválido), a captura é descartada.
-    let inicio = match backend::iniciar_run(&token, &jogo_id).await {
+    let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref()).await {
         Ok(inicio) => inicio,
         Err(e) => {
             let _ = child.kill().await;

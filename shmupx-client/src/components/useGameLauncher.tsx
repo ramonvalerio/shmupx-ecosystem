@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
-import type { GameRoom, PlayOn } from "../types/room";
+import type { GameMode, GameRoom, PlayOn } from "../types/room";
+import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
@@ -23,7 +24,10 @@ const describe = (error: unknown, fallback: string) => typeof error === "string"
  * a abertura com `treino`, e o App não inicia a corrida); o MiSTer fica de fora, porque o agente
  * dele registra toda partida aberta pelo menu do jogador.
  */
-export function useGameLauncher(room: GameRoom) {
+/** Play Training (sem ficha nem gravação), Play Ranked (gasta 1 ficha e grava) ou Play Live Ranked. */
+export type PlayKind = "training" | "ranked" | "live";
+
+export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform: PlayOn, mode: GameMode) => void } = {}) {
   const { t } = useI18n();
   const playable = usePlatformOwnership();
   const [isLaunching, setIsLaunching] = useState(false);
@@ -33,9 +37,11 @@ export function useGameLauncher(room: GameRoom) {
   /** Jogo aberto no MiSTer por aqui (o PARAR JOGO volta o MiSTer ao menu). */
   const [misterGame, setMisterGame] = useState<{ host: string; password?: string; practice: boolean } | null>(null);
   const [isStopping, setIsStopping] = useState(false);
-  /** Plataformas para escolher (o jogador tem o jogo em mais de uma). */
-  const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
+  /** Janela do Play: modo de jogo e plataforma, escolhidos antes de abrir. */
+  const [choosing, setChoosing] = useState<{ kind: PlayKind; platforms: PlayOn[]; mode: GameMode; platform: PlayOn } | null>(null);
   const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
+  /** Modo escolhido no Play (o MiSTer abre a entrada do menu desse modo). */
+  const [mode, setMode] = useState<GameMode | null>(null);
   /** Modos do jogo no menu ShmupX do MiSTer, para escolher qual abrir na TV. */
   const [misterModes, setMisterModes] = useState<MisterMenuGame[] | null>(null);
   const misterDialogRef = useDialogFocus(misterModes !== null, () => setMisterModes(null));
@@ -52,6 +58,7 @@ export function useGameLauncher(room: GameRoom) {
     setChoosing(null);
     setMisterModes(null);
     setNotFound(null);
+    setMode(null);
     setIsLaunching(false);
     setMisterGame(null);
   }, [room.id]);
@@ -68,24 +75,39 @@ export function useGameLauncher(room: GameRoom) {
     return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
-  /** INICIAR JOGO (`forPractice` false) ou MODO TREINO: uma plataforma abre direto; mais de uma pergunta. */
-  function start(forPractice: boolean) {
+  /** Play Training / Play Ranked / Play Live Ranked: abre a janela de modo e plataforma. */
+  function play(kind: PlayKind) {
     setError(null);
     setNotice(null);
-    setPractice(forPractice);
-    const list = options();
+    setPractice(kind === "training");
+    // A live captura a janela do jogo neste PC: o MiSTer (na TV) fica de fora.
+    const list = options().filter((id) => kind !== "live" || id !== "mister");
     if (list.length === 0) {
       setError(room.platform && OWN_HARDWARE[room.platform]
           ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
           : t("O Client ainda não sabe abrir este jogo. Importe o jogo de uma plataforma em Importar jogos."));
       return;
     }
-    if (list.length > 1) { setChoosing(list); return; }
-    void launchOn(list[0], forPractice);
+    const owned = list.find((id) => playable.owns(room, id));
+    setChoosing({ kind, platforms: list, mode: modesFor(room)[0], platform: owned ?? list[0] });
+  }
+
+  /** Compatível com as telas antigas: `start(true)` é o Play Training, `start(false)` o Play Ranked. */
+  function start(forPractice: boolean) { play(forPractice ? "training" : "ranked"); }
+
+  function confirmPlay() {
+    if (!choosing) return;
+    const { kind, platform, mode: chosen } = choosing;
+    setChoosing(null);
+    setMode(chosen);
+    if (kind === "live") { onLive?.(platform, chosen); return; }
+    // A run começa quando o jogo abrir (PC): leva o modo escolhido.
+    if (kind === "ranked" && platform !== "mister") setPendingRunMode(room.id, chosen);
+    void launchOn(platform, kind === "training", chosen);
   }
 
   /** Abre o jogo no MiSTer pela rede (SSH): no menu ShmupX, com o jogador da conta e o modo. */
-  async function openOnMister(game?: MisterMenuGame, forPractice = practice) {
+  async function openOnMister(game?: MisterMenuGame, forPractice = practice, chosenMode = mode) {
     const player = readMisterPlayer();
     if (!player) {
       // Ainda não sabe qual jogador do MiSTer é este: pergunta aqui mesmo (IP e jogador).
@@ -109,8 +131,11 @@ export function useGameLauncher(room: GameRoom) {
             : t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
           return;
         }
-        if (modes.length > 1) { setMisterModes(modes); return; }
-        target = modes[0];
+        // Entrada do menu do modo escolhido no Play; sem uma só que bata, o jogador escolhe.
+        const ofMode = chosenMode ? modes.filter((g) => misterEntryMatches(g.modo, chosenMode)) : [];
+        if (ofMode.length === 1) target = ofMode[0];
+        else if (modes.length > 1) { setMisterModes(ofMode.length > 1 ? ofMode : modes); return; }
+        else target = modes[0];
       }
       setMisterModes(null);
       await invoke("mister_iniciar", { host: player.host, senha: player.password ?? null, caminho: target.caminho });
@@ -160,12 +185,12 @@ export function useGameLauncher(room: GameRoom) {
     }
   }
 
-  async function launchOn(platform: PlayOn, forPractice = practice) {
+  async function launchOn(platform: PlayOn, forPractice = practice, chosenMode: GameMode | null = mode) {
     setChoosing(null);
     setError(null);
     setNotice(null);
     if (platform === "mister") {
-      await openOnMister(undefined, forPractice);
+      await openOnMister(undefined, forPractice, chosenMode);
       return;
     }
     setIsLaunching(true);
@@ -251,24 +276,42 @@ export function useGameLauncher(room: GameRoom) {
       </div>
     )}
     {choosing && (
-      <div className="controller-dialog-backdrop">
-        <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+      <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setChoosing(null); }}>
+        <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog play-dialog">
           <header>
             <div>
-              <h2 id="choose-platform-title">{t(practice ? "Treinar {game}" : "Iniciar {game}", { game: room.title })}</h2>
-              <p>{t(practice ? "Modo treino: o jogo abre sem gravar run nem gastar ficha. Por qual plataforma?" : "Este jogo roda em mais de uma plataforma. Por qual quer jogar?")}</p>
+              <h2 id="choose-platform-title">{t(choosing.kind === "training" ? "Play Training · {game}" : choosing.kind === "live" ? "Play Live Ranked · {game}" : "Play Ranked · {game}", { game: room.title })}</h2>
+              <p>{t(choosing.kind === "training"
+                ? "Treino: o jogo abre sem gravar run nem gastar ficha."
+                : choosing.kind === "live"
+                  ? "Ao vivo no seu canal do YouTube. Escolha o modo e a plataforma."
+                  : "Valendo ranking: gasta 1 ficha e grava a run. Escolha o modo e a plataforma.")}</p>
             </div>
           </header>
-          <div className="controller-dialog-body choose-platform-list">
-            {PLAY_ON.filter((p) => choosing.includes(p.id)).map((p) => (
-              <button key={p.id} type="button" className="import-source-option" onClick={() => void launchOn(p.id)}>
-                <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
-                <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : practice ? "Abre no MiSTer como CONVIDADO (sem ficha nem ranking online)" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
-                <span className={`import-availability ${playable.owns(room, p.id) ? "is-available" : ""}`}>{t(playable.owns(room, p.id) ? "Na sua biblioteca" : "Não importado")}</span>
-              </button>
-            ))}
+          <div className="controller-dialog-body play-dialog-body">
+            <h3 className="play-dialog-label">{t("Modo de jogo")}</h3>
+            <div className="play-mode-options" role="radiogroup" aria-label={t("Modo de jogo")}>
+              {GAME_MODES.filter((m) => modesFor(room).includes(m.id)).map((m) => (
+                <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" onClick={() => setChoosing({ ...choosing, mode: m.id })}>
+                  <strong>{m.label}</strong><small>{t(m.detail)}</small>
+                </button>
+              ))}
+            </div>
+            <h3 className="play-dialog-label">{t("Plataforma")}</h3>
+            <div className="choose-platform-list" role="radiogroup" aria-label={t("Plataforma")}>
+              {PLAY_ON.filter((p) => choosing.platforms.includes(p.id)).map((p) => (
+                <button key={p.id} type="button" role="radio" aria-checked={choosing.platform === p.id} className="import-source-option" onClick={() => setChoosing({ ...choosing, platform: p.id })}>
+                  <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
+                  <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : choosing.kind === "training" ? "Abre no MiSTer como CONVIDADO (sem ficha nem ranking online)" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
+                  <span className={`import-availability ${playable.owns(room, p.id) ? "is-available" : ""}`}>{t(playable.owns(room, p.id) ? "Na sua biblioteca" : "Não importado")}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <footer><span /><button type="button" className="secondary-action" onClick={() => setChoosing(null)}>{t("Cancelar")}</button></footer>
+          <footer>
+            <button type="button" className="secondary-action" onClick={() => setChoosing(null)}>{t("Cancelar")}</button>
+            <button type="button" className="primary-action" onClick={confirmPlay}>{t("Jogar")}</button>
+          </footer>
         </div>
       </div>
     )}
@@ -279,5 +322,5 @@ export function useGameLauncher(room: GameRoom) {
     {notice && <p className="room-banner" role="status">{notice}</p>}
   </>;
 
-  return { start, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister };
+  return { start, play, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister };
 }

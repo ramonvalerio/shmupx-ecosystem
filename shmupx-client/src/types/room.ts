@@ -1,6 +1,9 @@
 /** Onde se joga no ShmupX (o Lab marca uma ou mais). */
 export type PlayOn = "steam" | "emulator" | "mister";
 
+/** Formatos competitivos do jogo (Lab): pontuação, 1 crédito e caravana. */
+export type GameMode = "highscore" | "1cc" | "caravan";
+
 export interface GameRoom {
   id: string;
   title: string;
@@ -11,6 +14,8 @@ export interface GameRoom {
   coverUrl?: string;
   /** Plataformas em que se joga o jogo (Lab); jogos antigos: deduzidas da plataforma original. */
   platforms: PlayOn[];
+  /** Modos competitivos marcados no Lab; vazio = todos. */
+  modes?: GameMode[];
   /** Metadados do catálogo (Lab); ausentes quando o admin não preencheu. */
   platform?: string;
   developer?: string;

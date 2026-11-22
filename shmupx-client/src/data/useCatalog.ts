@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
-import type { GameRoom } from "../types/room";
+import type { GameMode, GameRoom } from "../types/room";
 import { robotxFromGame } from "./robotx";
 import { catalogPlayOn } from "./platforms";
 
@@ -20,6 +20,7 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     // Só capas do próprio site (o backend já recusa outras origens).
     coverUrl: typeof data.coverUrl === "string" && data.coverUrl.startsWith(COVER_PREFIX) ? data.coverUrl : undefined,
     platforms: catalogPlayOn(data),
+    modes: Array.isArray(data.modes) ? data.modes.filter((m): m is GameMode => m === "highscore" || m === "1cc" || m === "caravan") : [],
     platform: texto(data.platform),
     developer: texto(data.developer),
     publisher: texto(data.publisher),

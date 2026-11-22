@@ -13,6 +13,9 @@ import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
+import { formatPlayTime, useGameStats } from "../data/useGameStats";
+import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import type { PlayOn } from "../types/room";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 
 
@@ -114,8 +117,9 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
-  // INICIAR JOGO e MODO TREINO (plataforma, jogo instalado, MiSTer): ver useGameLauncher.
-  const launcher = useGameLauncher(room);
+  // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
+  const launcher = useGameLauncher(room, { onLive: (platform) => void startLive(platform) });
+  const stats = useGameStats(playerId, room.id);
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
@@ -188,9 +192,24 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
   async function toggleLive() {
     setLiveError(null);
+    if (!liveOn) { launcher.play("live"); return; }
     try {
-      if (liveOn) await live.stop();
-      else await live.start(room.id, `${room.title} · ShmupX`, publicLive, room.steamAppId);
+      await live.stop();
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /** Play Live Ranked na plataforma escolhida: a Steam a live abre sozinha; o emulador abre antes. */
+  async function startLive(platform: PlayOn) {
+    setLiveError(null);
+    try {
+      if (platform === "emulator") {
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });
+        await live.start(room.id, `${room.title} · ShmupX`, publicLive, 0);
+      } else {
+        await live.start(room.id, `${room.title} · ShmupX`, publicLive, room.steamAppId);
+      }
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : String(error));
     }
@@ -205,7 +224,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     : live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
     : live.state.status === "ending" ? t("Encerrando…")
-    : liveOn ? t("End live") : t("Start live");
+    : liveOn ? t("End live") : t("Play Live Ranked");
 
   const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
 
@@ -213,7 +232,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
   // treino no PC (fecha o jogo).
   const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
-  let mainLabel = "Iniciar jogo";
+  let mainLabel = "Play Ranked";
   let mainAction = () => launcher.start(false);
   let mainDisabled = launcher.isLaunching;
   let mainVariant = "primary";
@@ -262,15 +281,18 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           <div className="game-room-main">
             <div className="game-room-title">
               <h1 title={room.title}>{room.title}</h1>
-              <p>{t("Chat e presença em tempo real")}</p>
+              <dl className="game-room-stats">
+                <div><dt>{t("Fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
+                <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
+              </dl>
             </div>
             <div className="game-room-actions">
               <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
-              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
               {!gameOpen && !isStopping && (
-                <button type="button" className="room-action practice-action" onClick={() => launcher.start(true)} disabled={launcher.isLaunching || liveOn}
-                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>{t("Modo treino")}</button>
+                <button type="button" className="room-action practice-action" onClick={() => launcher.play("training")} disabled={launcher.isLaunching || liveOn}
+                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>{t("Play Training")}</button>
               )}
+              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
               <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
                 <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
               </button>

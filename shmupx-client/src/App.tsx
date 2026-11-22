@@ -12,6 +12,7 @@ import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
+import { takePendingRunMode } from "./data/gameModes";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -68,7 +69,7 @@ export default function App() {
     if (!isTauri()) return;
     // Jogo aberto (Steam ou emulador): começa a run, vigiando o processo dele.
     const startRun = (roomId: string, pid: number, steamAppId: number | null) => {
-      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId })
+      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId, modo: takePendingRunMode(roomId) })
         .then((nativePid) => {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: roomId, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);

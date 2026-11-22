@@ -58,6 +58,8 @@ pub async fn chamar_json(
 #[derive(Debug, Serialize)]
 struct IniciarRunPayload<'a> {
     jogo_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modo: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,11 +73,11 @@ pub struct IniciarRunResponse {
 /// Chamada por `capture::commands::iniciar_corrida_safe` antes de sequer abrir o FFmpeg — se o
 /// backend recusar (sem fichas, jogador/jogo inexistente, token inválido), a run nem começa a
 /// gravar localmente.
-pub async fn iniciar_run(token: &str, jogo_id: &str) -> Result<IniciarRunResponse, String> {
+pub async fn iniciar_run(token: &str, jogo_id: &str, modo: Option<&str>) -> Result<IniciarRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs/start"))
         .bearer_auth(token)
-        .json(&IniciarRunPayload { jogo_id })
+        .json(&IniciarRunPayload { jogo_id, modo })
         .send()
         .await
         .map_err(|e| format!("falha de rede ao iniciar a run no backend: {e}"))?;
