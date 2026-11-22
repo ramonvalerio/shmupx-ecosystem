@@ -346,7 +346,6 @@
 .game-room-stats div { display: flex; align-items: baseline; gap: 6px; }
 .game-room-stats dt { font-size: 11px; color: #8a9aa1; }
 .game-room-stats dd { margin: 0; font-size: 13px; font-weight: 700; color: var(--cyan); }
-.theme-light .game-room-stats dt { color: #475569; }
 
 /* Play: modo de jogo e plataforma */
 .play-dialog { width: min(620px,100%); }

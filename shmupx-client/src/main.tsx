@@ -6,6 +6,7 @@ import { I18nProvider } from "./i18n";
 import "./index.css";
 import "./room.css";
 import "./collection.css";
+import "./theme-light.css";
 
 // A mesma página serve a janela da live de um jogador (`?watch=<uid>&room=<gameId>`).
 const watch = watchParams();

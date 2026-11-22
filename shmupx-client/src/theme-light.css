@@ -1,0 +1,41 @@
+/*
+ * Tema claro: contraste do texto com o fundo que fica de fato atrás dele. Carregado por último
+ * (main.tsx). No tema claro, a barra de cima, as janelas e o ranking ficam claros; a coleção e a
+ * sala mantêm os painéis escuros, então ali o texto continua claro.
+ */
+
+/* Campos de texto e listas nas janelas e configurações: texto escuro sobre o fundo claro. */
+.theme-light :is([role=dialog], [role=alertdialog], .settings-page) :is(input, select, textarea),
+.theme-light .settings-field :is(input, select, textarea) { color: #10233f; }
+.theme-light :is([role=dialog], [role=alertdialog], .settings-page) :is(input, textarea)::placeholder,
+.theme-light .settings-field :is(input, textarea)::placeholder { color: #64748b; opacity: 1; }
+.theme-light :is([role=dialog], [role=alertdialog]) :is(input, select, textarea):disabled { color: #475569; }
+
+/* Barra de cima (clara): ambiente, legenda do status e fichas. */
+.theme-light .env-badge { color: #865315; background: #b7791f1a; border-color: #b7791f80; }
+.theme-light .env-badge.is-production { color: #b4232c; background: #b4232c14; border-color: #b4232c80; }
+.theme-light .client-status-caption { color: #475569; }
+.theme-light .credits-badge { color: #865315; background: #b7791f14; border-color: #b7791f66; }
+.theme-light .credits-badge strong { color: #865315; }
+.theme-light .credits-badge.is-low, .theme-light .credits-badge.is-low strong { color: #b4232c; }
+.theme-light .credits-badge.is-low { background: #b4232c12; border-color: #b4232c66; }
+
+/* Coleção: os cards e a barra de baixo continuam escuros; o texto deles volta às cores claras. */
+.theme-light .collection-layout .game-card-runs { color: #d7e4e8; }
+.theme-light .collection-layout .collection-statusbar .text-action { color: #6fb1ff; }
+
+/* Janela de Play (clara): rótulos e descrições dos modos. */
+.theme-light :is(.play-dialog-label, .play-mode-option small) { color: #475569; }
+
+/* Integrações nas configurações: a linha do YouTube acompanha o fundo claro da janela. */
+.theme-light .integration-row { background: var(--surface-recessed); border-color: var(--stroke); }
+.theme-light .integration-info small { color: #475569; }
+
+/* Ranking da sala (claro): rótulos em ciano e textos em cinza claro ficam escuros. */
+.theme-light :is(.room-ranking-header p, .filter-group > span) { color: #0b7285; }
+.theme-light :is(.room-ranking-row.is-head, .rank-position, .empty-state, .gameplay-placeholder) { color: #475569; }
+
+/* Mais ajustes achados na revisão das telas. */
+.theme-light .collection-layout .unsupported { color: #f2c14e; }
+.theme-light .integration-icon { color: #b4232c; }
+.theme-light .capture-source-preview span:last-child { color: #475569; }
