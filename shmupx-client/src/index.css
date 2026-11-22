@@ -314,6 +314,10 @@ button:disabled { opacity: .5; cursor: default; }
 .theme-light .game-panel-tabs button[aria-pressed=true] { color: var(--cyan); }
 @media (max-width: 700px) { .theme-swatch { width: 72px; height: 48px; } .settings-facts { grid-template-columns: minmax(80px,1fr) minmax(0,1.2fr); } .settings-menu button small { display: none; } }
 .theme-light .rail-avatar { color: #475569; }
+/* Menu do avatar e painel de avisos no tema branco: texto escuro sobre o fundo claro. */
+.theme-light .profile-menu, .theme-light .navigation-rail .profile-menu button, .theme-light .notification-panel { color: #10233f; }
+.theme-light .navigation-rail .profile-menu button:hover { background: #dae1ec; }
+.theme-light .navigation-rail .rail-settings, .theme-light .navigation-rail .notification-bell { color: #475569; }
 .theme-light .settings-page .page-heading h1 { color: #10233f; }
 .theme-light .ranking-table th { color: #475569; }
 .theme-light .settings-menu button:hover, .theme-light .secondary-action:hover { background: #dae1ec; }
