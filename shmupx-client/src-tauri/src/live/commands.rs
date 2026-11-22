@@ -22,7 +22,7 @@ pub async fn youtube_conexao(sessao: State<'_, SessionState>) -> Result<Value, S
 /// Abre o consentimento do Google para o YouTube (transmitir no canal) e guarda a conexão no
 /// servidor. O app nunca recebe o token do Google.
 #[tauri::command]
-pub async fn youtube_conectar(sessao: State<'_, SessionState>) -> Result<Value, String> {
+pub async fn youtube_conectar(app: AppHandle, sessao: State<'_, SessionState>) -> Result<Value, String> {
     let token = token(&sessao)?;
     let config = chamar_json(&token, reqwest::Method::GET, "/api/youtube/config", None).await?;
     let client_id = config["client_id"].as_str().ok_or("YouTube não configurado no servidor")?;
@@ -33,7 +33,9 @@ pub async fn youtube_conectar(sessao: State<'_, SessionState>) -> Result<Value, 
         escopo,
         &[("access_type", "offline"), ("prompt", "consent select_account"), ("include_granted_scopes", "true")],
     )
-    .await?;
+    .await;
+    oauth::trazer_para_frente(&app);
+    let codigo = codigo?;
     chamar_json(
         &token,
         reqwest::Method::POST,

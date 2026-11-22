@@ -105,7 +105,7 @@ export default function App() {
   const expiredRoom = rooms.find((room) => room.id === expiredRoomId) ?? null;
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
-  if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} />;
+  if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} onCancel={auth.cancelSignIn} />;
   const profileName = auth.state.profile.displayName;
   const profileUid = auth.state.profile.uid;
 

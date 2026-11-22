@@ -48,7 +48,10 @@ export function useAuth() {
     catch (error) { setState({ status: "signed-out", error: describe(error) }); }
   }, []);
 
+  /** Desiste de esperar o navegador (o jogador fechou a aba ou quer tentar de novo). */
+  const cancelSignIn = useCallback(() => setState({ status: "signed-out" }), []);
+
   const setProfile = useCallback((profile: PlayerProfile) => setState({ status: "signed-in", profile }), []);
 
-  return { state, signIn, signOut: signOutPlayer, setProfile };
+  return { state, signIn, cancelSignIn, signOut: signOutPlayer, setProfile };
 }

@@ -16,9 +16,12 @@ const SCOPES: &str = "openid email profile";
 /// Tempo para o jogador concluir o consentimento no navegador.
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 
-const PAGINA_OK: &str = "<!doctype html><meta charset=utf-8><title>ShmupX</title>\
-<body style=\"font-family:sans-serif;background:#1c1c1c;color:#eee;text-align:center;padding-top:20vh\">\
-<h1>Login concluído</h1><p>Você já pode fechar esta aba e voltar ao ShmupX.</p>";
+const PAGINA_OK: &str = "<!doctype html><meta charset=utf-8><title>ShmupX: pronto</title>\
+<body style=\"font-family:sans-serif;background:#111;color:#eee;text-align:center;padding-top:18vh\">\
+<h1 style=\"color:#57fcff\">Pronto! Você entrou.</h1>\
+<p style=\"font-size:18px\">O <b>ShmupX</b> já voltou para a frente da sua tela.</p>\
+<p style=\"color:#8a9aa1\">Pode fechar esta aba.</p>\
+<script>setTimeout(function(){window.close()},1500)</script>";
 const PAGINA_ERRO: &str = "<!doctype html><meta charset=utf-8><title>ShmupX</title>\
 <body style=\"font-family:sans-serif;background:#1c1c1c;color:#eee;text-align:center;padding-top:20vh\">\
 <h1>Login não concluído</h1><p>Volte ao ShmupX e tente novamente.</p>";
@@ -153,6 +156,19 @@ fn aleatorio_base64(bytes: usize) -> Result<String, String> {
     getrandom::getrandom(&mut buffer)
         .map_err(|e| format!("falha ao gerar valor aleatório: {e}"))?;
     Ok(URL_SAFE_NO_PAD.encode(buffer))
+}
+
+/// Traz o Client de volta para a frente depois do consentimento no navegador: o jogador não fica
+/// olhando a aba esperando algo acontecer. No Windows, o "sempre no topo" momentâneo vence a
+/// trava de primeiro plano do sistema (sem ela, a janela só piscaria na barra de tarefas).
+pub fn trazer_para_frente(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let Some(janela) = app.get_webview_window("main") else { return };
+    let _ = janela.unminimize();
+    let _ = janela.show();
+    let _ = janela.set_always_on_top(true);
+    let _ = janela.set_focus();
+    let _ = janela.set_always_on_top(false);
 }
 
 pub fn abrir_navegador(url: &str) -> Result<(), String> {
