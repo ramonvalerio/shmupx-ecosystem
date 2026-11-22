@@ -271,6 +271,13 @@ impl YouTube {
         Ok(resposta["items"][0]["status"]["streamStatus"].as_str().unwrap_or("unknown").to_string())
     }
 
+    /// Pessoas assistindo agora à live do próprio jogador (`concurrentViewers`; 0 fora do ar).
+    pub async fn espectadores(&self, fs: &Firestore, uid: &str, broadcast_id: &str) -> Result<u64, AppError> {
+        let acesso = self.acesso(fs, uid).await?;
+        let resposta = self.api(&acesso, reqwest::Method::GET, &format!("videos?part=liveStreamingDetails&id={broadcast_id}"), None).await?;
+        Ok(contar_espectadores(&resposta))
+    }
+
     /// Coloca no ar (`live`) ou encerra (`complete`). Encerrar uma live que nunca foi ao ar a apaga.
     pub async fn transicao(&self, fs: &Firestore, uid: &str, broadcast_id: &str, para: Transicao) -> Result<(), AppError> {
         let acesso = self.acesso(fs, uid).await?;
@@ -295,6 +302,24 @@ impl YouTube {
             }
             (Err(e), Transicao::Live) => Err(e),
         }
+    }
+}
+
+/// `concurrentViewers` vem como texto na API do YouTube (e some quando a live não está no ar).
+fn contar_espectadores(resposta: &Value) -> u64 {
+    let campo = &resposta["items"][0]["liveStreamingDetails"]["concurrentViewers"];
+    campo.as_u64().or_else(|| campo.as_str().and_then(|v| v.parse().ok())).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod testes_espectadores {
+    use super::*;
+
+    #[test]
+    fn conta_espectadores_em_texto_numero_ou_ausente() {
+        assert_eq!(contar_espectadores(&serde_json::json!({ "items": [{ "liveStreamingDetails": { "concurrentViewers": "42" } }] })), 42);
+        assert_eq!(contar_espectadores(&serde_json::json!({ "items": [{ "liveStreamingDetails": { "concurrentViewers": 7 } }] })), 7);
+        assert_eq!(contar_espectadores(&serde_json::json!({ "items": [] })), 0);
     }
 }
 

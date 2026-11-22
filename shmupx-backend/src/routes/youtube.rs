@@ -25,6 +25,7 @@ where
         .route("/api/live/start", post(iniciar))
         .route("/api/live/streams/{id}/status", get(situacao))
         .route("/api/live/broadcasts/{id}/transition", post(transicao))
+        .route("/api/live/broadcasts/{id}/viewers", get(espectadores))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
         .layer(Extension(firestore))
         .layer(Extension(youtube))
@@ -118,6 +119,25 @@ async fn situacao(
         return Err(AppError::bad_request("id inválido"));
     }
     Ok(Json(Situacao { status: configurado(youtube)?.situacao_do_stream(&fs, &usuario.uid, &id).await? }))
+}
+
+#[derive(Serialize)]
+struct Espectadores {
+    viewers: u64,
+}
+
+/// `GET /api/live/broadcasts/{id}/viewers`: quantos assistem à live do próprio jogador agora (o
+/// token do YouTube é o dele, então só vale para as lives do canal dele).
+async fn espectadores(
+    Extension(fs): Extension<Arc<Firestore>>,
+    Extension(youtube): Extension<Option<Arc<YouTube>>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<Espectadores>, AppError> {
+    if !youtube::id_valido(&id) {
+        return Err(AppError::bad_request("id inválido"));
+    }
+    Ok(Json(Espectadores { viewers: configurado(youtube)?.espectadores(&fs, &usuario.uid, &id).await? }))
 }
 
 #[derive(Deserialize)]

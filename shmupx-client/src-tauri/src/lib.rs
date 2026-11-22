@@ -53,6 +53,7 @@ pub fn run() {
             live::commands::youtube_conectar,
             live::commands::youtube_desconectar,
             live::commands::live_estado,
+            live::commands::live_espectadores,
             live::commands::live_iniciar,
             live::commands::live_encerrar,
             live::commands::live_abrir,

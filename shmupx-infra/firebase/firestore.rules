@@ -16,7 +16,8 @@ service cloud.firestore {
     //   published games' rooms; authorId/authorName must match the caller's own profile,
     //   createdAt is the server time, messages are immutable (no edit/delete by clients).
     // rooms/{gameId}/presence/{uid}: who joined the room. Each player writes only their own
-    //   doc (name = profile displayName, state online|away|playing, lastSeen = server time) every
+    //   doc (name = profile displayName, state online|away|playing|live, lastSeen = server time; live
+    //   adds liveVideoId and liveViewers) every
     //   30 s and deletes it on leaving the room; entries older than 75 s show as offline.
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
@@ -44,12 +45,16 @@ service cloud.firestore {
         && data.text.size() >= 1 && data.text.size() <= 500
         && data.createdAt == request.time;
     }
+    // state 'live' traz o vídeo do YouTube e quantos assistem (só nesse estado).
     function validPresence(data) {
       return data.keys().hasAll(['name', 'state', 'lastSeen'])
-        && data.keys().hasOnly(['name', 'state', 'lastSeen'])
+        && data.keys().hasOnly(['name', 'state', 'lastSeen', 'liveVideoId', 'liveViewers'])
         && data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
-        && data.state in ['online', 'away', 'playing']
-        && data.lastSeen == request.time;
+        && data.state in ['online', 'away', 'playing', 'live']
+        && data.lastSeen == request.time
+        && (data.state == 'live') == data.keys().hasAll(['liveVideoId', 'liveViewers'])
+        && (!data.keys().hasAny(['liveVideoId']) || (data.liveVideoId is string && data.liveVideoId.matches('^[A-Za-z0-9_-]{6,64}$')))
+        && (!data.keys().hasAny(['liveViewers']) || (data.liveViewers is int && data.liveViewers >= 0 && data.liveViewers <= 100000000));
     }
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;

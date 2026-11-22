@@ -316,3 +316,17 @@
 .topbar-breadcrumb [aria-current] { color: #f0fcff; }
 .theme-light .topbar-breadcrumb [aria-current] { color: #10233f; }
 .client-footer .footer-version { letter-spacing: .08em; font-weight: 600; }
+
+/* Ao vivo: bolinha vermelha pulsando; duplo clique no jogador abre a live. */
+.presence-dot.is-live { background: #fd4851; animation: presence-live 1.2s ease-in-out infinite; }
+@keyframes presence-live { 0%, 100% { box-shadow: 0 0 0 0 #fd4851aa; } 50% { box-shadow: 0 0 0 5px #fd485100; opacity: .7; } }
+.room-player.is-live { cursor: pointer; }
+.room-player.is-live:hover { background: #fd485114; }
+
+/* Janela da live de um jogador */
+.watch-window { height: 100vh; display: flex; flex-direction: column; background: #000; color: #f0fcff; }
+.watch-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #111; border-bottom: 1px solid #fd485166; font-size: 13px; }
+.watch-tag { padding: 2px 6px; border-radius: 3px; background: #fd4851; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.watch-viewers { margin-left: auto; color: #d7e4e8; font-weight: 600; }
+.watch-player { flex: 1; width: 100%; border: 0; }
+.watch-message { margin: auto; color: #a8c1cc; font-size: 14px; }

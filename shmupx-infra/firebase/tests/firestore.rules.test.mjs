@@ -147,6 +147,11 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing" })));
   await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "away" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "offline" })));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "live", liveVideoId: "dQw4w9WgXcQ", liveViewers: 3 })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "live" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "online", liveVideoId: "dQw4w9WgXcQ", liveViewers: 3 })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "live", liveVideoId: "x/../y", liveViewers: 3 })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "live", liveVideoId: "dQw4w9WgXcQ", liveViewers: -1 })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/bob"), presence()));
   await assertFails(setDoc(doc(alice, "rooms/draft/presence/alice"), presence()));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ name: "Admin" })));

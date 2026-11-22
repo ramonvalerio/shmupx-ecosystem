@@ -18,7 +18,7 @@ import { useNotifications } from "../data/useNotifications";
 import { useAutoUpdate } from "../data/useAutoUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
-import { leaveRoomPresence, usePresenceHeartbeat } from "../data/useRoomPresence";
+import { leaveRoomPresence, usePresenceHeartbeat, videoIdFromUrl } from "../data/useRoomPresence";
 import { useDialogFocus } from "./useDialogFocus";
 import { visibleDialog } from "./navigationInput";
 
@@ -95,7 +95,9 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     try { localStorage.setItem(openRoomsKey(profile.uid), JSON.stringify(openRoomIds)); } catch { /* fica só nesta sessão */ }
   }, [profile.uid, openRoomIds]);
   // Presença em todas as salas abertas: online na que está na tela, away nas outras.
-  usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId);
+  const liveVideoId = live.state.status === "live" ? videoIdFromUrl(live.state.watch_url) : null;
+  usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId,
+    liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null);
   // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
   const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
   const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;

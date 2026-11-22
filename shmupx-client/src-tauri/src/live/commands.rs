@@ -51,6 +51,16 @@ pub async fn youtube_desconectar(sessao: State<'_, SessionState>, live: State<'_
     chamar_json(&token(&sessao)?, reqwest::Method::DELETE, "/api/youtube/connection", None).await
 }
 
+/// Quantos assistem agora à live do próprio jogador (o contador da janela da live na sala).
+#[tauri::command]
+pub async fn live_espectadores(sessao: State<'_, SessionState>, broadcast_id: String) -> Result<u64, String> {
+    if broadcast_id.is_empty() || broadcast_id.len() > 64 || !broadcast_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err("id da live inválido".into());
+    }
+    let resposta = chamar_json(&token(&sessao)?, reqwest::Method::GET, &format!("/api/live/broadcasts/{broadcast_id}/viewers"), None).await?;
+    Ok(resposta["viewers"].as_u64().unwrap_or(0))
+}
+
 #[tauri::command]
 pub fn live_estado(live: State<'_, LiveState>) -> Estado {
     live.snapshot()

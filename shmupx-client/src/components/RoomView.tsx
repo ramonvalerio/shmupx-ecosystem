@@ -12,6 +12,7 @@ import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import { openWatchWindow } from "./WatchWindow";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
@@ -57,8 +58,8 @@ function readRobotxReplies(playerId: string | undefined, roomId: string): ChatMe
   }
 }
 
-const STATUS_ORDER: Record<PresenceStatus, number> = { online: 0, away: 1, offline: 2 };
-const STATUS_LABEL: Record<PresenceStatus, string> = { online: "Online", away: "Ausente", offline: "Offline" };
+const STATUS_ORDER: Record<PresenceStatus, number> = { live: 0, online: 1, away: 2, offline: 3 };
+const STATUS_LABEL: Record<PresenceStatus, string> = { live: "Ao vivo", online: "Online", away: "Ausente", offline: "Offline" };
 const MENCAO_ROBOTX = /@robotx\b/i;
 
 export { DEFAULT_COVER } from "../data/gameArt";
@@ -250,9 +251,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
   // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
   // Os outros: online, depois ausentes, depois offline; por nome quando essa é a ordem escolhida.
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: "online" as PresenceStatus, you: true };
+  const meLive = liveHere && live.state.status === "live";
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: (meLive ? "live" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], you: true };
   const rest = others
-    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, you: false }))
+    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, you: false }))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
   const sorted = [me, ...rest];
   const players = sorted;
@@ -336,7 +338,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         </label>
         <ul>
           {sorted.map((player) => (
-            <li key={player.id} className={`room-player ${player.you ? "is-you" : ""}`}>
+            <li key={player.id} className={`room-player ${player.you ? "is-you" : ""} ${player.live ? "is-live" : ""}`}
+              title={player.live ? t("Clique duas vezes para assistir à live de {name}", { name: player.name }) : undefined}
+              onDoubleClick={player.live ? () => void openWatchWindow(room.id, player.id, player.name, t("{name} · ao vivo · {game}", { name: player.name, game: room.title })) : undefined}>
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span>
               <span className="room-player-info">
                 <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
@@ -354,9 +358,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <span className="room-player-state bot">{robotxReady ? <><IconRobot size={11} /> {t("BOT")}</> : t("EM BREVE")}</span>
           </li>
         </ul>
-        {liveHere && live.state.status === "live" && live.state.watch_url
-          ? <button type="button" className="room-watch is-live" onClick={() => void live.open(live.state.watch_url!)}>{t("Assistir live")}</button>
-          : <button type="button" className="room-watch" disabled title={t("Nenhum jogador ao vivo nesta sala.")}>{t("Assistir live")}</button>}
       </aside>
     </section>
   );

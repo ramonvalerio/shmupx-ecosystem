@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, type Timestamp } from "firebase/firestore";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { db } from "../auth/firebase";
 
 /** De quanto em quanto tempo o Client confirma que continua conectado. */
@@ -10,14 +11,44 @@ const STALE_MS = 75_000;
 const TICK_MS = 15_000;
 
 /** Verde: na sala, com o Client em primeiro plano. Vermelho: Client aberto, mas em outra tela ou
- * janela. Cinza: Client fechado ou sem conexão (continua na sala até sair pela aba). */
-export type PresenceStatus = "online" | "away" | "offline";
+ * janela. Vermelho pulsando: transmitindo ao vivo (ausente da sala, jogando para a live). Cinza:
+ * Client fechado ou sem conexão (continua na sala até sair pela aba). */
+export type PresenceStatus = "online" | "away" | "live" | "offline";
 
 export interface RoomPresence {
   uid: string;
   name: string;
   status: PresenceStatus;
   playing: boolean;
+  /** Live no ar: vídeo do YouTube e quantos assistem (atualizado a cada 30 s por quem transmite). */
+  live?: { videoId: string; viewers: number };
+}
+
+/** Live do jogador nesta sala (o vídeo do YouTube é o id da transmissão). */
+export interface MyLive {
+  roomId: string;
+  videoId: string;
+}
+
+/** Id do vídeo no link da live (`https://www.youtube.com/watch?v=<id>`). */
+export function videoIdFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const id = new URL(url).searchParams.get("v");
+    return id && /^[A-Za-z0-9_-]{6,64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function presenceFrom(uid: string, data: Record<string, unknown>, now: number): RoomPresence {
+  const lastSeen = (data.lastSeen as Timestamp | null)?.toMillis() ?? Date.now();
+  const offline = now - lastSeen >= STALE_MS;
+  const state = typeof data.state === "string" ? data.state : "online";
+  const videoId = typeof data.liveVideoId === "string" ? data.liveVideoId : null;
+  const live = !offline && state === "live" && videoId ? { videoId, viewers: typeof data.liveViewers === "number" ? data.liveViewers : 0 } : undefined;
+  const status: PresenceStatus = offline ? "offline" : live ? "live" : state === "away" ? "away" : "online";
+  return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && state === "playing", live };
 }
 
 function presenceRef(roomId: string, uid: string) {
@@ -52,29 +83,51 @@ function useForeground() {
  * servidor). Confirma a cada 30 s e quando o estado muda: jogando, na sala em primeiro plano
  * (online) ou com o Client aberto em outro lugar (away).
  */
-export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null) {
+export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null) {
   const foreground = useForeground();
   const rooms = openRoomIds.join("\n");
+  const liveRoom = live?.roomId ?? null;
+  const liveVideo = live?.videoId ?? null;
   useEffect(() => {
     if (!me.uid || !rooms) return;
     const ids = rooms.split("\n");
-    const beat = () => {
+    let viewers = 0;
+    const beat = async () => {
+      // Quem transmite publica quantos assistem (a janela da live dos outros mostra o número).
+      if (liveVideo && isTauri()) viewers = await invoke<number>("live_espectadores", { broadcastId: liveVideo }).catch(() => viewers);
       for (const roomId of ids) {
-        const state = recordingRoomId === roomId ? "playing" : foreground && visibleRoomId === roomId ? "online" : "away";
-        setDoc(presenceRef(roomId, me.uid), { name: me.displayName, state, lastSeen: serverTimestamp() }).catch((failure) =>
-          console.warn("falha ao registrar a presença na sala:", failure),
-        );
+        const base = { name: me.displayName, lastSeen: serverTimestamp() };
+        const data = liveVideo && liveRoom === roomId
+          ? { ...base, state: "live", liveVideoId: liveVideo, liveViewers: viewers }
+          : { ...base, state: recordingRoomId === roomId ? "playing" : foreground && visibleRoomId === roomId ? "online" : "away" };
+        setDoc(presenceRef(roomId, me.uid), data).catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
       }
     };
-    beat();
-    const timer = window.setInterval(beat, HEARTBEAT_MS);
+    void beat();
+    const timer = window.setInterval(() => void beat(), HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo]);
+}
+
+/** Presença de um jogador (a janela da live acompanha quem transmite). */
+export function usePlayerPresence(roomId: string, uid: string): RoomPresence | null | undefined {
+  const [data, setData] = useState<Record<string, unknown> | null | undefined>(undefined);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => onSnapshot(
+    presenceRef(roomId, uid),
+    (snapshot) => setData(snapshot.exists() ? snapshot.data({ serverTimestamps: "estimate" }) : null),
+    (failure) => { console.warn("falha ao ler a presença do jogador:", failure); setData(null); },
+  ), [roomId, uid]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  return data === undefined ? undefined : data === null ? null : presenceFrom(uid, data, now);
 }
 
 /** Os outros jogadores da sala (quem entrou e não saiu pela aba), com o status de cada um. */
 export function useRoomPresence(roomId: string, myUid: string): RoomPresence[] {
-  const [entries, setEntries] = useState<Array<{ uid: string; name: string; state: string; lastSeen: number }>>([]);
+  const [entries, setEntries] = useState<Array<{ uid: string; data: Record<string, unknown> }>>([]);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -83,15 +136,7 @@ export function useRoomPresence(roomId: string, myUid: string): RoomPresence[] {
       collection(db, "rooms", roomId, "presence"),
       (snapshot) =>
         setEntries(
-          snapshot.docs.map((d) => {
-            const data = d.data({ serverTimestamps: "estimate" });
-            return {
-              uid: d.id,
-              name: typeof data.name === "string" ? data.name : "Jogador",
-              state: typeof data.state === "string" ? data.state : "online",
-              lastSeen: (data.lastSeen as Timestamp | null)?.toMillis() ?? Date.now(),
-            };
-          }),
+          snapshot.docs.map((d) => ({ uid: d.id, data: d.data({ serverTimestamps: "estimate" }) })),
         ),
       (failure) => console.warn("falha ao ler a presença da sala:", failure),
     );
@@ -103,11 +148,5 @@ export function useRoomPresence(roomId: string, myUid: string): RoomPresence[] {
   }, []);
 
   // O próprio jogador a tela mostra sempre, pelo estado local.
-  return entries
-    .filter((e) => e.uid !== myUid)
-    .map(({ uid, name, state, lastSeen }) => {
-      const offline = now - lastSeen >= STALE_MS;
-      const status: PresenceStatus = offline ? "offline" : state === "away" ? "away" : "online";
-      return { uid, name, status, playing: !offline && state === "playing" };
-    });
+  return entries.filter((e) => e.uid !== myUid).map(({ uid, data }) => presenceFrom(uid, data, now));
 }
