@@ -23,6 +23,8 @@ img { max-width: 100%; }
 .lite-center-text { text-align: center; margin: 24px 0; }
 .lite-logo { width: min(240px, 60vw); }
 .lite-badge { margin: 4px 0 0; padding: 2px 10px; border: 1px solid var(--cyan); color: var(--cyan); font-size: 12px; font-weight: 700; letter-spacing: .3em; }
+.lite-version { color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: .05em; }
+.lite-badge .lite-version { font-size: 11px; }
 .lite-badge.small { margin: 0; padding: 1px 6px; font-size: 9px; letter-spacing: .2em; }
 .lite-muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .lite-note { color: #6f8a94; font-size: 12px; line-height: 1.5; padding: 0 16px; }

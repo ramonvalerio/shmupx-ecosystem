@@ -4,6 +4,7 @@ import { useGameArt } from "@client/data/gameArt";
 import type { GameRoom } from "@client/types/room";
 import { romsFor } from "@client/data/emulatorLibrary";
 import { useMisterCompatible } from "./PlayPanel";
+import { APP_VERSION } from "./version";
 
 function RoomCard({ room, onOpen }: { room: GameRoom; onOpen: () => void }) {
   const art = useGameArt(room);
@@ -39,6 +40,7 @@ export default function RoomList({ rooms, profileName, onOpen, onSettings, onSig
       <header className="lite-topbar">
         <img src="/img/logo.png" alt="ShmupX" className="lite-topbar-logo" />
         <span className="lite-badge small">LITE</span>
+        <span className="lite-version">v{APP_VERSION}</span>
         <button type="button" className="lite-icon-button lite-gear" onClick={onSettings} aria-label={t("Ajustes")} title={t("Ajustes")}>⚙</button>
         <button type="button" className="lite-profile" onClick={onSignOut} title={t("Sair da conta")}>
           <img src="/img/avatar-default.png" alt="" />
