@@ -1,3 +1,6 @@
+/** Onde se joga no ShmupX (o Lab marca uma ou mais). */
+export type PlayOn = "steam" | "emulator" | "mister";
+
 export interface GameRoom {
   id: string;
   title: string;
@@ -6,6 +9,8 @@ export interface GameRoom {
   steamAppId: number;
   /** Imagem do card enviada pelo Lab (WebP 16:9); ausente = cartão tipográfico. */
   coverUrl?: string;
+  /** Plataformas em que se joga o jogo (Lab); jogos antigos: deduzidas da plataforma original. */
+  platforms: PlayOn[];
   /** Metadados do catálogo (Lab); ausentes quando o admin não preencheu. */
   platform?: string;
   developer?: string;

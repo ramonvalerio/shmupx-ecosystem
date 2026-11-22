@@ -11,8 +11,10 @@ export interface CatalogGame {
   publisher?: string;
   genre?: string;
   year?: number;
-  /** Um de `PLATFORMS` (features/catalog/options.ts). */
+  /** Plataforma original (legado: um de `PLATFORMS`); o Lab não edita mais, só preserva. */
   platform?: string;
+  /** Onde se joga no ShmupX: subconjunto de `PLAY_ON` (steam, emulator, mister). */
+  platforms?: string[];
   /** Subconjunto de `MODES`. */
   modes: string[];
   /** Imagem do card no Client (WebP 16:9 em www.shmupx.com/catalog/covers/). */

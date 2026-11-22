@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
 import { robotxFromGame } from "./robotx";
+import { catalogPlayOn } from "./platforms";
 
 const texto = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined);
 const COVER_PREFIX = "https://www.shmupx.com/catalog/covers/";
@@ -18,6 +19,7 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     steamAppId: typeof data.steamAppId === "number" ? data.steamAppId : 0,
     // Só capas do próprio site (o backend já recusa outras origens).
     coverUrl: typeof data.coverUrl === "string" && data.coverUrl.startsWith(COVER_PREFIX) ? data.coverUrl : undefined,
+    platforms: catalogPlayOn(data),
     platform: texto(data.platform),
     developer: texto(data.developer),
     publisher: texto(data.publisher),

@@ -3,7 +3,7 @@ import type { CatalogGame } from "../../lib/backend";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { IconPlus } from "../../components/ui/Icons";
-import { platformLabel } from "./options";
+import { playOnLabels, playOnOf } from "./options";
 
 interface CatalogTableProps {
   games: CatalogGame[];
@@ -63,7 +63,7 @@ export default function CatalogTable({ games, loading, filtered, selectedId, onO
       <thead className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur">
         <tr className="border-b border-white/5">
           <th className={HEAD}>Jogo</th>
-          <th className={HEAD}>Plataforma</th>
+          <th className={HEAD}>Plataformas</th>
           <th className={HEAD}>Steam</th>
           <th className={`${HEAD} text-right`}>Run máx.</th>
           <th className={HEAD}>Estado</th>
@@ -89,7 +89,7 @@ export default function CatalogTable({ games, loading, filtered, selectedId, onO
                   {details && ` · ${details}`}
                 </p>
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{platformLabel(game.platform) || "—"}</td>
+              <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{playOnLabels(playOnOf(game)) || "—"}</td>
               <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-zinc-400">{game.steam_app_id || "—"}</td>
               <td className="px-4 py-3 text-right whitespace-nowrap text-zinc-400 tabular-nums">{Math.round(game.max_duration_segundos / 60)} min</td>
               <td className="px-4 py-3">

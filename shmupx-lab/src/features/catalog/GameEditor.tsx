@@ -2,13 +2,13 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { saveGame, type CatalogGame } from "../../lib/backend";
 import type { GameSuggestion } from "../../lib/ai";
 import Button from "../../components/ui/Button";
-import { Field, Select, TextInput } from "../../components/ui/Field";
+import { Field, TextInput } from "../../components/ui/Field";
 import { IconAlert, IconClose } from "../../components/ui/Icons";
 import Switch from "../../components/ui/Switch";
 import AiAssist from "./AiAssist";
 import CoverField from "./CoverField";
 import { RobotxField } from "./RobotxEditor";
-import { MODES, PLATFORMS, slugFromName } from "./options";
+import { MODES, PLAY_ON, playOnOf, slugFromName } from "./options";
 
 interface GameEditorProps {
   /** Jogo em edição; `null` cria um novo. */
@@ -28,6 +28,7 @@ interface Draft {
   genre: string;
   year: string;
   platform: string;
+  platforms: string[];
   modes: string[];
   coverUrl: string;
 }
@@ -36,7 +37,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function toDraft(game: CatalogGame | null): Draft {
   if (!game) {
-    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", modes: [], coverUrl: "" };
+    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "" };
   }
   return {
     id: game.id,
@@ -49,6 +50,7 @@ function toDraft(game: CatalogGame | null): Draft {
     genre: game.genre ?? "",
     year: game.year ? String(game.year) : "",
     platform: game.platform ?? "",
+    platforms: playOnOf(game),
     modes: game.modes,
     coverUrl: game.cover_url ?? "",
   };
@@ -111,11 +113,17 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
       genre: s.genre ?? "",
       year: s.year ? String(s.year) : "",
       platform: s.platform ?? "",
+      // A sugestão da IA marca onde jogar; o que o admin já marcou continua.
+      platforms: [...new Set([...current.platforms, ...playOnOf({ platform: s.platform ?? undefined, steam_app_id: s.steam_app_id ?? 0 })])],
       modes: s.modes,
       // Sem app_id na sugestão, mantém o que já estava digitado.
       steamAppId: s.steam_app_id ? String(s.steam_app_id) : current.steamAppId,
     }));
     setUnverifiedSteamId(verified ? null : s.steam_app_id);
+  }
+
+  function togglePlatform(value: string) {
+    patch({ platforms: draft.platforms.includes(value) ? draft.platforms.filter((p) => p !== value) : [...draft.platforms, value] });
   }
 
   function toggleMode(mode: string) {
@@ -140,6 +148,7 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
         genre: draft.genre.trim() || undefined,
         year: draft.year.trim() ? Number(draft.year) : undefined,
         platform: draft.platform || undefined,
+        platforms: PLAY_ON.map((p) => p.value).filter((value) => draft.platforms.includes(value)),
         modes: draft.modes,
         cover_url: draft.coverUrl || undefined,
       });
@@ -210,14 +219,28 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
               <Field label="Publicadora" className="col-span-2">
                 <TextInput value={draft.publisher} maxLength={80} onChange={(e) => patch({ publisher: e.target.value })} />
               </Field>
-              <Field label="Plataforma">
-                <Select value={draft.platform} onChange={(e) => patch({ platform: e.target.value })}>
-                  <option value="">Não informada</option>
-                  {PLATFORMS.map((platform) => (
-                    <option key={platform.value} value={platform.value}>{platform.label}</option>
-                  ))}
-                </Select>
-              </Field>
+              <div className="col-span-2">
+                <p className="mb-1.5 text-xs font-medium text-zinc-400">Plataformas</p>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Plataformas">
+                  {PLAY_ON.map((platform) => {
+                    const on = draft.platforms.includes(platform.value);
+                    return (
+                      <button
+                        key={platform.value}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => togglePlatform(platform.value)}
+                        className={`rounded-full px-3 py-1 text-xs ring-1 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400/50 focus-visible:outline-none ${
+                          on ? "bg-cyan-400/15 text-cyan-200 ring-cyan-400/40" : "text-zinc-400 ring-white/10 hover:text-zinc-200 hover:ring-white/20"
+                        }`}
+                      >
+                        {platform.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-zinc-500">Onde dá para jogar no ShmupX. Marque todas as que valem.</p>
+              </div>
               <Field label="Ano">
                 <TextInput inputMode="numeric" maxLength={4} value={draft.year} onChange={(e) => patch({ year: e.target.value })} />
               </Field>

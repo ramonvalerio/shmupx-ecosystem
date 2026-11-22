@@ -11,6 +11,27 @@ export const PLATFORMS = [
   { value: "other", label: "Outra" },
 ] as const;
 
+/** Onde o jogo pode ser jogado no ShmupX (mais de uma). Mesmos valores do backend. */
+export const PLAY_ON = [
+  { value: "steam", label: "Steam" },
+  { value: "emulator", label: "Emulador" },
+  { value: "mister", label: "MiSTer" },
+] as const;
+
+/** Plataformas de um jogo salvo antes da escolha múltipla: pela plataforma antiga e pelo app_id. */
+export function playOnOf(game: { platforms?: string[]; platform?: string; steam_app_id: number }): string[] {
+  if (game.platforms?.length) return game.platforms;
+  const result = new Set<string>();
+  if (game.steam_app_id > 0 || game.platform === "steam") result.add("steam");
+  if (game.platform === "mister") result.add("mister");
+  if (game.platform === "arcade" || game.platform === "neogeo" || game.platform === "megadrive") result.add("emulator");
+  return [...result];
+}
+
+export function playOnLabels(values: string[]): string {
+  return PLAY_ON.filter((p) => values.includes(p.value)).map((p) => p.label).join(", ");
+}
+
 /** Formatos competitivos que o jogo suporta. */
 export const MODES = [
   { value: "highscore", label: "High score" },

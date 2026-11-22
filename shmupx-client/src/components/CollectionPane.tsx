@@ -7,8 +7,7 @@ import ImportGamesDialog from "./ImportGamesDialog";
 import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
-import { useEmulatorLibrary } from "../data/emulatorLibrary";
-import { useMisterLibrary } from "../data/misterLibrary";
+import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 // Scripts de validação que o instalador leva (só os aprovados no Lab): o mesmo arquivo do build.
 import scriptsAceitos from "../../src-tauri/scripts-aceitos.json";
 
@@ -19,20 +18,22 @@ export const isSupported = (room: GameRoom) => SUPPORTED.has(room.id);
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }
 
-/** Plataformas do catálogo (as mesmas do Lab/backend). */
-const PLATFORM_LABELS: Record<string, string> = {
-  steam: "Steam", mister: "MiSTer", megadrive: "Mega Drive", neogeo: "Neo Geo", arcade: "Arcade", xbox360: "Xbox 360",
-  playstation: "PlayStation", switch: "Switch", other: "Outra",
-};
-/** Plataforma do jogo: a do catálogo; sem ela, Steam quando há app_id. */
-export function platformOf(room: GameRoom): string | undefined {
-  return room.platform ?? (room.steamAppId > 0 ? "steam" : undefined);
-}
-
-/** Grupo do filtro de plataforma: Steam, MiSTer FPGA ou emulador (o resto). */
-export function platformGroup(room: GameRoom): "steam" | "mister" | "emulator" {
-  const platform = platformOf(room);
-  return platform === "steam" ? "steam" : platform === "mister" ? "mister" : "emulator";
+/**
+ * Etiquetas das plataformas em que o jogo roda; azul = o jogador tem o jogo nela (dá para jogar
+ * por ela).
+ */
+function PlatformTags({ tags }: { tags: PlatformTag[] }) {
+  const { t } = useI18n();
+  if (tags.length === 0) return <span className="platform-tags muted">—</span>;
+  return (
+    <span className="platform-tags">
+      {tags.map((tag) => (
+        <span key={tag.id} className={`platform-tag ${tag.owned ? "is-owned" : ""}`} title={t(tag.owned ? "Você tem este jogo no {platform}" : "Roda no {platform}; você ainda não tem o jogo nele", { platform: t(tag.label) })}>
+          {t(tag.label)}
+        </span>
+      ))}
+    </span>
+  );
 }
 const PLATFORM_FILTERS = [
   { id: "all", label: "Todas" },
@@ -94,20 +95,11 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
-  const emulator = useEmulatorLibrary();
-  const mister = useMisterLibrary();
+  const playable = usePlatformOwnership();
   const [ownedOnly, setOwnedOnly] = useState<"all" | "owned">("all");
   const [refreshing, setRefreshing] = useState(false);
-  /** Na biblioteca importada (Steam ou emulador)? `null` = nenhuma biblioteca importada. */
-  const inLibrary = (room: GameRoom) => {
-    if (room.steamAppId > 0 && steam.library && steam.owns(room.steamAppId)) return true;
-    if (emulator.owns(room) || mister.owns(room)) return true;
-    return steam.library || emulator.library || mister.library ? false : null;
-  };
-  const libraryLabel = (room: GameRoom) => {
-    const owned = inLibrary(room);
-    return owned === null ? null : owned ? t("Na sua biblioteca") : t("Fora da sua biblioteca");
-  };
+  /** O jogador tem o jogo em alguma plataforma (Steam, emulador ou MiSTer)? */
+  const inLibrary = (room: GameRoom) => playable.tags(room).some((tag) => tag.owned);
   async function refreshLibrary() {
     setRefreshing(true);
     try { await steam.refresh(); } finally { setRefreshing(false); }
@@ -118,7 +110,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   // Filtro por origem: Steam ou emulador (arcade, Neo Geo, consoles… tudo o que não é Steam).
   const platforms = PLATFORM_FILTERS;
   const visible = selectCollection(rooms, runs, preferences, query, "all")
-    .filter((room) => platform === "all" || (platform === "unsupported" ? !isSupported(room) : platformGroup(room) === platform))
+    .filter((room) => platform === "all" || (platform === "unsupported" ? !isSupported(room) : playable.tags(room).some((tag) => tag.id === platform)))
     .filter((room) => ownedOnly === "all" || inLibrary(room) === true);
   const selected = rooms.find((room) => room.id === selectedRoomId) ?? null;
   const selectionHidden = selected && !visible.some((room) => room.id === selected.id);
@@ -141,7 +133,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </label>
         <button type="button" className="collection-import" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
         <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
-        {(steam.library || emulator.library || mister.library) && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
+        {playable.anyLibrary && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
         {!bigPicture && <div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>
@@ -156,13 +148,12 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         {visible.map((room) => {
           const favorite = preferences.favorites.includes(room.id);
           const count = runs.filter((run) => run.gameId === room.id).length;
-          const platformId = platformOf(room);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
             <button type="button" className="game-card" aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
               <GameArt room={room} decorative />
               <div className="game-card-info">
                 <strong>{room.title}</strong>
-                <span className="game-card-meta"><span className={inLibrary(room) === false ? "not-owned" : ""}>{libraryLabel(room) ?? (platformId ? t(PLATFORM_LABELS[platformId] ?? platformId) : "—")}</span><SupportBadge room={room} /></span>
+                <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /><SupportBadge room={room} /></span>
                 <span className="game-card-runs"><i aria-hidden="true">◇</i>{t("Runs nesta sessão: {count}", { count })}</span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
@@ -191,7 +182,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </header>
         <ArcadeCabinet room={selected} />
         <dl className="collection-facts two-columns">
-          <div><dt>{t("Plataforma")}</dt><dd>{platformOf(selected) ? t(PLATFORM_LABELS[platformOf(selected)!] ?? platformOf(selected)!) : "—"}{libraryLabel(selected) && <small className={inLibrary(selected) ? "" : "not-owned"}>{libraryLabel(selected)}</small>}</dd></div>
+          <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
           <div><dt>{t("Compatibilidade")}</dt><dd><SupportBadge room={selected} /></dd></div>
         </dl>
         <dl className="collection-facts">

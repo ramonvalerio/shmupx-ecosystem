@@ -29,6 +29,8 @@ const URL_MAXIMA: usize = 300;
 /// Plataformas do catálogo (as mesmas do Lab antigo). Qualquer outro valor é recusado.
 const PLATAFORMAS: [&str; 9] =
     ["steam", "mister", "megadrive", "neogeo", "arcade", "xbox360", "playstation", "switch", "other"];
+/// Onde o jogo pode ser jogado no ShmupX (mais de uma): Steam, emulador (Fightcade/FBNeo) e MiSTer.
+const ONDE_JOGAR: [&str; 3] = ["steam", "emulator", "mister"];
 /// Formatos competitivos que o jogo suporta: pontuação, 1 crédito e caravana.
 const MODOS: [&str; 3] = ["highscore", "1cc", "caravan"];
 
@@ -52,6 +54,9 @@ pub struct JogoEntrada {
     pub year: Option<i64>,
     #[serde(default)]
     pub platform: Option<String>,
+    /// Plataformas em que se joga o jogo no ShmupX (`steam`, `emulator`, `mister`).
+    #[serde(default)]
+    pub platforms: Vec<String>,
     #[serde(default)]
     pub modes: Vec<String>,
     /// Imagem do card (16:9, WebP), enviada pelo Lab. Ausente = cartão tipográfico.
@@ -76,6 +81,7 @@ pub struct Jogo {
     pub year: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
+    pub platforms: Vec<String>,
     pub modes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
@@ -114,6 +120,15 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
     if platform.as_deref().is_some_and(|p| !PLATAFORMAS.contains(&p)) {
         return Err(AppError::bad_request("platform desconhecida"));
     }
+    let mut platforms: Vec<String> = Vec::new();
+    for onde in entrada.platforms {
+        if !ONDE_JOGAR.contains(&onde.as_str()) {
+            return Err(AppError::bad_request("plataforma desconhecida (use steam, emulator ou mister)"));
+        }
+        if !platforms.contains(&onde) {
+            platforms.push(onde);
+        }
+    }
     let mut modes: Vec<String> = Vec::new();
     for modo in entrada.modes {
         if !MODOS.contains(&modo.as_str()) {
@@ -138,6 +153,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
         publisher: texto_opcional(entrada.publisher, "publisher")?,
         genre: texto_opcional(entrada.genre, "genre")?,
         platform,
+        platforms,
         modes,
         ..entrada
     })
@@ -145,7 +161,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
 
 /// Campos do catálogo que a gravação controla. Os opcionais ausentes na entrada estão na máscara
 /// mas não nos valores, o que os apaga do documento.
-const MASCARA: [&str; 12] = [
+const MASCARA: [&str; 13] = [
     "title",
     "steamAppId",
     "maxDurationSeconds",
@@ -156,6 +172,7 @@ const MASCARA: [&str; 12] = [
     "genre",
     "year",
     "platform",
+    "platforms",
     "modes",
     "coverUrl",
 ];
@@ -190,6 +207,9 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
     if !entrada.modes.is_empty() {
         inserir("modes", lista_de_textos(&entrada.modes));
     }
+    if !entrada.platforms.is_empty() {
+        inserir("platforms", lista_de_textos(&entrada.platforms));
+    }
     fs.gravar(&format!("games/{id}"), campos, &MASCARA).await?;
     Ok(Jogo {
         id: id.to_string(),
@@ -202,6 +222,7 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
         genre: entrada.genre,
         year: entrada.year,
         platform: entrada.platform,
+        platforms: entrada.platforms,
         modes: entrada.modes,
         cover_url: entrada.cover_url,
     })
@@ -257,7 +278,7 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
             if antes.modes != depois.modes {
                 mudancas.push(item("modos", "rules", Some(format!("{}: modos competitivos agora são {}", depois.title, nomes_dos_modos(&depois.modes)))));
             }
-            if dados_do_jogo(antes) != dados_do_jogo(depois) {
+            if dados_do_jogo(antes) != dados_do_jogo(depois) || antes.platforms != depois.platforms {
                 mudancas.push(item("dados", "fixes", Some(format!("{}: informações do jogo atualizadas", depois.title))));
             }
             mudancas
@@ -288,6 +309,7 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         genre: ler_texto(campos, "genre"),
         year: ler_inteiro(campos, "year"),
         platform: ler_texto(campos, "platform"),
+        platforms: ler_lista_de_textos(campos, "platforms"),
         modes: ler_lista_de_textos(campos, "modes"),
         cover_url: ler_texto(campos, "coverUrl"),
         id,
@@ -358,6 +380,8 @@ mod tests {
         assert_eq!(ok.developer.as_deref(), Some("Ratalaika"));
         assert_eq!(ok.publisher, None);
         assert_eq!(ok.modes, vec!["highscore", "1cc"]);
+        let varias = validar("g", JogoEntrada { platforms: vec!["mister".into(), "steam".into(), "mister".into()], ..entrada() }).unwrap();
+        assert_eq!(varias.platforms, vec!["mister", "steam"]);
     }
 
     #[test]
@@ -366,6 +390,7 @@ mod tests {
         assert!(validar("g", JogoEntrada { year: Some(2101), ..entrada() }).is_err());
         assert!(validar("g", JogoEntrada { platform: Some("atari".into()), ..entrada() }).is_err());
         assert!(validar("g", JogoEntrada { modes: vec!["speedrun".into()], ..entrada() }).is_err());
+        assert!(validar("g", JogoEntrada { platforms: vec!["xbox360".into()], ..entrada() }).is_err());
         assert!(validar("g", JogoEntrada { developer: Some("x".repeat(81)), ..entrada() }).is_err());
     }
 

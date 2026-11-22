@@ -13,6 +13,9 @@ import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { openWatchWindow } from "./WatchWindow";
+import { PLAY_ON, usePlatformOwnership } from "../data/platforms";
+import { useDialogFocus } from "./useDialogFocus";
+import type { PlayOn } from "../types/room";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
@@ -114,6 +117,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const { t } = useI18n();
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchNotice, setLaunchNotice] = useState<string | null>(null);
+  /** Plataformas para escolher ao iniciar (o jogador tem o jogo em mais de uma). */
+  const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
+  const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
+  const playable = usePlatformOwnership();
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
@@ -131,6 +139,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
   useEffect(() => {
     setLaunchError(null);
+    setLaunchNotice(null);
+    setChoosing(null);
     setIsLaunching(false);
     setIsStopping(false);
     setBotReplies(readRobotxReplies(playerId, room.id));
@@ -174,20 +184,51 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     if (robotxReady && MENCAO_ROBOTX.test(text)) reply(text);
   }
 
-  /** Abre o jogo pela plataforma dele: Steam quando há app_id; senão, o emulador (Fightcade/FBNeo). */
-  async function handleStartGame() {
+  /**
+   * Plataformas por onde dá para iniciar: as em que o jogador tem o jogo (bibliotecas importadas).
+   * Sem nenhuma importada, o que o Client sabe abrir (Steam pelo app_id, emulador pelo ROM).
+   */
+  function startOptions(): PlayOn[] {
+    const owned = playable.tags(room).filter((tag) => tag.owned).map((tag) => tag.id);
+    if (owned.length > 0) return owned;
+    const known: PlayOn[] = [];
+    if (room.steamAppId > 0) known.push("steam");
+    if (romsFor(room).length > 0) known.push("emulator");
+    return known;
+  }
+
+  /** INICIAR JOGO: uma plataforma inicia direto; mais de uma pergunta por qual. */
+  function handleStartGame() {
     setLaunchError(null);
-    const roms = romsFor(room);
-    if (room.steamAppId === 0 && roms.length === 0) {
+    setLaunchNotice(null);
+    const options = startOptions();
+    if (options.length === 0) {
       setLaunchError(room.platform && OWN_HARDWARE[room.platform]
         ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
-        : t("O Client ainda não sabe abrir este jogo. Abra-o manualmente."));
+        : t("O Client ainda não sabe abrir este jogo. Importe o jogo de uma plataforma em Importar jogos."));
+      return;
+    }
+    if (options.length > 1) { setChoosing(options); return; }
+    void launchOn(options[0]);
+  }
+
+  async function launchOn(platform: PlayOn) {
+    setChoosing(null);
+    setLaunchError(null);
+    setLaunchNotice(null);
+    if (platform === "mister") {
+      // O MiSTer é outro aparelho: a partida começa nele (a integração ShmupX do MiSTer grava a run).
+      setLaunchNotice(t("Inicie {game} no MiSTer. A partida entra no seu perfil pela integração ShmupX do MiSTer.", { game: room.title }));
       return;
     }
     setIsLaunching(true);
     try {
-      if (room.steamAppId > 0) await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
-      else await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms, pasta: readEmulatorLibrary()?.root || null });
+      if (platform === "steam") {
+        if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
+        await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
+      } else {
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null });
+      }
     } catch (error) {
       setLaunchError(typeof error === "string" ? error : "Falha ao iniciar o jogo.");
     } finally {
@@ -299,6 +340,28 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
+        {launchNotice && <p className="room-banner" role="status">{launchNotice}</p>}
+        {choosing && (
+          <div className="controller-dialog-backdrop">
+            <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+              <header>
+                <div>
+                  <h2 id="choose-platform-title">{t("Iniciar {game}", { game: room.title })}</h2>
+                  <p>{t("Você tem este jogo em mais de uma plataforma. Por qual quer jogar?")}</p>
+                </div>
+              </header>
+              <div className="controller-dialog-body choose-platform-list">
+                {PLAY_ON.filter((p) => choosing.includes(p.id)).map((p) => (
+                  <button key={p.id} type="button" className="import-source-option" onClick={() => void launchOn(p.id)}>
+                    <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
+                    <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : "Você inicia o jogo no próprio MiSTer")}</small></span>
+                  </button>
+                ))}
+              </div>
+              <footer><span /><button type="button" className="secondary-action" onClick={() => setChoosing(null)}>{t("Cancelar")}</button></footer>
+            </div>
+          </div>
+        )}
         {startError && <p className="room-banner warning" role="alert">{t("A gravação não começou: {reason}", { reason: startError })}</p>}
         {lastRun && <RunOutcome run={lastRun} onOpenRanking={onOpenRanking} />}
 
