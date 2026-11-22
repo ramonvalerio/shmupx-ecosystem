@@ -107,10 +107,12 @@ pub fn live_encerrar(live: State<'_, LiveState>) {
     live.cancelar.notify_waiters();
 }
 
-/// Abre o link da live no navegador (só links do YouTube).
+/// Abre no navegador o link da live ou as páginas do YouTube para criar o canal e liberar as lives
+/// (só esses endereços).
 #[tauri::command]
 pub fn live_abrir(url: String) -> Result<(), String> {
-    if !url.starts_with("https://www.youtube.com/watch?v=") {
+    const PERMITIDOS: [&str; 3] = ["https://www.youtube.com/watch?v=", "https://www.youtube.com/create_channel", "https://www.youtube.com/features"];
+    if !PERMITIDOS.iter().any(|p| url.starts_with(p)) {
         return Err("link inválido".into());
     }
     oauth::abrir_navegador(&url)

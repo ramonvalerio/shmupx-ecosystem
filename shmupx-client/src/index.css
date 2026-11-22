@@ -567,3 +567,15 @@ button:disabled { opacity: .5; cursor: default; }
   -webkit-mask: url(/img/tech_element7.png) left bottom / 100% auto no-repeat; mask: url(/img/tech_element7.png) left bottom / 100% auto no-repeat;
 }
 .notification-panel { overflow: hidden auto; }
+
+/* YouTube sem canal: passo a passo por cima das Configurações. */
+.youtube-help-backdrop { z-index: 70; }
+.youtube-help { width: min(560px,100%); }
+.youtube-help-steps { margin: 0 0 14px; padding: 0; list-style: none; counter-reset: passo; display: flex; flex-direction: column; gap: 12px; }
+.youtube-help-steps li { counter-increment: passo; position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px 12px 50px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--surface-recessed); }
+.youtube-help-steps li::before { content: counter(passo); position: absolute; left: 14px; top: 12px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #57fcff1f; color: var(--cyan); font-weight: 700; font-size: 13px; }
+.youtube-help-steps strong { font-size: 14px; }
+.youtube-help-steps span { font-size: 13px; line-height: 1.5; color: #b8c7cd; }
+.theme-light .youtube-help-steps span { color: #475569; }
+.youtube-help-steps button { margin-top: 4px; }
+.youtube-help-actions { justify-content: flex-end !important; }

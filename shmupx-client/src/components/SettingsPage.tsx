@@ -10,6 +10,7 @@ import ProfileSettings from "./ProfileSettings";
 import StorageSettings from "./StorageSettings";
 import type { PlayerProfile } from "../auth/firebase";
 import { useYouTube } from "../data/useLive";
+import YouTubeNoChannelDialog from "./YouTubeNoChannelDialog";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
@@ -33,7 +34,7 @@ function SettingsCard({ title, detail, children }: { title: string; detail?: str
 /** YouTube do jogador: conectar o canal para transmitir ao vivo (START LIVE na sala). */
 function YouTubeCard() {
   const { t } = useI18n();
-  const { connection, busy, error, connect, disconnect } = useYouTube();
+  const { connection, busy, error, noChannel, dismissNoChannel, connect, disconnect } = useYouTube();
   const connected = Boolean(connection?.connected);
   return <SettingsCard title={t("Integrações")} detail={t("Conecte serviços externos à sua conta ShmupX.")}>
     <div className="integration-row">
@@ -48,6 +49,7 @@ function YouTubeCard() {
     </div>
     {busy && !connected && <p className="muted" role="status">{t("Conclua a autorização no navegador que foi aberto e volte para o aplicativo.")}</p>}
     {error && <p className="mode-error" role="alert">{t(error)}</p>}
+    {noChannel && <YouTubeNoChannelDialog busy={busy} onRetry={() => void connect()} onClose={dismissNoChannel} />}
     <p className="muted">{t("O ShmupX pede permissão para criar e encerrar transmissões no seu canal. As lives são não listadas, a menos que você marque \"Live pública\" na sala.")}</p>
   </SettingsCard>;
 }

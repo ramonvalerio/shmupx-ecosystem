@@ -71,16 +71,23 @@ export function useYouTube() {
   }, []);
   useEffect(reload, [reload]);
 
+  // A conta Google escolhida não tem canal no YouTube (backend: 409): vira um passo a passo na
+  // tela, não uma mensagem de erro técnica.
+  const [noChannel, setNoChannel] = useState(false);
   const run = (command: string) => async () => {
     setBusy(true);
     setError(null);
+    setNoChannel(false);
     try {
       setConnection(await invoke<YouTubeConnection>(command));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      if (/não tem canal no YouTube/i.test(message)) setNoChannel(true);
+      else setError(message);
     } finally {
       setBusy(false);
     }
   };
-  return { connection, busy, error, connect: run("youtube_conectar"), disconnect: run("youtube_desconectar"), reload };
+  const dismissNoChannel = useCallback(() => setNoChannel(false), []);
+  return { connection, busy, error, noChannel, dismissNoChannel, connect: run("youtube_conectar"), disconnect: run("youtube_desconectar"), reload };
 }
