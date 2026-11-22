@@ -6,6 +6,8 @@ import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/emulatorLibrary";
 import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister } from "../data/misterLibrary";
+import { usePlatformOwnership } from "../data/platforms";
+import type { PlayOn } from "../types/room";
 
 const SOURCES = [
   { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
@@ -23,6 +25,21 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   const [imported, setImported] = useState<number | null>(null);
   const [emu, setEmu] = useState<{ status: "idle" | "scanning" | "done" | "error"; found?: boolean; root?: string | null; roms?: string[]; error?: string }>({ status: "idle" });
   const source = SOURCES.find((candidate) => candidate.id === sourceId);
+  const playable = usePlatformOwnership();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  /** Jogos do ShmupX que o jogador tem na plataforma, de quantos rodam nela. */
+  function counts(id: PlayOn) {
+    const tagged = rooms.map((room) => playable.tags(room).find((tag) => tag.id === id)).filter((tag) => tag !== undefined);
+    return { owned: tagged.filter((tag) => tag.owned).length, total: tagged.length };
+  }
+  async function refreshLibrary(id: PlayOn) {
+    setBusyId(id);
+    setRowError(null);
+    try { await playable.library(id).refresh(); }
+    catch (error) { setRowError(error instanceof Error ? error.message : String(error)); }
+    finally { setBusyId(null); }
+  }
   function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
   async function readEmulator() {
     setEmu({ status: "scanning" });
@@ -72,7 +89,22 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-dialog-title" tabIndex={-1} className="controller-dialog import-games-dialog">
       <header><div><h2 id="import-dialog-title">{t(source ? "Conectar {platform}" : "Importar jogos", { platform: source ? t(source.title) : "" })}</h2><p>{t(source ? source.detail : "Escolha de onde deseja trazer seus jogos.")}</p></div><div className="import-header-actions">{source && <button data-dialog-close className="secondary-action" onClick={back}>{t("Voltar")}</button>}<button data-dialog-close={!source ? true : undefined} className="secondary-action" onClick={onClose}>{t("Fechar")}</button></div></header>
       <div className="controller-dialog-body">
-        {!source && <div className="import-source-list">{SOURCES.map((item) => <button key={item.id} className="import-source-option" onClick={() => setSourceId(item.id)}><span className="platform-mark" aria-hidden="true">{item.icon}</span><span><strong>{t(item.title)}</strong><small>{t(item.detail)}</small></span><span className={`import-availability ${item.available ? "is-available" : ""}`}>{t(item.available ? "Disponível" : "Em breve")}</span></button>)}</div>}
+        {!source && <div className="import-source-list">{SOURCES.map((item) => {
+          const id = item.id === "local" ? null : (item.id as PlayOn);
+          const lib = id ? playable.library(id) : null;
+          const count = id && lib?.connected ? counts(id) : null;
+          return <div key={item.id} className={`import-source-row ${lib?.connected ? "is-connected" : ""}`}>
+            <button className="import-source-option" onClick={() => setSourceId(item.id)}>
+              <span className="platform-mark" aria-hidden="true">{item.icon}</span>
+              <span><strong>{t(item.title)}</strong><small>{count ? t("✓ Conectada · {owned} de {total} jogos do ShmupX", { owned: count.owned, total: count.total }) : t(item.detail)}</small></span>
+              {!lib?.connected && <span className={`import-availability ${item.available ? "is-available" : ""}`}>{t(item.available ? "Disponível" : "Em breve")}</span>}
+            </button>
+            {id && lib?.connected && <div className="import-source-actions">
+              <button type="button" className="secondary-action" disabled={busyId !== null} onClick={() => void refreshLibrary(id)} title={t("Lê de novo e importa os jogos instalados depois da última vez")}>{t(busyId === id ? "Atualizando…" : "Atualizar")}</button>
+              <button type="button" className="secondary-action" disabled={busyId !== null} onClick={lib.disconnect}>{t("Desconectar")}</button>
+            </div>}
+          </div>;
+        })}{rowError && <p className="mode-error" role="alert">{t(rowError)}</p>}</div>}
 
         {source?.id === "emulator" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">E</span><h3>{t("Emulador")}</h3></div>

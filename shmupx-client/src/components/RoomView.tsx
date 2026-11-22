@@ -13,7 +13,7 @@ import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { openWatchWindow } from "./WatchWindow";
-import { PLAY_ON, usePlatformOwnership } from "../data/platforms";
+import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
 import { useDialogFocus } from "./useDialogFocus";
 import type { PlayOn } from "../types/room";
 
@@ -121,6 +121,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   /** Plataformas para escolher ao iniciar (o jogador tem o jogo em mais de uma). */
   const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
   const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
+  /** Jogo desinstalado (ou sem o ROM) na plataforma escolhida. */
+  const [notFound, setNotFound] = useState<PlayOn | null>(null);
+  const notFoundDialogRef = useDialogFocus(notFound !== null, () => setNotFound(null));
   const playable = usePlatformOwnership();
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
@@ -141,6 +144,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     setLaunchError(null);
     setLaunchNotice(null);
     setChoosing(null);
+    setNotFound(null);
     setIsLaunching(false);
     setIsStopping(false);
     setBotReplies(readRobotxReplies(playerId, room.id));
@@ -223,6 +227,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     }
     setIsLaunching(true);
     try {
+      if (!(await stillInstalled(room, platform))) { setNotFound(platform); return; }
       if (platform === "steam") {
         if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId });
@@ -341,6 +346,21 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
         {launchNotice && <p className="room-banner" role="status">{launchNotice}</p>}
+        {notFound && (
+          <div className="controller-dialog-backdrop">
+            <div ref={notFoundDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="not-found-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+              <header>
+                <div>
+                  <h2 id="not-found-title">{t("Jogo não encontrado")}</h2>
+                  <p>{notFound === "steam"
+                    ? t("{game} não está instalado na Steam deste computador. Instale o jogo na Steam e tente de novo.", { game: room.title })
+                    : t("O ROM de {game} não está no Fightcade deste computador. Baixe o jogo pelo Fightcade e tente de novo.", { game: room.title })}</p>
+                </div>
+              </header>
+              <footer><span /><button type="button" className="primary-action" onClick={() => setNotFound(null)}>{t("Entendi")}</button></footer>
+            </div>
+          </div>
+        )}
         {choosing && (
           <div className="controller-dialog-backdrop">
             <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog">

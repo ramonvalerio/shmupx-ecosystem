@@ -130,3 +130,11 @@
 .theme-light .platform-tag.is-owned { color: #1d4ed8; border-color: #3b82f6; background: #dbeafe; }
 
 .choose-platform-list { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; }
+
+/* Importar jogos: plataforma conectada com Atualizar e Desconectar ao lado. */
+.import-source-row { display: flex; align-items: stretch; gap: 8px; }
+.import-source-row .import-source-option { flex: 1; min-width: 0; }
+.import-source-row.is-connected .import-source-option { border-color: #3b8bff66; }
+.import-source-row.is-connected .import-source-option small { color: #8fc0ff; }
+.import-source-actions { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.import-source-actions .secondary-action { white-space: nowrap; }

@@ -1,5 +1,5 @@
-import { useSteamLibrary } from "./steamLibrary";
-import { useEmulatorLibrary } from "./emulatorLibrary";
+import { clearSteamLibrary, saveSteamLibrary, scanSteam, useSteamLibrary } from "./steamLibrary";
+import { publish as saveEmulatorLibrary, readEmulatorLibrary, romsFor, scanEmulator, useEmulatorLibrary } from "./emulatorLibrary";
 import { useMisterLibrary } from "./misterLibrary";
 import type { GameRoom, PlayOn } from "../types/room";
 
@@ -42,5 +42,38 @@ export function usePlatformOwnership() {
   const tags = (room: GameRoom): PlatformTag[] =>
     PLAY_ON.filter((p) => room.platforms.includes(p.id) || owns(room, p.id)).map((p) => ({ ...p, owned: owns(room, p.id) }));
   const anyLibrary = Boolean(steam.library || emulator.library || mister.library);
-  return { owns, tags, anyLibrary };
+  /** Biblioteca importada da plataforma, com atualizar (ler de novo) e desconectar (esquecer). */
+  const library = (id: PlayOn) =>
+    id === "steam" ? { connected: Boolean(steam.library), refresh: () => steam.refresh(), disconnect: clearSteamLibrary }
+    : id === "emulator" ? { connected: Boolean(emulator.library), refresh: () => emulator.refresh(), disconnect: emulator.disconnect }
+    : { connected: Boolean(mister.library), refresh: () => mister.refresh(), disconnect: mister.disconnect };
+  return { owns, tags, anyLibrary, library };
+}
+
+/**
+ * Confere, logo antes de iniciar, se o jogo continua instalado neste PC (Steam) ou com o ROM no
+ * Fightcade (emulador). Atualiza a biblioteca importada com o que achou: um jogo desinstalado
+ * volta ao preto e branco na coleção. O MiSTer é outro aparelho: não é conferido aqui.
+ */
+export async function stillInstalled(room: GameRoom, platform: PlayOn): Promise<boolean> {
+  if (platform === "steam") {
+    const result = await scanSteam();
+    if (!result.found) return false;
+    const installed = result.games.filter((g) => g.installed).map((g) => g.app_id);
+    // Só regrava se a Steam já estava importada (iniciar não conecta a biblioteca sozinho).
+    if (localStorageHas("shmupx.client.steamLibrary.v1")) saveSteamLibrary(installed, result.games.length);
+    return installed.includes(room.steamAppId);
+  }
+  if (platform === "emulator") {
+    const current = readEmulatorLibrary();
+    const result = await scanEmulator(current?.root || undefined);
+    if (!result.found) return false;
+    if (current) saveEmulatorLibrary({ root: result.root ?? current.root, roms: result.roms, importedAt: Date.now() });
+    return romsFor(room).some((rom) => result.roms.includes(rom));
+  }
+  return true;
+}
+
+function localStorageHas(key: string) {
+  try { return localStorage.getItem(key) !== null; } catch { return false; }
 }
