@@ -20,6 +20,7 @@ import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 import { leaveRoomPresence, usePresenceHeartbeat } from "../data/useRoomPresence";
 import { useDialogFocus } from "./useDialogFocus";
+import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
@@ -146,6 +147,24 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     if (rankingRoomIds.includes(crumbRoom.id)) crumbs.push({ label: t("Ranking") });
   }
 
+  // Esc volta um nível no menu de navegação: Ranking → sala → Minhas coleções; telas internas
+  // (Configurações, perfil…) → Minhas coleções. Não age com janela aberta (o Esc a fecha), ao
+  // digitar nem no Big Picture (lá o Esc sai do modo).
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || bigPicture.active || visibleDialog()) return;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && focused.matches("input,select,textarea,[contenteditable=true]")) return;
+      if (section !== "collection") { setSection("collection"); setActiveRoomId(null); }
+      else if (activeRoomId && rankingRoomIds.includes(activeRoomId)) setRanking(activeRoomId, false);
+      else if (activeRoomId) setActiveRoomId(null);
+      else return;
+      event.preventDefault();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [section, activeRoomId, rankingRoomIds, bigPicture.active]);
+
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
       <nav className="navigation-rail" aria-label={t("Navegação principal")}>
@@ -157,7 +176,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
             if (!room) return null;
             // O item (não girado) é o que se arrasta; o botão dentro dele é girado 180° (texto vertical).
             return <div key={id} ref={railDrag.register(id)} className={`rail-room-item ${railDrag.draggingId === id ? "is-dragging" : ""}`} style={railDrag.styleFor(id)}
-              onPointerDown={(event) => railDrag.onPointerDown(event, id, ".rail-room-close")}>
+              onPointerDown={(event) => railDrag.onPointerDown(event, id, ".rail-room-close")}
+              // Botão do meio (scroll) fecha a sala, como o ×; o mousedown evita a rolagem automática.
+              onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}
+              onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); setClosingRoomId(id); } }}>
               <button type="button" className="rail-room" title={room.title} aria-current={section === "collection" && activeRoomId === id ? "page" : undefined}
                 onClick={() => { if (railDrag.consumeClick()) return; setSection("collection"); activateRoom(id); }}>
                 {recordingRoomId === id && <span className="rail-room-recording" aria-label={t("Gravando")} />}
