@@ -117,16 +117,12 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   return <div className={`collection-layout ${compact ? "compact" : ""}`}>
     <section className="collection-pane" aria-label={t("Coleção de jogos")}>
       {importOpen && <ImportGamesDialog rooms={rooms} onClose={() => setImportOpen(false)} />}
-      <header className="collection-heading">
-        <h1>{t("Minhas coleções")}</h1>
-        <button className="secondary-action" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
-      </header>
-
       <div className="collection-toolbar">
         <label className="collection-search">
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Buscar seus jogos…")} aria-label={t("Buscar jogos")} />
           <span aria-hidden="true">⌕</span>
         </label>
+        <button type="button" className="collection-import" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
         <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
         {(steam.library || emulator.library) && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
