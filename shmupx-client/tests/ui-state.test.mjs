@@ -166,6 +166,22 @@ test("recording is not marked submitted until native submission confirmation", (
   assert.equal(submitted[0].status, "submitted");
   assert.equal(submitted[0].endedAt, 20);
 });
+const { mergePendingRuns } = await sourceModule("../src/types/submission.ts");
+test("runs não enviadas voltam do disco e podem ser analisadas de novo ou descartadas", () => {
+  const pending = [{ run_id: "r1", jogo_id: "earthion", iniciada_em: 100, encerrada_em: 450, erro: "game over" }];
+  const runs = mergePendingRuns([], pending);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].status, "failed");
+  assert.equal(runs[0].runId, "r1");
+  assert.equal(mergePendingRuns(runs, pending), runs, "a mesma run não entra duas vezes");
+  const again = applyRunAnalysis(runs, { pid: 0, jogo_id: "earthion", run_id: "r1", status: "analyzing" }, 500);
+  assert.equal(again[0].status, "analyzing");
+  assert.equal(again[0].endedAt, 450);
+  const sent = applyRunAnalysis(again, { pid: 0, jogo_id: "earthion", run_id: "r1", status: "submitted", score: 918200 }, 600);
+  assert.equal(sent[0].status, "submitted");
+  assert.equal(sent[0].score, 918200);
+  assert.deepEqual(applyRunAnalysis(runs, { pid: 0, jogo_id: "earthion", run_id: "r1", status: "discarded" }, 700), []);
+});
 
 const { answer: robotxAnswer, robotxFromGame } = await sourceModule("../src/data/robotx.ts");
 test("RobotX responde pela pergunta curada mais parecida e admite quando não sabe", () => {

@@ -1,5 +1,6 @@
 import { useI18n } from "../i18n";
 import { useMemo, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGameRanking } from "../data/useRanking";
 import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
@@ -40,6 +41,7 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
   const [mode, setMode] = useState<Mode>("highscore");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const localRuns = useMemo(
     () => runs.filter((run) => run.gameId === room.id).sort((a, b) => b.startedAt - a.startedAt),
@@ -54,6 +56,18 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
 
   const selectedRun = scope === "local" ? localRuns.find((run) => run.id === selected) : undefined;
   const selectedEntry = scope === "online" ? online.find((entry) => entry.jogador_id === selected) : undefined;
+
+  /** Run "Não enviada": analisa o vídeo de novo e envia (ou tira da lista). */
+  async function retryRun(runId: string, discard = false) {
+    setRetryError(null);
+    if (!isTauri()) return;
+    try {
+      await invoke(discard ? "descartar_run_pendente" : "reanalisar_run", { runId });
+      if (discard) setSelected(null);
+    } catch (error) {
+      setRetryError(typeof error === "string" ? error : String(error));
+    }
+  }
 
   function changeScope(next: Scope) {
     setScope(next);
@@ -106,7 +120,7 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
               <button key={run.id} type="button" className="room-ranking-row" aria-pressed={selected === run.id} onClick={() => setSelected(run.id)}>
                 <span>{runDate(run.startedAt, locale)}</span>
                 <span className={`run-badge run-${run.status}`}>{t(RUN_LABELS[run.status])}</span>
-                <span className="rank-score">—</span>
+                <span className="rank-score">{run.score !== undefined ? run.score.toLocaleString(locale) : "—"}</span>
                 <span className="rank-duration">{run.endedAt ? formatDuration(run.endedAt - run.startedAt) : t("Em andamento")}</span>
               </button>
             ))}
@@ -135,13 +149,21 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
         <h2>{t("DETALHES DO REGISTRO")}</h2>
         {selectedRun && (
           <>
-            <div className="big-score" aria-label={t("Placar")}>—</div>
+            <div className="big-score" aria-label={t("Placar")}>{selectedRun.score !== undefined ? selectedRun.score.toLocaleString(locale) : "—"}</div>
             <dl className="detail-list">
               <dt>{t("Início")}</dt><dd>{runDate(selectedRun.startedAt, locale)}</dd>
               <dt>{t("Duração")}</dt><dd>{selectedRun.endedAt ? formatDuration(selectedRun.endedAt - selectedRun.startedAt) : t("Em andamento")}</dd>
               <dt>{t("Status")}</dt><dd>{t(RUN_LABELS[selectedRun.status])}</dd>
             </dl>
             {selectedRun.message && <p className="muted" role="status">{selectedRun.message}</p>}
+            {selectedRun.status === "failed" && selectedRun.runId && (
+              <div className="run-retry">
+                <p className="muted">{t("O vídeo desta run está guardado: dá para analisar de novo e enviar o placar.")}</p>
+                <button type="button" className="room-action" onClick={() => void retryRun(selectedRun.runId!)}>{t("Analisar de novo")}</button>
+                <button type="button" className="text-action" onClick={() => void retryRun(selectedRun.runId!, true)}>{t("Descartar")}</button>
+                {retryError && <p className="form-error" role="alert">{retryError}</p>}
+              </div>
+            )}
           </>
         )}
         {selectedEntry && (

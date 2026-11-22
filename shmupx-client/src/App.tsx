@@ -10,7 +10,7 @@ import { useRoomChat } from "./data/useRoomChat";
 import { useRoomPresence } from "./data/useRoomPresence";
 import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
-import { applyRunAnalysis, type RunAnalysisEvent, type SessionRun } from "./types/submission";
+import { applyRunAnalysis, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
 import { takePendingRunMode } from "./data/gameModes";
 
@@ -56,6 +56,15 @@ export default function App() {
   // O listener da Steam é registrado uma vez; a ref evita que ele enxergue um catálogo antigo.
   const roomsRef = useRef(rooms);
   roomsRef.current = rooms;
+
+  // Runs "Não enviada" guardadas (vídeo no disco): aparecem no ranking local para analisar de novo.
+  const signedUid = auth.state.status === "signed-in" ? auth.state.profile.uid : null;
+  useEffect(() => {
+    if (!isTauri() || !signedUid) return;
+    invoke<PendingRun[]>("runs_pendentes", { uid: signedUid })
+      .then((pending) => setRuns((current) => mergePendingRuns(current, pending)))
+      .catch((error) => console.error("falha ao ler as runs não enviadas:", error));
+  }, [signedUid]);
 
 
   useEffect(() => {

@@ -13,9 +13,13 @@ class ReportTests(unittest.TestCase):
         self.assertIs(report["gameplay"], gameplay)
         self.assertFalse(report["needs_review"])
 
+    def test_game_over_without_continue_is_a_normal_ending(self):
+        result = dict(confidence="high", hi=918200, continues=0, game_over=True)
+        self.assertFalse(client_report("earthion", "1.0.0", result, {})["needs_review"])
+
     def test_uncertain_or_heuristic_results_require_review(self):
         for override in (dict(confidence="low"), dict(hi=None),
-                         dict(continues=1), dict(game_over=True), dict(players=2)):
+                         dict(continues=1), dict(players=2)):
             result = dict(confidence="high", hi=123, continues=0, game_over=False)
             result.update(override)
             self.assertTrue(client_report("earthion", "1.0.0", result, {})["needs_review"])

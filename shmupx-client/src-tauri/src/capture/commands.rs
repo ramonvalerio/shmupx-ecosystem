@@ -8,6 +8,7 @@ use crate::net::backend;
 use crate::session::SessionState;
 
 use super::ffmpeg::{self, RecordingConfig};
+use super::pendentes::{self, RunPendente};
 use super::state::{AnalysisQueue, RunHandle, RunState};
 
 #[derive(Debug, Clone, Serialize)]
@@ -148,18 +149,28 @@ pub async fn finalizar_corrida_manual(
 struct RunAnalysisPayload {
     jogo_id: String,
     pid: u32,
+    /// Id da run no servidor, quando já existe (análise e envio; "Analisar de novo").
+    run_id: Option<String>,
     status: String,
     message: Option<String>,
+    /// Placar enviado (`submitted`).
+    score: Option<i64>,
 }
 
 fn emit_analysis(app: &AppHandle, jogo_id: &str, pid: u32, status: &str, message: Option<String>) {
+    emit_run(app, jogo_id, pid, None, status, message, None);
+}
+
+fn emit_run(app: &AppHandle, jogo_id: &str, pid: u32, run_id: Option<&str>, status: &str, message: Option<String>, score: Option<i64>) {
     let _ = app.emit(
         "run://analysis",
         RunAnalysisPayload {
             jogo_id: jogo_id.to_string(),
             pid,
+            run_id: run_id.map(str::to_string),
             status: status.into(),
             message,
+            score,
         },
     );
 }
@@ -217,7 +228,7 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
             );
         }
     }
-    emit_analysis(app, &job.jogo_id, job.pid, "analyzing", None);
+    emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
     let app = app.clone();
     tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
 }
@@ -239,15 +250,63 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
         )
         .await
         .map_err(|error| format!("vídeo preservado; falha ao enviar resultado: {error}"))?;
-        Ok::<(), String>(())
+        Ok::<i64, String>(result.score_bruto)
     }
     .await;
     match result {
-        Ok(()) => emit_analysis(app, &job.jogo_id, job.pid, "submitted", None),
+        Ok(score) => {
+            pendentes::remover(app, &job.run_id);
+            emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "submitted", None, Some(score));
+        }
         Err(error) => {
             log::warn!("capture: run {} não enviada: {error}", job.run_id);
-            emit_analysis(app, &job.jogo_id, job.pid, "failed", Some(error));
+            // O vídeo fica: o jogador pode analisar de novo (Ranking da sala › Analisar de novo).
+            pendentes::guardar(app, RunPendente {
+                run_id: job.run_id.clone(),
+                jogo_id: job.jogo_id.clone(),
+                video_path: job.video_path.clone(),
+                uid: pendentes::uid_do_token(&job.token),
+                iniciada_em: pendentes::inicio_pelo_video(&job.video_path),
+                encerrada_em: pendentes::fim_pelo_video(&job.video_path),
+                erro: error.clone(),
+            });
+            emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(error), None);
         }
+    }
+}
+
+/// Runs "Não enviada" da conta (`uid`, ou a da sessão) com o vídeo ainda no disco.
+#[tauri::command]
+pub fn runs_pendentes(app: AppHandle, uid: Option<String>) -> Vec<RunPendente> {
+    let uid = uid.or_else(|| app.state::<SessionState>().snapshot().token.as_deref().and_then(pendentes::uid_do_token));
+    pendentes::listar(&app, uid.as_deref())
+}
+
+/// Analisa de novo o vídeo de uma run "Não enviada" e envia o resultado. Entra na mesma fila
+/// das análises; o andamento chega pelo evento `run://analysis` com o `run_id`.
+#[tauri::command]
+pub fn reanalisar_run(app: AppHandle, run_id: String) -> Result<(), String> {
+    let run = pendentes::buscar(&app, &run_id).ok_or("run não encontrada entre as não enviadas")?;
+    if !run.video_path.is_file() {
+        return Err("o vídeo desta run não está mais no disco".into());
+    }
+    let token = app
+        .state::<SessionState>()
+        .snapshot()
+        .token
+        .ok_or("sem sessão: entre com sua conta Google")?;
+    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: run.video_path };
+    emit_run(&app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
+    tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
+    Ok(())
+}
+
+/// Tira a run da lista de não enviadas (o vídeo continua na pasta das gravações).
+#[tauri::command]
+pub fn descartar_run_pendente(app: AppHandle, run_id: String) {
+    if let Some(run) = pendentes::buscar(&app, &run_id) {
+        pendentes::remover(&app, &run_id);
+        emit_run(&app, &run.jogo_id, 0, Some(&run_id), "discarded", None, None);
     }
 }
 

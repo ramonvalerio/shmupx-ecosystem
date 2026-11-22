@@ -250,8 +250,8 @@ struct Gameplay {
 }
 
 /// Lê o relatório `client-v1`. `aceito_automatico` segue a regra do Client
-/// (`shmupx-client/src-tauri/src/analysis/offline.rs`): confiança alta, sem revisão, sem game
-/// over, sem continue e com placar.
+/// (`shmupx-client/src-tauri/src/analysis/offline.rs`): confiança alta, sem revisão, sem continue
+/// e com placar. Game over (morreu na última vida) é o fim normal de uma partida de 1 ficha.
 fn interpretar(bytes: &[u8], jogo: &str, versao: &str, duracao_segundos: u64) -> Resultado {
     let bruto: Value = match serde_json::from_slice(bytes) {
         Ok(valor) => valor,
@@ -271,7 +271,6 @@ fn interpretar(bytes: &[u8], jogo: &str, versao: &str, duracao_segundos: u64) ->
         && g.players.is_none_or(|p| p <= 1)
         && relatorio.confidence == "high"
         && !relatorio.needs_review
-        && !g.game_over
         && g.continues == 0
         && g.score.is_some();
     Resultado {
@@ -319,13 +318,18 @@ mod tests {
     }
 
     #[test]
+    fn game_over_sem_continue_e_aceito() {
+        let r = interpretar(&relatorio("high", false, Some(918_200), 0, true), "earthion", "1.0.0", 10);
+        assert!(r.aceito_automatico && r.game_over);
+    }
+
+    #[test]
     fn mesma_regra_do_client_para_ir_a_revisao() {
         for (confianca, revisao, placar, continues, game_over) in [
             ("medium", false, Some(1), 0, false),
             ("high", true, Some(1), 0, false),
             ("high", false, None, 0, false),
             ("high", false, Some(1), 1, false),
-            ("high", false, Some(1), 0, true),
         ] {
             let r = interpretar(&relatorio(confianca, revisao, placar, continues, game_over), "earthion", "1.0.0", 1);
             assert!(!r.aceito_automatico, "{confianca} {revisao} {placar:?} {continues} {game_over}");

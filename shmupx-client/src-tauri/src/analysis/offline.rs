@@ -36,8 +36,7 @@ struct Gameplay {
     #[serde(rename = "lives-lost")]
     lives: i32,
     continues: i32,
-    #[serde(rename = "game-over")]
-    game_over: bool,
+    // `game-over` também vem no relatório, mas não decide o envio: é o fim normal da ficha.
     observation: Option<String>,
 }
 
@@ -47,9 +46,10 @@ fn parse_report(bytes: &[u8], game: &str, version: &str) -> Result<AnalysisResul
     if report.schema_version != 1 || report.game_id != game || report.validator_version != version {
         return Err("versão ou jogo incompatível no resultado offline".into());
     }
+    // Game over (morreu na última vida, sem continue) é o fim normal de uma partida de 1 ficha:
+    // o placar final do HUD vale. Continue ou leitura duvidosa ficam de fora.
     if report.needs_review
         || report.confidence != "high"
-        || report.gameplay.game_over
         || report.gameplay.continues > 0
     {
         return Err(format!(
@@ -320,6 +320,13 @@ mod tests {
         assert_eq!(parse(&valid()).unwrap().score_bruto, 1234);
     }
     #[test]
+    fn accepts_game_over_without_continue() {
+        let mut report = valid();
+        report["gameplay"]["game-over"] = serde_json::json!(true);
+        report["gameplay"]["hi-score"] = serde_json::json!(918_200);
+        assert_eq!(parse(&report).unwrap().score_bruto, 918_200);
+    }
+    #[test]
     fn rejects_mismatched_or_uncertain_results() {
         for (key, value) in [
             ("game_id", serde_json::json!("other")),
@@ -341,7 +348,6 @@ mod tests {
             ("lives-lost", serde_json::json!(-1)),
             ("continues", serde_json::json!(-1)),
             ("continues", serde_json::json!(1)),
-            ("game-over", serde_json::json!(true)),
         ] {
             let mut report = valid();
             report["gameplay"][key] = value;
