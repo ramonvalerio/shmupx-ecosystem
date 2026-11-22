@@ -298,7 +298,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       {section === "events" && <EventsPage />}
       {section === "ranking" && <RankingPage rooms={rooms} />}
       {settingsOpen && (
-        <div className="controller-dialog-backdrop">
+        <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
           <div ref={settingsDialogRef} role="dialog" aria-modal="true" aria-label={t("Configurações")} tabIndex={-1} className="controller-dialog settings-modal">
             <header>
               <div><h2>{t("Configurações")}</h2></div>
