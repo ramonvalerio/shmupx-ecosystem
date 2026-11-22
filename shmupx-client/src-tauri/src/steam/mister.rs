@@ -166,7 +166,7 @@ const INI: &str = "/media/fat/shmupx/shmupx.ini";
 const INI_BACKUP: &str = "/media/fat/shmupx/shmupx.ini.bak";
 
 /// Nome de jogador do MiSTer: letras, dígitos, `_` e `-` (vira chave no `shmupx.ini`).
-fn username_valido(nome: &str) -> bool {
+pub fn username_valido(nome: &str) -> bool {
     !nome.is_empty() && nome.len() <= 32 && nome.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 

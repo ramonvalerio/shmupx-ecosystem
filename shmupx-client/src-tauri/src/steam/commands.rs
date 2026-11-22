@@ -148,22 +148,29 @@ pub async fn mister_usuarios(host: String, senha: Option<String>) -> Result<Vec<
         .map_err(|e| e.to_string())?
 }
 
-/// Conecta o MiSTer à conta: pede um token novo ao backend e o grava direto no `shmupx.ini` do
-/// MiSTer para o jogador `username`. O token não volta para a interface.
+/// Instala (ou atualiza) o ShmupX no MiSTer por SSH e liga o jogador `username` à conta: pede um
+/// token novo ao backend e grava no `shmupx.ini` do MiSTer. O token não volta para a interface.
+/// O andamento chega pelo evento `mister://etapa`; devolve a saída do instalador.
 #[tauri::command]
 pub async fn mister_conectar(
+    app: AppHandle,
     sessao: tauri::State<'_, crate::session::SessionState>,
     host: String,
     senha: Option<String>,
     username: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
+    if !super::mister::username_valido(&username) {
+        return Err("nome de jogador inválido: use letras, números, _ e -".into());
+    }
     let login = sessao.snapshot().token.ok_or_else(|| "entre na sua conta para conectar o MiSTer".to_string())?;
     let resposta = crate::net::backend::chamar_json(&login, reqwest::Method::POST, "/api/mister/tokens/direct", None).await?;
     let token = resposta["token"].as_str().filter(|t| t.starts_with("sxm_")).ok_or("o servidor não devolveu o token do MiSTer")?.to_string();
+    let senha = senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into());
     let api = crate::net::backend::BACKEND_BASE_URL;
-    tauri::async_runtime::spawn_blocking(move || super::mister::gravar_token(&host, senha.as_deref(), &username, &token, api))
-        .await
-        .map_err(|e| e.to_string())?
+    super::mister_ssh::instalar(host.trim(), &senha, &username, &token, api, |etapa| {
+        let _ = app.emit("mister://etapa", etapa.to_string());
+    })
+    .await
 }
 
 /// Jogos do MiSTer FPGA na rede (FTP, usuário root). `senha`: a do MiSTer, se não for a padrão.

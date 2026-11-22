@@ -23,7 +23,11 @@ O resultado é um binário estático, sem dependência da imagem do MiSTer, link
 
 ## Instalar no MiSTer
 
-Com o MiSTer ligado na rede, a partir do Windows:
+**Pelo ShmupX Client (o caminho do jogador):** Importar jogos › MiSTer FPGA › *Conectar ao meu MiSTer*. Com o IP e a senha do root (padrão `1`), o Client entra por SSH, baixa o pacote publicado (`downloads/mister/latest.json`, conferido pelo SHA-256), extrai em `/media/fat/shmupx`, baixa o core MegaDrive do odelot (v1.1) se faltar, grava o `shmupx.ini` (jogador, `api` e um token novo, com `shmupx.ini.bak`) e roda o `instalar.sh`. Código: `shmupx-client/src-tauri/src/steam/mister_ssh.rs`.
+
+**Publicar o pacote que o Client instala:** `python scripts/pacote.py` compila e gera `target/pacote/shmupx-mister-<versão>-<commit>.tar` e `latest.json`; os dois vão para `s3://<bucket do site>/downloads/mister/` (o `latest.json` com `Cache-Control: no-cache`).
+
+**Para desenvolver**, com o MiSTer ligado na rede, a partir do Windows:
 
 ```powershell
 .\scripts\implantar.ps1 -Mister 192.168.0.50

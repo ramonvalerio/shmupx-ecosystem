@@ -37,6 +37,8 @@ base64 = "0.22"
 getrandom = "0.2"
 url = "2.5"
 tauri-plugin-process = "2"
+# SSH em Rust puro (criptografia ring): instala o ShmupX no MiSTer pela rede.
+russh = { version = "=0.65.1", default-features = false, features = ["ring", "flate2", "rsa"] }
 
 # Captura da janela do jogo para a live (Windows Graphics Capture).
 [target.'cfg(windows)'.dependencies]

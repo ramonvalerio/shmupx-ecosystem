@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import { readMisterLibrary } from "../data/misterLibrary";
 
@@ -20,6 +21,7 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
   const [player, setPlayer] = useState("");
   const [newPlayer, setNewPlayer] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [mail, setMail] = useState<{ kind: "idle" | "sending" | "sent" | "error"; text?: string }>({ kind: "idle" });
   const target = hostProp ?? host;
   const secret = passwordProp ?? password;
@@ -43,13 +45,18 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
   async function connect() {
     setStep("saving");
     setMessage(null);
+    // Andamento da instalação (conectar, baixar, copiar, montar o menu).
+    const stop = await listen<string>("mister://etapa", (event) => setProgress(event.payload));
     try {
-      await invoke("mister_conectar", { host: target, senha: secret || null, username: chosen });
+      await invoke<string>("mister_conectar", { host: target, senha: secret || null, username: chosen });
       setStep("done");
-      setMessage(t("Pronto: {player} está ligado à sua conta. As partidas desse jogador no MiSTer entram no seu perfil e no ranking.", { player: chosen.toUpperCase() }));
+      setMessage(t("Pronto: o ShmupX está instalado no MiSTer e {player} está ligado à sua conta. No MiSTer, abra a pasta ShmupX no menu principal; as partidas desse jogador entram no seu perfil e no ranking.", { player: chosen.toUpperCase() }));
     } catch (error) {
       setStep("error");
       setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      stop();
+      setProgress(null);
     }
   }
 
@@ -67,7 +74,7 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
   return <div className="mister-connect">
     {hostProp === undefined && <div className="mister-connect-form">
       <label className="settings-field">{t("IP do MiSTer")}<input value={host} onChange={(event) => setHost(event.target.value)} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" /></label>
-      <label className="settings-field">{t("Senha do FTP (vazio = padrão)")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" /></label>
+      <label className="settings-field">{t("Senha do root (vazio = padrão)")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" /></label>
     </div>}
     {(step === "idle" || step === "loading" || step === "error") && (
       <button className="primary-action" disabled={step === "loading" || !target.trim()} onClick={() => void loadPlayers()}>
@@ -85,11 +92,12 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
         <input value={newPlayer} onChange={(event) => setNewPlayer(event.target.value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12))} placeholder="ramonvalerio" maxLength={12} autoComplete="off" />
       </label>}
       <button className="primary-action" disabled={step === "saving" || !chosen} onClick={() => void connect()}>
-        {t(step === "saving" ? "Gravando no MiSTer…" : "Ligar à minha conta")}
+        {t(step === "saving" ? "Instalando no MiSTer…" : "Instalar e ligar à minha conta")}
       </button>
+      {progress && <p className="muted" role="status">{t(progress)}</p>}
     </>}
     {message && <p className={step === "error" ? "mode-error" : "success-text"} role="status">{t(message)}</p>}
-    <p className="muted">{t("O Client grava no shmupx.ini do MiSTer o seu jogador, o endereço do ShmupX e um token novo (o arquivo anterior fica em shmupx.ini.bak). O token não aparece na tela.")}</p>
+    <p className="muted">{t("Pelo SSH do MiSTer (usuário root), o Client instala ou atualiza o ShmupX: o agente, o menu ShmupX por jogador e modo, as telas em Scripts, o serviço no boot e, se faltar, o core MegaDrive do Earthion. Depois grava o seu jogador, o endereço do ShmupX e um token novo no shmupx.ini (o anterior fica em shmupx.ini.bak). O token não aparece na tela.")}</p>
     <p className="muted">
       {t("Prefere fazer à mão?")}{" "}
       <button type="button" className="text-action" disabled={mail.kind === "sending"} onClick={() => void sendByEmail()}>{t(mail.kind === "sending" ? "Enviando…" : "Receber o token por e-mail")}</button>
