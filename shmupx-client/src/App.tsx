@@ -41,6 +41,8 @@ export default function App() {
   const [runs, setRuns] = useState<SessionRun[]>([]);
   // Por jogo: por que a última tentativa de gravação não começou (mostrado na sala).
   const [startErrors, setStartErrors] = useState<Record<string, string>>({});
+  // Jogo aberto no MODO TREINO em cada sala (processo): o PARAR JOGO o fecha.
+  const [practiceGames, setPracticeGames] = useState<Record<string, number>>({});
   const recordingRoomId = runs.find((run) => run.status === "recording")?.gameId ?? null;
   const expiredDialogRef = useDialogFocus(expiredRoomId !== null, () => setExpiredRoomId(null));
 
@@ -80,11 +82,17 @@ export default function App() {
 
     const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
-      if (room && !event.payload.treino) startRun(room.id, event.payload.pid, event.payload.app_id);
+      if (room && event.payload.treino) setPracticeGames((current) => ({ ...current, [room.id]: event.payload.pid }));
+      else if (room) startRun(room.id, event.payload.pid, event.payload.app_id);
     });
     const unlistenEmulator = listen<EmulatorLaunchedPayload>("emulator://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.id === event.payload.game_id);
-      if (room && !event.payload.treino) startRun(room.id, event.payload.pid, null);
+      if (room && event.payload.treino) setPracticeGames((current) => ({ ...current, [room.id]: event.payload.pid }));
+      else if (room) startRun(room.id, event.payload.pid, null);
+    });
+
+    const unlistenPractice = listen<{ pid: number }>("treino://encerrado", (event) => {
+      setPracticeGames((current) => Object.fromEntries(Object.entries(current).filter(([, pid]) => pid !== event.payload.pid)));
     });
 
     const unlistenExpired = listen<RunExpiredPayload>("run://expired", (event) => {
@@ -103,6 +111,7 @@ export default function App() {
       unlistenLaunched.then((unlisten) => unlisten());
       unlistenEmulator.then((unlisten) => unlisten());
       unlistenExpired.then((unlisten) => unlisten());
+      unlistenPractice.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -134,6 +143,7 @@ export default function App() {
           onShowCollection={actions.showCollection}
           lastRun={runs.find((run) => run.gameId === room.id)}
           startError={startErrors[room.id]}
+          practicePid={practiceGames[room.id]}
         />
       )}
     />

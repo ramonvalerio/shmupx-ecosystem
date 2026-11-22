@@ -190,6 +190,10 @@ pub fn ini_com_token(texto: &str, username: &str, token: &str, api: &str) -> Str
     if !usuarios.iter().any(|u| u == username) {
         usuarios.push(username.to_string());
     }
+    // CONVIDADO (sem token): o MODO TREINO abre o jogo por ele, sem ficha e sem ranking online.
+    if !usuarios.iter().any(|u| u == "convidado") {
+        usuarios.push("convidado".to_string());
+    }
     let linha_usuarios = format!("username = [{}]", usuarios.join(", "));
     let linha_token = format!("token.{username} = {token}");
     let linha_api = format!("api = {api}");
@@ -324,12 +328,12 @@ mod tests {
         assert_eq!(usuarios_do_ini(ini), vec!["ramonvalerio", "kwayd"]);
         let api = "https://api.shmupx";
         let novo = ini_com_token(ini, "ramonvalerio", "sxm_novo", api);
-        assert_eq!(novo, "username = [ramonvalerio, kwayd]\napi = https://api.shmupx\ntoken.ramonvalerio = sxm_novo\n# comentario\n");
+        assert_eq!(novo, "username = [ramonvalerio, kwayd, convidado]\napi = https://api.shmupx\ntoken.ramonvalerio = sxm_novo\n# comentario\n");
         let outro = ini_com_token(&novo, "dantrius", "sxm_d", api);
-        assert!(outro.starts_with("username = [ramonvalerio, kwayd, dantrius]\napi = https://api.shmupx\n"));
+        assert!(outro.starts_with("username = [ramonvalerio, kwayd, convidado, dantrius]\napi = https://api.shmupx\n"));
         assert!(outro.contains("token.ramonvalerio = sxm_novo") && outro.ends_with("token.dantrius = sxm_d\n"));
         assert_eq!(outro.matches("api =").count(), 1);
-        assert_eq!(ini_com_token("", "ramon", "sxm_x", api), "username = [ramon]\napi = https://api.shmupx\ntoken.ramon = sxm_x\n");
+        assert_eq!(ini_com_token("", "ramon", "sxm_x", api), "username = [ramon, convidado]\napi = https://api.shmupx\ntoken.ramon = sxm_x\n");
         assert!(!username_valido("a b") && !username_valido("") && username_valido("ramon_valerio"));
     }
 

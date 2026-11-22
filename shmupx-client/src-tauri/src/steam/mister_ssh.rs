@@ -214,6 +214,14 @@ pub async fn abrir(host: &str, senha: &str, caminho: &str) -> Result<(), String>
     Ok(())
 }
 
+/// Volta o MiSTer ao menu principal (como apertar o menu no controle): o agente vê o jogo fechar
+/// e grava a partida.
+pub async fn voltar_ao_menu(host: &str, senha: &str) -> Result<(), String> {
+    let ssh = Ssh::conectar(host, senha).await?;
+    ssh.exigir("echo 'load_core /media/fat/menu.rbf' > /dev/MiSTer_cmd", None, "voltar ao menu").await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

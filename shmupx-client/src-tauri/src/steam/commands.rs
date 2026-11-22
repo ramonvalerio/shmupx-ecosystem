@@ -93,6 +93,9 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration, treino: b
                     "steam://game-launched",
                     GameLaunchedPayload { app_id, pid, name, treino },
                 );
+                if treino {
+                    super::treino::acompanhar(app.clone(), pid);
+                }
                 return;
             }
 
@@ -124,7 +127,11 @@ pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Ve
     let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms))
         .await
         .map_err(|e| e.to_string())??;
-    let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino: treino.unwrap_or(false) });
+    let treino = treino.unwrap_or(false);
+    let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
+    if treino {
+        super::treino::acompanhar(app.clone(), pid);
+    }
     Ok(())
 }
 
@@ -182,6 +189,13 @@ pub async fn mister_conectar(
 pub async fn mister_jogos_do_jogador(host: String, senha: Option<String>, username: String) -> Result<Vec<super::mister_ssh::JogoNoMenu>, String> {
     let senha = senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into());
     super::mister_ssh::jogos_no_menu(host.trim(), &senha, &username).await
+}
+
+/// PARAR JOGO › MiSTer: volta o MiSTer ao menu; o agente registra a partida (com o placar).
+#[tauri::command]
+pub async fn mister_parar(host: String, senha: Option<String>) -> Result<(), String> {
+    let senha = senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into());
+    super::mister_ssh::voltar_ao_menu(host.trim(), &senha).await
 }
 
 /// INICIAR JOGO › MiSTer: abre o jogo do menu ShmupX no MiSTer, já com o jogador e o modo.

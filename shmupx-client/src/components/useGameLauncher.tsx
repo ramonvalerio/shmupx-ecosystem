@@ -30,6 +30,9 @@ export function useGameLauncher(room: GameRoom) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [practice, setPractice] = useState(false);
+  /** Jogo aberto no MiSTer por aqui (o PARAR JOGO volta o MiSTer ao menu). */
+  const [misterGame, setMisterGame] = useState<{ host: string; password?: string; practice: boolean } | null>(null);
+  const [isStopping, setIsStopping] = useState(false);
   /** Plataformas para escolher (o jogador tem o jogo em mais de uma). */
   const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
   const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
@@ -50,6 +53,7 @@ export function useGameLauncher(room: GameRoom) {
     setMisterModes(null);
     setNotFound(null);
     setIsLaunching(false);
+    setMisterGame(null);
   }, [room.id]);
 
   /**
@@ -57,12 +61,11 @@ export function useGameLauncher(room: GameRoom) {
    * jogador já tem o jogo) e o que o Client sabe abrir (Steam pelo app_id, emulador pelo ROM).
    * Com mais de uma, o jogador escolhe; a janela mostra em quais ele já tem o jogo.
    */
-  function options(forPractice: boolean): PlayOn[] {
+  function options(): PlayOn[] {
     const ids = new Set<PlayOn>(playable.tags(room).map((tag) => tag.id));
     if (room.steamAppId > 0) ids.add("steam");
     if (romsFor(room).length > 0) ids.add("emulator");
-    const list = PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
-    return forPractice ? list.filter((id) => id !== "mister") : list;
+    return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
   /** INICIAR JOGO (`forPractice` false) ou MODO TREINO: uma plataforma abre direto; mais de uma pergunta. */
@@ -70,11 +73,9 @@ export function useGameLauncher(room: GameRoom) {
     setError(null);
     setNotice(null);
     setPractice(forPractice);
-    const list = options(forPractice);
+    const list = options();
     if (list.length === 0) {
-      setError(forPractice && options(false).includes("mister")
-        ? t("O modo treino ainda não está disponível no MiSTer: lá toda partida aberta pelo menu do jogador é registrada.")
-        : room.platform && OWN_HARDWARE[room.platform]
+      setError(room.platform && OWN_HARDWARE[room.platform]
           ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
           : t("O Client ainda não sabe abrir este jogo. Importe o jogo de uma plataforma em Importar jogos."));
       return;
@@ -84,7 +85,7 @@ export function useGameLauncher(room: GameRoom) {
   }
 
   /** Abre o jogo no MiSTer pela rede (SSH): no menu ShmupX, com o jogador da conta e o modo. */
-  async function openOnMister(game?: MisterMenuGame) {
+  async function openOnMister(game?: MisterMenuGame, forPractice = practice) {
     const player = readMisterPlayer();
     if (!player) {
       // Ainda não sabe qual jogador do MiSTer é este: pergunta aqui mesmo (IP e jogador).
@@ -97,11 +98,15 @@ export function useGameLauncher(room: GameRoom) {
     try {
       let target = game;
       if (!target) {
-        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, senha: player.password ?? null, username: player.username });
+        // Treino no MiSTer: pelo CONVIDADO (sem token), sem ficha e sem ranking online.
+        const username = forPractice ? "convidado" : player.username;
+        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, senha: player.password ?? null, username });
         const names = new Set([slug(room.title), slug(room.id)]);
         const modes = games.filter((g) => names.has(slug(g.jogo)));
         if (modes.length === 0) {
-          setError(t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
+          setError(forPractice
+            ? t("O jogador CONVIDADO do seu MiSTer não tem {game}. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title })
+            : t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
           return;
         }
         if (modes.length > 1) { setMisterModes(modes); return; }
@@ -109,7 +114,10 @@ export function useGameLauncher(room: GameRoom) {
       }
       setMisterModes(null);
       await invoke("mister_iniciar", { host: player.host, senha: player.password ?? null, caminho: target.caminho });
-      setNotice(t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
+      setMisterGame({ host: player.host, password: player.password, practice: forPractice });
+      setNotice(forPractice
+        ? t("Modo treino: abrindo {game} no MiSTer ({mode}) como CONVIDADO, sem gastar ficha nem ir para o ranking online.", { game: room.title, mode: target.modo })
+        : t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
     } catch (failure) {
       setError(describe(failure, "Falha ao abrir o jogo no MiSTer."));
     } finally {
@@ -134,12 +142,30 @@ export function useGameLauncher(room: GameRoom) {
     void openOnMister();
   }
 
+  /** PARAR JOGO no MiSTer: volta ao menu; o agente grava a partida com o placar. */
+  async function stopMister() {
+    if (!misterGame) return;
+    setIsStopping(true);
+    setError(null);
+    try {
+      await invoke("mister_parar", { host: misterGame.host, senha: misterGame.password ?? null });
+      setNotice(misterGame.practice
+        ? t("Treino encerrado: o MiSTer voltou ao menu.")
+        : t("O MiSTer voltou ao menu: o agente registrou a partida com o placar."));
+      setMisterGame(null);
+    } catch (failure) {
+      setError(describe(failure, "Não foi possível parar o jogo no MiSTer."));
+    } finally {
+      setIsStopping(false);
+    }
+  }
+
   async function launchOn(platform: PlayOn, forPractice = practice) {
     setChoosing(null);
     setError(null);
     setNotice(null);
     if (platform === "mister") {
-      await openOnMister();
+      await openOnMister(undefined, forPractice);
       return;
     }
     setIsLaunching(true);
@@ -237,7 +263,7 @@ export function useGameLauncher(room: GameRoom) {
             {PLAY_ON.filter((p) => choosing.includes(p.id)).map((p) => (
               <button key={p.id} type="button" className="import-source-option" onClick={() => void launchOn(p.id)}>
                 <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
-                <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
+                <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : practice ? "Abre no MiSTer como CONVIDADO (sem ficha nem ranking online)" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
                 <span className={`import-availability ${playable.owns(room, p.id) ? "is-available" : ""}`}>{t(playable.owns(room, p.id) ? "Na sua biblioteca" : "Não importado")}</span>
               </button>
             ))}
@@ -253,5 +279,5 @@ export function useGameLauncher(room: GameRoom) {
     {notice && <p className="room-banner" role="status">{notice}</p>}
   </>;
 
-  return { start, isLaunching, practice, setError, dialogs, banners };
+  return { start, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister };
 }

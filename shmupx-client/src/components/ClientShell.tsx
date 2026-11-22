@@ -23,6 +23,7 @@ import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
+import { useWallet } from "../data/useWallet";
 import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
@@ -61,6 +62,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const settingsDialogRef = useDialogFocus(settingsOpen, () => setSettingsOpen(false));
   const presenceMode = usePresenceMode();
   const myPublic = useMyPublicProfile(profile.displayName);
+  const credits = useWallet(profile.uid);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   // O menu do perfil fecha com um clique fora dele (o botão do avatar alterna sozinho).
@@ -203,6 +205,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           })}
         </div>
         <div className="profile-menu-anchor">
+          {/* Avisos, Configurações e status: separados dos jogos abertos por uma linha. */}
+          <div className="rail-tools">
+            <NotificationBell items={notifications.items} unread={notifications.unread} error={notifications.error} onOpen={openNotification} onSeen={notifications.markSeen} />
+          </div>
           <button type="button" className="rail-settings" aria-label={t("Configurações")} title={t("Configurações")} aria-haspopup="dialog" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
           </button>
@@ -265,8 +271,12 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
         <div className="client-topbar-actions">
-          <NotificationBell items={notifications.items} unread={notifications.unread} error={notifications.error} onOpen={openNotification} onSeen={notifications.markSeen} />
-          <button type="button" className="secondary-action big-picture-toggle" onClick={bigPicture.toggle} aria-pressed={bigPicture.active} title={t("Alt+Enter")}>{bigPicture.active ? t("Sair do Big Picture") : t("Big Picture")}</button>
+          {/* Fichas: cada INICIAR JOGO gasta 1 (PC e MiSTer); o treino não gasta. */}
+          <div className={`credits-badge ${credits !== null && credits <= 5 ? "is-low" : ""}`} title={t("Fichas: cada partida valendo ranking gasta 1. O modo treino não gasta.")}>
+            <span className="credits-coin" aria-hidden="true">◎</span>
+            <strong>{credits ?? "—"}</strong>
+            <span>{t("fichas")}</span>
+          </div>
         </div>
       </header>
       <div className="client-content">

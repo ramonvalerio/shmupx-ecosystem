@@ -37,6 +37,8 @@ export interface RoomViewProps {
   lastRun?: SessionRun;
   /** Motivo de a última tentativa de gravação não ter começado (ex.: FFmpeg, ficha). */
   startError?: string;
+  /** Jogo aberto no MODO TREINO nesta sala (processo): o PARAR JOGO o fecha. */
+  practicePid?: number;
   /** Outros jogadores presentes na sala agora (presença em tempo real). */
   others?: RoomPresence[];
 }
@@ -110,7 +112,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, others = [] }: RoomViewProps) {
+export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   // INICIAR JOGO e MODO TREINO (plataforma, jogo instalado, MiSTer): ver useGameLauncher.
   const launcher = useGameLauncher(room);
@@ -207,17 +209,31 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
 
   const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
 
+  // INICIAR JOGO vira PARAR JOGO (vermelho) com o jogo aberto: run no PC (encerra a gravação e
+  // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
+  // treino no PC (fecha o jogo).
+  const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
   let mainLabel = "Iniciar jogo";
   let mainAction = () => launcher.start(false);
   let mainDisabled = launcher.isLaunching;
   let mainVariant = "primary";
-  if (isStopping) {
-    mainLabel = "Encerrando a gravação...";
+  if (isStopping || launcher.isStopping) {
+    mainLabel = "Encerrando o jogo…";
     mainDisabled = true;
-    mainVariant = "";
+    mainVariant = "stop";
   } else if (isRecording) {
-    mainLabel = "[ STOP ]";
+    mainLabel = "Parar jogo";
     mainAction = handleStopGame;
+    mainDisabled = false;
+    mainVariant = "stop";
+  } else if (launcher.misterGame) {
+    mainLabel = "Parar jogo";
+    mainAction = () => void launcher.stopMister();
+    mainDisabled = false;
+    mainVariant = "stop";
+  } else if (practicePid !== undefined) {
+    mainLabel = "Parar jogo";
+    mainAction = () => void invoke("treino_parar", { pid: practicePid }).catch((error) => launcher.setError(String(error)));
     mainDisabled = false;
     mainVariant = "stop";
   } else if (launcher.isLaunching) {
@@ -251,7 +267,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <div className="game-room-actions">
               <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
               <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
-              {!isRecording && !isStopping && (
+              {!gameOpen && !isStopping && (
                 <button type="button" className="room-action practice-action" onClick={() => launcher.start(true)} disabled={launcher.isLaunching || liveOn}
                   title={t("Abre o jogo sem gravar run nem gastar ficha.")}>{t("Modo treino")}</button>
               )}

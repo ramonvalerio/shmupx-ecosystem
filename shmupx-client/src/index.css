@@ -522,3 +522,17 @@ button:disabled { opacity: .5; cursor: default; }
 .storage-bar { position: relative; height: 8px; border-radius: 4px; background: #ffffff14; overflow: hidden; }
 .storage-bar > span { position: absolute; inset: 0 auto 0 0; background: #57fcff55; }
 .storage-bar > .storage-bar-runs { background: #57fcff; }
+
+/* Fichas no canto superior direito */
+.credits-badge { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #f2c14e55; border-radius: 4px; background: #f2c14e12; color: #f2c14e; font-size: 13px; white-space: nowrap; }
+.credits-badge strong { font-size: 16px; color: #ffd76a; }
+.credits-badge .credits-coin { font-size: 15px; }
+.credits-badge.is-low { border-color: #fd485188; background: #fd485114; color: #ff8b92; }
+.credits-badge.is-low strong { color: #ff8b92; }
+
+/* Menu lateral: sininho acima da engrenagem, com uma linha separando dos jogos abertos */
+.navigation-rail .rail-tools { display: flex; justify-content: center; margin: 0 6px; padding-top: 10px; border-top: 1px solid var(--stroke); }
+.navigation-rail .notification-bell { writing-mode: horizontal-tb; transform: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #a8c1cc; }
+.navigation-rail .notification-bell:hover { color: var(--cyan); background: #57fcff12; }
+.navigation-rail .notification-count { top: -4px; right: -6px; }
+.navigation-rail .notification-panel { position: fixed; left: 48px; right: auto; top: auto; bottom: 60px; }
