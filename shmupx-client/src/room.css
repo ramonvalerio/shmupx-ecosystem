@@ -98,7 +98,6 @@
 
 /* ── Login: design "Acesso do Piloto" (Superdesign) ── */
 /* Fonte do ShmupX (a mesma do site) em todos os textos do login. */
-@font-face { font-family: "Share Tech"; src: url(/fonts/ShareTech-Regular.ttf) format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
 .login-screen, .login-screen :is(h1, h2, p, span, strong, button, div) { font-family: "Share Tech", "Segoe UI", system-ui, sans-serif; font-weight: 400 !important; font-synthesis: none; }
 .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 44px 64px; background: linear-gradient(to right, #030c12cc 0%, #030c121a 48%, #030c12d9 100%), linear-gradient(to bottom, #030c124d 0%, #030c1200 40%, #030c12d9 100%), #030c12 url(/img/login-cockpit.jpg) center bottom / cover; }
 .entrance-layout { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 54px; align-items: center; width: 100%; max-width: 1320px; min-height: 590px; }

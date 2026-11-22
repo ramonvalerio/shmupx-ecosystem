@@ -7,8 +7,11 @@
   --text: #f0fcff;
   --muted: #8a9aa1;
   color-scheme: dark;
-  font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+  font-family: "Share Tech", Roboto, system-ui, sans-serif;
 }
+/* Fonte do ShmupX (a mesma do Client, de shmupx-client/public). */
+@font-face { font-family: "Share Tech"; src: url(/fonts/ShareTech-Regular.ttf) format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+button, input, select, textarea { font-family: inherit; }
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
 button { font: inherit; color: inherit; cursor: pointer; }
