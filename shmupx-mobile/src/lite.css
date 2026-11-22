@@ -1,0 +1,102 @@
+/* ShmupX Lite: mesma paleta do Client (fundo escuro, ciano), pensado para a tela do celular. */
+:root {
+  --cyan: #57fcff;
+  --bg: #111111;
+  --surface: #1c1c1c;
+  --stroke: #ffffff1f;
+  --text: #f0fcff;
+  --muted: #8a9aa1;
+  color-scheme: dark;
+  font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+img { max-width: 100%; }
+
+.lite-screen { min-height: 100%; height: 100%; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.lite-center { align-items: center; justify-content: center; }
+.lite-center-text { text-align: center; margin: 24px 0; }
+.lite-logo { width: min(240px, 60vw); }
+.lite-badge { margin: 4px 0 0; padding: 2px 10px; border: 1px solid var(--cyan); color: var(--cyan); font-size: 12px; font-weight: 700; letter-spacing: .3em; }
+.lite-badge.small { margin: 0; padding: 1px 6px; font-size: 9px; letter-spacing: .2em; }
+.lite-muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.lite-note { color: #6f8a94; font-size: 12px; line-height: 1.5; padding: 0 16px; }
+.lite-error { color: #ff8b92; font-size: 13px; text-align: center; padding: 0 12px; }
+
+/* Login */
+.lite-login { align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; background: radial-gradient(circle at 50% 30%, #57fcff14, transparent 60%), var(--bg); }
+.lite-primary { width: min(320px, 100%); padding: 14px 18px; border: 0; border-radius: 4px; background: var(--cyan); color: #06181b; font-weight: 700; letter-spacing: .04em; }
+.lite-primary:disabled { opacity: .7; }
+.lite-secondary { margin: 12px 16px; padding: 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface); font-weight: 600; }
+
+/* Topo */
+.lite-topbar { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px; background: #0b0b0b; border-bottom: 1px solid #57fcff55; }
+.lite-topbar-logo { height: 26px; width: auto; }
+.lite-profile { margin-left: auto; display: flex; align-items: center; gap: 8px; max-width: 50%; padding: 4px 6px; border: 0; background: none; font-size: 13px; color: var(--muted); }
+.lite-profile img { width: 28px; height: 28px; border-radius: 50%; }
+.lite-profile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lite-icon-button { width: 40px; height: 40px; flex-shrink: 0; border: 0; background: none; color: var(--cyan); font-size: 26px; line-height: 1; }
+
+/* Lista de salas */
+.lite-content { flex: 1; overflow-y: auto; padding: 16px; }
+.lite-title { margin: 0 0 12px; padding-left: 10px; border-left: 3px solid var(--cyan); font-size: 22px; font-weight: 600; }
+.lite-search { width: 100%; margin-bottom: 14px; padding: 11px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 15px; }
+.lite-room-list { display: flex; flex-direction: column; gap: 10px; }
+.lite-room-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--surface); text-align: left; }
+.lite-room-card:active { border-color: var(--cyan); }
+.lite-room-card img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 3px; background: #000; flex-shrink: 0; }
+.lite-room-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.lite-room-info strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lite-room-info small { color: var(--muted); font-size: 12px; }
+.lite-chevron { color: var(--cyan); font-size: 24px; }
+
+/* Sala */
+.lite-room-title { margin: 0; font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lite-tabs { display: flex; border-bottom: 1px solid var(--stroke); }
+.lite-tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-weight: 600; font-size: 14px; }
+.lite-tabs button[aria-selected=true] { color: var(--cyan); border-bottom-color: var(--cyan); }
+.lite-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lite-players { flex: 1; overflow-y: auto; }
+.lite-players ul { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.lite-player { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 1px solid transparent; border-radius: 6px; background: var(--surface); text-align: left; }
+.lite-player img { width: 32px; height: 32px; border-radius: 50%; }
+.lite-player-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.lite-player.is-live { border-color: #fd485166; }
+
+/* Chat (componentes do Client) */
+.chat-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.chat-feed .empty-state { margin: auto; color: #6f8a94; font-size: 13px; text-align: center; }
+.chat-message { display: flex; align-items: flex-start; gap: 10px; }
+.chat-avatar { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; overflow: hidden; border-radius: 50%; color: #c58bff; font-size: 10px; font-weight: 700; }
+.chat-avatar .avatar-img { width: 100%; height: 100%; }
+.chat-body { min-width: 0; }
+.chat-body header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.chat-body strong { font-size: 13px; }
+.chat-message.is-mine .chat-body strong { color: var(--cyan); }
+.chat-tag { font-size: 9px; letter-spacing: .08em; color: #c58bff; }
+.chat-body time { font-size: 10px; color: #6f8a94; }
+.chat-body p { margin: 3px 0 0; font-size: 15px; line-height: 1.45; color: #d7e4e8; overflow-wrap: anywhere; user-select: text; }
+.chat-reply-to { margin: 4px 0 0; padding: 2px 0 2px 8px; border-left: 2px solid #c58bff66; font-size: 12px; color: #a8c1cc; }
+.chat-composer { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--stroke); background: #0b0b0b; }
+.chat-composer input { flex: 1; min-width: 0; padding: 11px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 16px; }
+.chat-composer button { padding: 0 16px; border: 0; border-radius: 4px; background: var(--cyan); color: #06181b; font-weight: 700; }
+.chat-composer button:disabled { opacity: .5; }
+.chat-composer-error { width: 100%; margin: 0; color: #ff8b92; font-size: 12px; }
+
+/* Presença: verde online, vermelho ausente, vermelho pulsando ao vivo, cinza offline. */
+.presence-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.presence-dot.is-online { background: #3fd98b; box-shadow: 0 0 6px #3fd98b99; }
+.presence-dot.is-away { background: #fd4851; }
+.presence-dot.is-offline { background: #6b757c; }
+.presence-dot.is-live { background: #fd4851; animation: presence-live 1.2s ease-in-out infinite; }
+@keyframes presence-live { 0%, 100% { box-shadow: 0 0 0 0 #fd4851aa; } 50% { box-shadow: 0 0 0 5px #fd485100; opacity: .7; } }
+
+/* Live */
+.lite-live { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: #000; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.lite-live-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #111; border-bottom: 1px solid #fd485166; font-size: 14px; }
+.lite-live-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lite-live-tag { padding: 2px 6px; border-radius: 3px; background: #fd4851; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.lite-live-viewers { margin-left: auto; color: #d7e4e8; font-weight: 600; white-space: nowrap; }
+.lite-live-player { width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }

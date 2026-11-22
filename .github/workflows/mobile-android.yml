@@ -1,0 +1,72 @@
+# ShmupX Lite para Android (APK assinado). Só salas, chat e lives: não joga nem transmite. O APK
+# fica como artefato da execução; a publicação no site é manual (S3), como a dos instaladores.
+name: mobile-android
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018" > /dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shmupx-mobile/src-tauri
+
+      # O Lite importa telas e dados do Client (shmupx-client/src): as dependências dele também.
+      - name: Dependências
+        run: |
+          npm ci --prefix shmupx-client --ignore-scripts --no-audit --no-fund
+          npm install --prefix shmupx-mobile --no-audit --no-fund
+
+      - name: Projeto Android e assinatura
+        working-directory: shmupx-mobile
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_B64" ]; then echo "faltam os secrets ANDROID_KEYSTORE_B64/ANDROID_KEYSTORE_PASSWORD" >&2; exit 1; fi
+          npx tauri android init --ci
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/shmupx-lite.jks"
+          printf 'storeFile=%s\npassword=%s\nkeyAlias=shmupx-lite\n' "$RUNNER_TEMP/shmupx-lite.jks" "$ANDROID_KEYSTORE_PASSWORD" > src-tauri/gen/android/keystore.properties
+          python3 android/assinar.py src-tauri/gen/android/app/build.gradle.kts
+
+      - name: APK
+        working-directory: shmupx-mobile
+        env:
+          VITE_SHMUPX_ENV: prd
+          SHMUPX_BACKEND_URL: https://shmupx-backend-230979440400.us-central1.run.app
+          VITE_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.VITE_GOOGLE_DESKTOP_CLIENT_ID }}
+        run: |
+          npx tauri android build --apk --target aarch64 armv7
+          mkdir -p "$RUNNER_TEMP/out"
+          versao=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "$RUNNER_TEMP/out/ShmupX-Lite-$versao.apk"
+          ls -la "$RUNNER_TEMP/out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shmupx-lite-android
+          path: ${{ runner.temp }}/out/*
+          retention-days: 14
