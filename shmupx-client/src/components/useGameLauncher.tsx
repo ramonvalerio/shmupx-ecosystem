@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 import type { GameRoom, PlayOn } from "../types/room";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import { readMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
+import { readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
+import { readMisterLibrary } from "../data/misterLibrary";
 import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -35,6 +36,9 @@ export function useGameLauncher(room: GameRoom) {
   /** Modos do jogo no menu ShmupX do MiSTer, para escolher qual abrir na TV. */
   const [misterModes, setMisterModes] = useState<MisterMenuGame[] | null>(null);
   const misterDialogRef = useDialogFocus(misterModes !== null, () => setMisterModes(null));
+  /** Ligar o MiSTer na hora (IP e jogador), quando o jogador escolhe MiSTer sem ter conectado. */
+  const [linking, setLinking] = useState<{ host: string; players: string[] | null; busy: boolean; error: string | null } | null>(null);
+  const linkDialogRef = useDialogFocus(linking !== null, () => setLinking(null));
   /** Jogo desinstalado (ou sem o ROM) na plataforma escolhida. */
   const [notFound, setNotFound] = useState<PlayOn | null>(null);
   const notFoundDialogRef = useDialogFocus(notFound !== null, () => setNotFound(null));
@@ -83,7 +87,10 @@ export function useGameLauncher(room: GameRoom) {
   async function openOnMister(game?: MisterMenuGame) {
     const player = readMisterPlayer();
     if (!player) {
-      setError(t("Ligue seu MiSTer à conta em Importar jogos › MiSTer FPGA (Conectar ao meu MiSTer) para abrir o jogo nele."));
+      // Ainda não sabe qual jogador do MiSTer é este: pergunta aqui mesmo (IP e jogador).
+      const host = readMisterLibrary()?.host ?? "";
+      setLinking({ host, players: null, busy: false, error: null });
+      if (host) void loadMisterPlayers(host);
       return;
     }
     setIsLaunching(true);
@@ -108,6 +115,23 @@ export function useGameLauncher(room: GameRoom) {
     } finally {
       setIsLaunching(false);
     }
+  }
+
+  async function loadMisterPlayers(host: string) {
+    setLinking({ host, players: null, busy: true, error: null });
+    try {
+      const players = await invoke<string[]>("mister_usuarios", { host: host.trim(), senha: null });
+      setLinking({ host, players, busy: false, error: players.length ? null : t("Nenhum jogador no shmupx.ini desse MiSTer. Use Conectar ao meu MiSTer em Importar jogos para instalar o ShmupX nele.") });
+    } catch (failure) {
+      setLinking({ host, players: null, busy: false, error: describe(failure, "Não foi possível ler o MiSTer.") });
+    }
+  }
+
+  function chooseMisterPlayer(username: string) {
+    if (!linking) return;
+    saveMisterPlayer({ host: linking.host.trim(), username });
+    setLinking(null);
+    void openOnMister();
   }
 
   async function launchOn(platform: PlayOn, forPractice = practice) {
@@ -136,6 +160,34 @@ export function useGameLauncher(room: GameRoom) {
   }
 
   const dialogs: ReactNode = <>
+    {linking && (
+      <div className="controller-dialog-backdrop">
+        <div ref={linkDialogRef} role="dialog" aria-modal="true" aria-labelledby="mister-link-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+          <header>
+            <div>
+              <h2 id="mister-link-title">{t("Qual MiSTer e qual jogador?")}</h2>
+              <p>{t("Informe o IP do MiSTer e escolha quem é você na lista de jogadores dele. O Client lembra para as próximas vezes.")}</p>
+            </div>
+          </header>
+          <div className="controller-dialog-body choose-platform-list">
+            <form className="mister-link-form" onSubmit={(event) => { event.preventDefault(); void loadMisterPlayers(linking.host); }}>
+              <label className="settings-field">{t("IP do MiSTer")}
+                <input value={linking.host} onChange={(event) => setLinking({ ...linking, host: event.target.value })} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" required />
+              </label>
+              <button type="submit" className="secondary-action" disabled={linking.busy || !linking.host.trim()}>{t(linking.busy ? "Lendo o MiSTer…" : "Buscar jogadores")}</button>
+            </form>
+            {linking.error && <p className="mode-error-inline" role="alert">{t(linking.error)}</p>}
+            {linking.players?.map((name) => (
+              <button key={name} type="button" className="import-source-option" onClick={() => chooseMisterPlayer(name)}>
+                <span className="platform-mark" aria-hidden="true">{name[0]?.toUpperCase()}</span>
+                <span><strong>{name.toUpperCase()}</strong><small>{t("Abrir como este jogador")}</small></span>
+              </button>
+            ))}
+          </div>
+          <footer><span /><button type="button" className="secondary-action" onClick={() => setLinking(null)}>{t("Cancelar")}</button></footer>
+        </div>
+      </div>
+    )}
     {misterModes && (
       <div className="controller-dialog-backdrop">
         <div ref={misterDialogRef} role="dialog" aria-modal="true" aria-labelledby="mister-mode-title" tabIndex={-1} className="controller-dialog close-room-dialog">

@@ -139,3 +139,7 @@
 .import-source-actions { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 .import-source-actions .secondary-action { white-space: nowrap; }
 .collection-details .room-banner { margin: 0; font-size: 12px; }
+
+.mister-link-form { display: flex; align-items: flex-end; gap: 10px; }
+.mister-link-form .settings-field { flex: 1; margin: 0; }
+.mister-link-form .settings-field input { width: 100%; }
