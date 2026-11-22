@@ -91,8 +91,8 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <rect x="201" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
       <rect x="210" y="238" width="2" height="12" rx="1" fill="#2b3035" />
       <rect x="199" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />
-      {/* Rodapé sutil: só um filete na base do corpo */}
-      <rect x="41" y="288" width="238" height="3" rx="1" fill="#7d878e" fillOpacity=".55" />
+      {/* Rodapé: linha horizontal cinza dentro do corpo, com margem até a base */}
+      <line x1="50" y1="283" x2="270" y2="283" stroke="#8a939a" strokeWidth="1.5" strokeLinecap="round" />
       </g>
     </svg>
   );
