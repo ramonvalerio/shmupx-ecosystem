@@ -1,5 +1,5 @@
-//! Pasta de destino dos vídeos das runs (Configurações › Armazenamento). Padrão: a pasta de dados
-//! do app. A escolha do jogador fica em `<pasta de dados>/gravacoes.json`; se a pasta escolhida
+//! Pasta de destino dos vídeos das runs (Configurações › Armazenamento). Padrão: `recordings`
+//! dentro da pasta de dados do app. A escolha do jogador fica em `<pasta de dados>/gravacoes.json`; se a pasta escolhida
 //! deixar de existir ou de aceitar escrita (disco removido), a gravação volta ao padrão.
 
 use std::path::{Path, PathBuf};
@@ -82,7 +82,9 @@ fn gravavel(pasta: &Path) -> bool {
 
 /// Destino atual (a escolha do jogador, se disponível; senão a pasta de dados).
 pub fn atual(app: &AppHandle) -> Result<Destino, String> {
-    let padrao = pasta_de_dados(app)?;
+    // Padrão: a subpasta `recordings` dos dados do app (separada do motor, dos scripts e do FFmpeg).
+    let padrao = pasta_de_dados(app)?.join("recordings");
+    std::fs::create_dir_all(&padrao).map_err(|e| e.to_string())?;
     if let Some(escolhida) = ler_config(app).pasta {
         let caminho = PathBuf::from(&escolhida);
         if caminho.is_absolute() && gravavel(&caminho) {
