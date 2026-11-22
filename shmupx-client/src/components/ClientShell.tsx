@@ -246,8 +246,18 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {AMBIENTE === "prd" && import.meta.env.DEV && <span className="env-badge is-production" title={t("Versão em desenvolvimento ligada aos dados reais: o que você fizer vale para os jogadores.")}>{t("DEV · PRODUÇÃO")}</span>}
         <div className="client-status-group">
           {live.state.status === "live" || live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
-            <div className="client-status recording" role="status"><span className="status-dot" />{live.state.status === "live" ? t("AO VIVO") : t("PREPARANDO LIVE")}</div>
-            <span className="client-status-caption">{live.state.status === "live" ? `${liveRoom?.title ?? "YouTube"}${liveCountdown ? ` · ${liveCountdown}` : ""}` : t("Conectando ao YouTube…")}</span>
+            {live.state.status === "live" ? (
+              // No ar: microfone desligado (a live leva só o som do jogo) e a pílula LIVE.
+              <div className="live-indicator" role="status" aria-label={t("Ao vivo no YouTube, sem microfone")} title={`${liveRoom?.title ?? "YouTube"}${liveCountdown ? ` · ${liveCountdown}` : ""}`}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.7" /><path d="M19 11a7 7 0 0 1-1.1 3.8M5 11a7 7 0 0 0 11.4 5.4M12 18v3M3 3l18 18" />
+                </svg>
+                <span className="live-pill">LIVE</span>
+              </div>
+            ) : <>
+              <div className="client-status recording" role="status"><span className="status-dot" />{t("PREPARANDO LIVE")}</div>
+              <span className="client-status-caption">{t("Conectando ao YouTube…")}</span>
+            </>}
           </> : <>
             <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
             <span className="client-status-caption">{recordingRoom ? t("Gravando · {game}", { game: recordingRoom.title }) : t("Pronto para capturar")}</span>

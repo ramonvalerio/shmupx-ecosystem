@@ -329,3 +329,7 @@
 .watch-viewers { margin-left: auto; color: #d7e4e8; font-weight: 600; }
 .watch-player { flex: 1; width: 100%; border: 0; }
 .watch-message { margin: auto; color: #a8c1cc; font-size: 14px; }
+
+/* Live no ar: microfone desligado + pílula LIVE vermelha */
+.live-indicator { display: flex; align-items: center; gap: 8px; color: #e6e6e6; }
+.live-pill { padding: 2px 9px; border-radius: 999px; background: #e5242b; color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .04em; line-height: 1.3; }
