@@ -1,20 +1,21 @@
 import { useI18n } from "../i18n";
 import { useState, type ReactNode } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { isTauri } from "@tauri-apps/api/core";
 import { appDataDir } from "@tauri-apps/api/path";
 import { PageHeading, type Section } from "./ClientPages";
 import { defaultPreferences, type ClientPreferences } from "./settingsState";
 import ConfigureControllerDialog from "./ConfigureControllerDialog";
 import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
+import MisterConnect from "./MisterConnect";
 import { useYouTube } from "../data/useLive";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
 
 const GROUPS = [
-  { id: "connections", title: "Importar jogos", detail: "Bibliotecas e plataformas", icon: "▦" },
-  { id: "integrations", title: "Integrações", detail: "YouTube e MiSTer FPGA", icon: "▷" },
+  { id: "connections", title: "Importar jogos", detail: "Bibliotecas, plataformas e MiSTer FPGA", icon: "▦" },
+  { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
   { id: "storage", title: "Armazenamento", detail: "Destino das gravações", icon: "▣" },
   { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●" },
@@ -127,27 +128,6 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
   </SettingsCard>;
 }
 
-/** Conectar o MiSTer FPGA (ADR 008): o token vai para o e-mail da conta, nunca para a tela. */
-function MisterCard() {
-  const { t } = useI18n();
-  const [state, setState] = useState<{ kind: "idle" | "sending" | "sent" | "error"; text?: string }>({ kind: "idle" });
-  const send = async () => {
-    if (!isTauri()) { setState({ kind: "error", text: t("Entre com sua conta para conectar o MiSTer.") }); return; }
-    setState({ kind: "sending" });
-    try {
-      const reply = await invoke<{ enviado_para: string }>("mister_enviar_token");
-      setState({ kind: "sent", text: t("Token enviado para {email}. Cole a linha do e-mail no shmupx.ini do MiSTer.", { email: reply.enviado_para }) });
-    } catch (error) {
-      setState({ kind: "error", text: error instanceof Error ? error.message : String(error) });
-    }
-  };
-  return <SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}>
-    <button className="primary-action" disabled={state.kind === "sending"} onClick={() => void send()}>{t(state.kind === "sending" ? "Enviando…" : "Enviar token para meu e-mail")}</button>
-    {state.text && <p className="muted" role="status">{state.text}</p>}
-    <p className="muted">{t("Cada pedido gera um token novo; os anteriores continuam valendo.")}</p>
-  </SettingsCard>;
-}
-
 export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate }: {
   rooms?: GameRoom[]; preferences: ClientPreferences; onPreferences: (value: ClientPreferences) => void; storageError: boolean; onNavigate: (section: Section) => void;
 }) {
@@ -190,8 +170,8 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
           </SettingsCard>
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
-        {group === "connections" && <ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} />}
-        {group === "integrations" && <><YouTubeCard /><MisterCard /></>}
+        {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect /></SettingsCard></>}
+        {group === "integrations" && <YouTubeCard />}
         {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("As runs são salvas na pasta de dados do aplicativo.")}><button className="secondary-action" disabled={folderBusy} onClick={locateFolder}>{folderBusy ? t("Consultando…") : t("Consultar pasta atual")}</button>{folder && <p className="folder-result" role="status">{t(folder)}</p>}<p className="muted">{t("A seleção de outra pasta e a listagem de replays ainda não estão disponíveis.")}</p><button className="text-action" onClick={() => onNavigate("submissions")}>{t("Ver runs desta sessão →")}</button></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}

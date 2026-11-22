@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { useDialogFocus } from "./useDialogFocus";
+import MisterConnect from "./MisterConnect";
 import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/emulatorLibrary";
@@ -8,6 +9,7 @@ import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/e
 const SOURCES = [
   { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
   { id: "emulator", title: "Emulador", icon: "E", detail: "ROMs do Fightcade (FBNeo)", body: "Leia os ROMs do Fightcade deste computador para marcar na coleção os jogos que você tem.", available: true },
+  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Partidas jogadas no MiSTer", body: "Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.", available: true },
   { id: "local", title: "Jogos locais", icon: "▣", detail: "Jogos instalados no computador", body: "Escolha os jogos instalados no computador que deseja incluir na coleção.", available: false },
 ] as const;
 
@@ -76,6 +78,12 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
               ? <button className="primary-action" onClick={() => { saveEmulatorLibrary({ root: emu.root ?? "", roms: emuRoms, importedAt: Date.now() }); setImported(emuRoms.length); }}>{t("Importar biblioteca")}</button>
               : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
           </>}
+        </>}
+
+        {source?.id === "mister" && <>
+          <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">M</span><h3>{t("MiSTer FPGA")}</h3></div>
+          <p className="muted">{t(source.body)}</p>
+          <MisterConnect />
         </>}
 
         {source && !source.available && <><div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">{source.icon}</span><h3>{t(source.title)}</h3></div><p className="muted">{t(source.body)}</p><div className="integration-notice" role="status"><strong>{t("Em breve")}</strong><p>{t("A leitura desta biblioteca ainda não está disponível nesta versão.")}</p></div></>}
