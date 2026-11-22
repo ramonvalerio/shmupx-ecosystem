@@ -164,6 +164,10 @@ button:disabled { opacity: .5; cursor: default; }
 
 /* Account, submissions and the shared Big Picture presentation. */
 .profile-menu-anchor { flex-shrink: 0; }
+/* Sino, engrenagem e avatar no mesmo eixo, no centro do trilho. */
+.navigation-rail .profile-menu-anchor { align-self: stretch; display: flex; flex-direction: column; align-items: center; }
+.navigation-rail .rail-tools { align-self: stretch; }
+.navigation-rail .rail-tools > * { display: grid; place-items: center; }
 .navigation-rail .rail-avatar { writing-mode: horizontal-tb; transform: none; width: 28px; height: 28px; font-size: 10px; padding: 0; border: 1px solid var(--stroke); background: var(--surface-raised); margin: 8px 0 10px; }
 .profile-menu { position: fixed; left: 48px; bottom: 40px; width: 220px; z-index: 40; display: flex; flex-direction: column; gap: 8px; padding: 16px; background: var(--surface-recessed); border: 1px solid var(--stroke); border-radius: 6px; box-shadow: 0 10px 40px #0008; }
 .navigation-rail .profile-menu button { writing-mode: horizontal-tb; transform: none; width: 100%; height: auto; padding: 10px; justify-content: flex-start; font-size: 13px; }
