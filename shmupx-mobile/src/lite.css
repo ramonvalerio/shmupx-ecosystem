@@ -103,3 +103,34 @@ img { max-width: 100%; }
 .lite-live-tag { padding: 2px 6px; border-radius: 3px; background: #fd4851; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .lite-live-viewers { margin-left: auto; color: #d7e4e8; font-weight: 600; white-space: nowrap; }
 .lite-live-player { width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
+
+/* MiSTer: ajustes e jogar pela sala */
+.lite-gear { margin-left: auto; font-size: 22px; }
+.lite-gear + .lite-profile { margin-left: 0; }
+.lite-mister-badge { align-self: flex-start; padding: 1px 6px; border: 1px solid #57fcff88; border-radius: 3px; color: var(--cyan); font-size: 10px; letter-spacing: .08em; }
+.lite-settings { display: flex; flex-direction: column; gap: 14px; padding-bottom: 24px; overflow-y: auto; }
+.lite-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--surface); }
+.lite-card h2 { margin: 0; font-size: 16px; color: var(--cyan); letter-spacing: .04em; }
+.lite-card .lite-muted, .lite-card p { margin: 0; }
+.mister-connect, .mister-connect-form { display: flex; flex-direction: column; gap: 10px; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.settings-field input, .settings-field select { padding: 11px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: #111; color: var(--text); font-size: 16px; font-family: inherit; }
+.primary-action { padding: 12px 16px; border: 0; border-radius: 4px; background: var(--cyan); color: #06181b; font-weight: 700; letter-spacing: .04em; }
+.primary-action:disabled, .secondary-action:disabled, .text-action:disabled { opacity: .6; }
+.secondary-action { padding: 10px 14px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface); }
+.text-action { padding: 0; border: 0; background: none; color: var(--cyan); text-decoration: underline; }
+.muted { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.success-text { margin: 0; color: #3fd98b; font-size: 13px; line-height: 1.5; }
+.mode-error, .mode-error-inline { margin: 0; color: #ff8b92; font-size: 13px; line-height: 1.5; }
+.lite-mister { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--stroke); background: #151515; }
+.lite-mister .lite-muted, .lite-mister .lite-note { margin: 0; padding: 0; }
+.lite-mister .lite-primary, .lite-mister .lite-secondary { width: 100%; margin: 0; }
+.lite-segment { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--stroke); border-radius: 4px; overflow: hidden; }
+.lite-segment button { padding: 9px; border: 0; background: none; color: var(--muted); font-weight: 600; }
+.lite-segment button[aria-pressed="true"] { background: #57fcff22; color: var(--cyan); }
+.lite-modes { display: flex; flex-direction: column; gap: 8px; }
+.lite-mode { padding: 12px; border: 1px solid #57fcff66; border-radius: 4px; background: #57fcff14; color: var(--cyan); font-weight: 700; text-align: left; }
+.lite-mister-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.lite-stop { padding: 14px; border: 0; border-radius: 4px; background: #fd4851; color: #fff; font-weight: 700; letter-spacing: .06em; }
+.lite-stop:disabled { opacity: .7; }
+.lite-mister .lite-error { margin: 0; padding: 0; text-align: left; }

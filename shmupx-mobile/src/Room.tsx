@@ -8,6 +8,7 @@ import { useRoomChat } from "@client/data/useRoomChat";
 import { leaveRoomPresence, usePlayerPresence, usePresenceHeartbeat, useRoomPresence, type PresenceStatus } from "@client/data/useRoomPresence";
 import type { PlayerProfile } from "@client/auth/firebase";
 import type { GameRoom } from "@client/types/room";
+import MisterPlay, { useMisterCompatible } from "./MisterPlay";
 
 const STATUS_ORDER: Record<PresenceStatus, number> = { live: 0, online: 1, away: 2, offline: 3 };
 const STATUS_LABEL: Record<PresenceStatus, string> = { live: "Ao vivo", online: "Online", away: "Ausente", offline: "Offline" };
@@ -50,8 +51,9 @@ function LiveViewer({ roomId, uid, name, onClose }: { roomId: string; uid: strin
 }
 
 /** Sala no celular: chat e jogadores (com as lives). Sair pela seta deixa a sala. */
-export default function Room({ room, profile, onBack }: { room: GameRoom; profile: PlayerProfile; onBack: () => void }) {
+export default function Room({ room, profile, onBack, onSettings }: { room: GameRoom; profile: PlayerProfile; onBack: () => void; onSettings: () => void }) {
   const { t } = useI18n();
+  const mister = useMisterCompatible(room);
   const [tab, setTab] = useState<"chat" | "players">("chat");
   const [watching, setWatching] = useState<{ uid: string; name: string } | null>(null);
   const author = useMemo(() => ({ uid: profile.uid, displayName: profile.displayName }), [profile.uid, profile.displayName]);
@@ -80,6 +82,7 @@ export default function Room({ room, profile, onBack }: { room: GameRoom; profil
         <button type="button" className="lite-icon-button" onClick={leave} aria-label={t("Sair da sala")}>‹</button>
         <h1 className="lite-room-title" title={room.title}>{room.title}</h1>
       </header>
+      {mister && <MisterPlay room={room} onSettings={onSettings} />}
       <div className="lite-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>{t("Chat")}</button>
         <button type="button" role="tab" aria-selected={tab === "players"} onClick={() => setTab("players")}>

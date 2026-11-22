@@ -1,6 +1,6 @@
 [package]
 name = "shmupx-mobile"
-version = "0.1.1"
+version = "0.1.2"
 description = "ShmupX Lite (Android): salas, chat e lives pelo celular"
 authors = ["ShmupX"]
 edition = "2024"
@@ -18,6 +18,8 @@ tauri = { version = "2.12.1", features = [] }
 tauri-plugin-opener = "2"
 # Login nativo do Google no Android (Credential Manager).
 tauri-plugin-google-auth = "=0.6.0-rc.5"
+# MiSTer FPGA pela rede (FTP e SSH), o mesmo código do Client.
+shmupx-mister-link = { path = "../../shmupx-mister-link" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "io-util", "net"] }

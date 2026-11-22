@@ -1,6 +1,7 @@
 //! ShmupX Lite: o app do celular só entra nas salas, conversa e assiste às lives. Tudo isso é
-//! Firebase no lado da interface; o Rust só conduz o login do Google.
+//! Firebase no lado da interface; o Rust conduz o login do Google e o MiSTer (rede local).
 
+mod mister;
 #[cfg(not(mobile))]
 mod oauth;
 
@@ -41,20 +42,24 @@ async fn login_google_desktop(app: tauri::AppHandle, client_id: String) -> Resul
     }
 }
 
-/// O Client guarda o ID token no Rust para chamar o backend; o Lite não chama o backend depois do
-/// login, então só aceita (a interface reaproveitada chama sempre).
-#[tauri::command]
-fn definir_token_autenticacao(_token: String) {}
-
-#[tauri::command]
-fn limpar_token_autenticacao() {}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_google_auth::init())
-        .invoke_handler(tauri::generate_handler![login_google_desktop, definir_token_autenticacao, limpar_token_autenticacao])
+        .manage(mister::Sessao::default())
+        .invoke_handler(tauri::generate_handler![
+            login_google_desktop,
+            mister::definir_token_autenticacao,
+            mister::limpar_token_autenticacao,
+            mister::mister_biblioteca,
+            mister::mister_usuarios,
+            mister::mister_conectar,
+            mister::mister_enviar_token,
+            mister::mister_jogos_do_jogador,
+            mister::mister_iniciar,
+            mister::mister_parar,
+        ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o ShmupX Lite");
 }
