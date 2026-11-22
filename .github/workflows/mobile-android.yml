@@ -48,6 +48,8 @@ jobs:
         run: |
           if [ -z "$ANDROID_KEYSTORE_B64" ]; then echo "faltam os secrets ANDROID_KEYSTORE_B64/ANDROID_KEYSTORE_PASSWORD" >&2; exit 1; fi
           npx tauri android init --ci
+          # Ícone do app: o X da logo do ShmupX (mipmaps do projeto gerado).
+          npx tauri icon assets-src/icon-x.png
           echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/shmupx-lite.jks"
           printf 'storeFile=%s\npassword=%s\nkeyAlias=shmupx-lite\n' "$RUNNER_TEMP/shmupx-lite.jks" "$ANDROID_KEYSTORE_PASSWORD" > src-tauri/gen/android/keystore.properties
           python3 android/assinar.py src-tauri/gen/android/app/build.gradle.kts
