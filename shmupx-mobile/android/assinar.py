@@ -34,3 +34,20 @@ if "signingConfigs {" not in texto:
 
 open(caminho, "w", encoding="utf-8").write(texto)
 print("assinatura de release ligada em", caminho)
+
+# Login nativo do Google (Credential Manager): o R8 do release não pode remover essas classes.
+import os
+proguard = os.path.join(os.path.dirname(caminho), "proguard-rules.pro")
+REGRAS = """
+# ShmupX Lite: login nativo do Google
+-keep class com.google.android.gms.auth.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+-keep class androidx.credentials.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
+"""
+atual = open(proguard, encoding="utf-8").read() if os.path.exists(proguard) else ""
+if "ShmupX Lite: login nativo" not in atual:
+    open(proguard, "w", encoding="utf-8").write(atual + REGRAS)
+print("regras do ProGuard em", proguard)
