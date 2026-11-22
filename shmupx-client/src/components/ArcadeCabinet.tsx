@@ -85,14 +85,14 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       {/* Corpo de baixo claro, reto: mesma largura do corpo de cima, cantos de baixo levemente arredondados */}
       <path d="M39 216 H281 V281 Q281 288 274 288 H46 Q39 288 39 281 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
       {/* Esquerda: tampa de manutenção (só o recorte e a fechadura) */}
-      <rect x="70" y="224" width="92" height="54" rx="4" fill="none" stroke="#a3abb1" strokeWidth="1.2" />
-      <circle cx="152" cy="251" r="2.6" fill="#8a939a" />
-      <rect x="151.4" y="250" width="1.2" height="3.4" rx=".5" fill="#4b5359" />
+      <rect x="56" y="224" width="130" height="54" rx="4" fill="none" stroke="#a3abb1" strokeWidth="1.2" />
+      <circle cx="176" cy="251" r="2.6" fill="#8a939a" />
+      <rect x="175.4" y="250" width="1.2" height="3.4" rx=".5" fill="#4b5359" />
       {/* Direita: porta da ficha cinza, com uma entrada de moeda e o retorno de moedas */}
-      <rect x="178" y="226" width="66" height="50" rx="3" fill="#c3c9ce" stroke="#8a939a" strokeWidth="1.2" />
-      <rect x="201" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
-      <rect x="210" y="238" width="2" height="12" rx="1" fill="#2b3035" />
-      <rect x="199" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />
+      <rect x="198" y="226" width="66" height="50" rx="3" fill="#c3c9ce" stroke="#8a939a" strokeWidth="1.2" />
+      <rect x="221" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
+      <rect x="230" y="238" width="2" height="12" rx="1" fill="#2b3035" />
+      <rect x="219" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />
       {/* Rodapé: linha horizontal cinza de lado a lado, com margem até a base */}
       <line x1="39.75" y1="281" x2="280.25" y2="281" stroke="#8a939a" strokeWidth="1.5" />
       </g>
