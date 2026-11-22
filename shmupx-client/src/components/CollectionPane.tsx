@@ -8,6 +8,7 @@ import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
 import { useEmulatorLibrary } from "../data/emulatorLibrary";
+import { useMisterLibrary } from "../data/misterLibrary";
 // Scripts de validação que o instalador leva (só os aprovados no Lab): o mesmo arquivo do build.
 import scriptsAceitos from "../../src-tauri/scripts-aceitos.json";
 
@@ -94,13 +95,14 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
   const emulator = useEmulatorLibrary();
+  const mister = useMisterLibrary();
   const [ownedOnly, setOwnedOnly] = useState<"all" | "owned">("all");
   const [refreshing, setRefreshing] = useState(false);
   /** Na biblioteca importada (Steam ou emulador)? `null` = nenhuma biblioteca importada. */
   const inLibrary = (room: GameRoom) => {
     if (room.steamAppId > 0 && steam.library && steam.owns(room.steamAppId)) return true;
-    if (emulator.owns(room)) return true;
-    return steam.library || emulator.library ? false : null;
+    if (emulator.owns(room) || mister.owns(room)) return true;
+    return steam.library || emulator.library || mister.library ? false : null;
   };
   const libraryLabel = (room: GameRoom) => {
     const owned = inLibrary(room);
@@ -139,7 +141,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         </label>
         <button type="button" className="collection-import" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
         <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
-        {(steam.library || emulator.library) && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
+        {(steam.library || emulator.library || mister.library) && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
         {!bigPicture && <div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>

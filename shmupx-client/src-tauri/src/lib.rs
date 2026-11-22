@@ -39,6 +39,7 @@ pub fn run() {
             steam::commands::inicializar_jogo_emulador,
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
+            steam::commands::mister_biblioteca,
             session::commands::definir_token_autenticacao,
             session::commands::limpar_token_autenticacao,
             session::commands::definir_sala_ativa,

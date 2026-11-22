@@ -116,3 +116,8 @@
 .theme-light .collection-layout .collection-import { background: var(--surface-recessed); color: #10233f; }
 .collection-layout .unsupported { color: #f2c14e; white-space: nowrap; }
 .theme-light .unsupported { color: #865315; }
+
+/* Importar do MiSTer: IP e senha do FTP lado a lado, botão embaixo. */
+.mister-connect-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 12px 0; }
+.mister-connect-form .settings-field input { width: 100%; }
+.mister-connect-form button { grid-column: 1 / -1; justify-self: start; }

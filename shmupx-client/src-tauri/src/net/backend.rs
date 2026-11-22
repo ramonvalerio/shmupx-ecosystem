@@ -38,11 +38,15 @@ pub async fn chamar_json(
     caminho: &str,
     corpo: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
+    let sem_corpo_permitido = metodo == reqwest::Method::GET || metodo == reqwest::Method::DELETE;
     let mut pedido = client()?
         .request(metodo, format!("{BACKEND_BASE_URL}{caminho}"))
         .bearer_auth(token);
     if let Some(corpo) = corpo {
         pedido = pedido.json(&corpo);
+    } else if !sem_corpo_permitido {
+        // POST/PUT sem corpo: o front do Cloud Run (Google) exige Content-Length (senão, HTTP 411).
+        pedido = pedido.header(reqwest::header::CONTENT_LENGTH, 0).body(Vec::<u8>::new());
     }
     let response = pedido
         .send()

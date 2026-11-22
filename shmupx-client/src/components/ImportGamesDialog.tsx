@@ -5,11 +5,12 @@ import MisterConnect from "./MisterConnect";
 import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/emulatorLibrary";
+import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister } from "../data/misterLibrary";
 
 const SOURCES = [
   { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
   { id: "emulator", title: "Emulador", icon: "E", detail: "ROMs do Fightcade (FBNeo)", body: "Leia os ROMs do Fightcade deste computador para marcar na coleção os jogos que você tem.", available: true },
-  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Partidas jogadas no MiSTer", body: "Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.", available: true },
+  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Jogos do MiSTer na rede", body: "Informe o IP do MiSTer (Menu › Sistema mostra o endereço) para ler os jogos de arcade e os ROMs dele e marcar na coleção os que têm sala no ShmupX.", available: true },
   { id: "local", title: "Jogos locais", icon: "▣", detail: "Jogos instalados no computador", body: "Escolha os jogos instalados no computador que deseja incluir na coleção.", available: false },
 ] as const;
 
@@ -22,7 +23,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   const [imported, setImported] = useState<number | null>(null);
   const [emu, setEmu] = useState<{ status: "idle" | "scanning" | "done" | "error"; found?: boolean; root?: string | null; roms?: string[]; error?: string }>({ status: "idle" });
   const source = SOURCES.find((candidate) => candidate.id === sourceId);
-  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setImported(null); } else onClose(); }
+  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
   async function readEmulator() {
     setEmu({ status: "scanning" });
     try {
@@ -32,6 +33,17 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
       setEmu({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
   }
+  const [mister, setMister] = useState<{ status: "idle" | "scanning" | "done" | "error"; host: string; password: string; mras?: string[]; roms?: string[]; error?: string }>(() => ({ status: "idle", host: readMisterLibrary()?.host ?? "", password: "" }));
+  async function readMister() {
+    setMister((current) => ({ ...current, status: "scanning", error: undefined }));
+    try {
+      const result = await scanMister(mister.host, mister.password);
+      setMister((current) => ({ ...current, status: "done", host: result.host, mras: result.mras, roms: result.roms }));
+    } catch (error) {
+      setMister((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+  const misterRooms = mister.status === "done" ? rooms.filter((room) => misterMatches(room, { mras: mister.mras ?? [], roms: mister.roms ?? [] })) : [];
   const emuRoms = emu.roms ?? [];
   const emuRooms = rooms.filter((room) => romsFor(room).some((rom) => emuRoms.includes(rom)));
   const dialogRef = useDialogFocus(true, back);
@@ -83,6 +95,23 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "mister" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">M</span><h3>{t("MiSTer FPGA")}</h3></div>
           <p className="muted">{t(source.body)}</p>
+          <form className="mister-connect-form" onSubmit={(event) => { event.preventDefault(); void readMister(); }}>
+            <label className="settings-field">{t("IP do MiSTer")}<input value={mister.host} onChange={(event) => setMister((current) => ({ ...current, host: event.target.value }))} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" required /></label>
+            <label className="settings-field">{t("Senha do FTP (vazio = padrão)")}<input type="password" value={mister.password} onChange={(event) => setMister((current) => ({ ...current, password: event.target.value }))} autoComplete="off" /></label>
+            <button type="submit" className="primary-action" disabled={mister.status === "scanning" || !mister.host.trim()}>{t(mister.status === "scanning" ? "Lendo os jogos do MiSTer…" : "Ler jogos do MiSTer")}</button>
+          </form>
+          {mister.status === "error" && <p className="mode-error" role="alert">{t(mister.error ?? "Não foi possível ler o MiSTer.")}</p>}
+          {mister.status === "done" && <>
+            <p role="status"><strong>{t("{mras} jogos de arcade e {roms} ROMs no MiSTer {host}.", { mras: (mister.mras ?? []).length, roms: (mister.roms ?? []).length, host: mister.host })}</strong></p>
+            {misterRooms.length > 0
+              ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{misterRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
+              : <p className="muted">{t("Nenhum jogo do MiSTer tem sala no ShmupX ainda.")}</p>}
+            {imported === null
+              ? <button className="primary-action" onClick={() => { saveMisterLibrary({ host: mister.host, mras: mister.mras ?? [], roms: mister.roms ?? [], importedAt: Date.now() }); setImported(misterRooms.length); }}>{t("Importar biblioteca")}</button>
+              : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
+          </>}
+          <div className="import-platform-heading"><h3>{t("Partidas do MiSTer no ranking")}</h3></div>
+          <p className="muted">{t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.")}</p>
           <MisterConnect />
         </>}
 

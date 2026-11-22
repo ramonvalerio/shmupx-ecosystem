@@ -139,3 +139,11 @@ pub async fn emulador_biblioteca(pasta: Option<String>) -> super::emulador::Bibl
         .await
         .unwrap_or(super::emulador::BibliotecaEmulador { found: false, root: None, roms: vec![] })
 }
+
+/// Jogos do MiSTer FPGA na rede (FTP, usuário root). `senha`: a do MiSTer, se não for a padrão.
+#[tauri::command]
+pub async fn mister_biblioteca(host: String, senha: Option<String>) -> Result<super::mister::BibliotecaMister, String> {
+    tauri::async_runtime::spawn_blocking(move || super::mister::ler(&host, senha.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
