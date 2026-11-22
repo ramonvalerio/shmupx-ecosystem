@@ -48,14 +48,15 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <defs>
         <clipPath id={id("screen")}><rect {...screen} /></clipPath>
         <linearGradient id={id("body")} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#b9c0c6" /><stop offset=".18" stopColor="#e9ecef" /><stop offset=".82" stopColor="#e9ecef" /><stop offset="1" stopColor="#b9c0c6" /></linearGradient>
-        <linearGradient id={id("marquee")} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#e9fdff" /><stop offset="1" stopColor="#7fe7ee" /></linearGradient>
+        <linearGradient id={id("marquee")} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#123038" /><stop offset="1" stopColor="#081418" /></linearGradient>
         <linearGradient id={id("glass")} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffffff" stopOpacity=".1" /><stop offset=".45" stopColor="#ffffff" stopOpacity="0" /></linearGradient>
       </defs>
       {/* Corpo de cima: topo bem arredondado */}
       <path d="M66 4 H254 Q278 4 279 30 L281 218 H39 L41 30 Q42 4 66 4 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
-      {/* Marquise iluminada, sem nome do jogo */}
-      <rect x="58" y="12" width="204" height="22" rx="8" fill={`url(#${id("marquee")})`} stroke="#5fb8c0" strokeWidth="1" />
-      <rect x="58" y="12" width="204" height="22" rx="8" fill="none" stroke="#ffffff" strokeOpacity=".6" strokeWidth="1" transform="translate(0 1)" />
+      {/* Marquise iluminada com a logo do ShmupX (fundo escuro para a logo ciano e vermelha ler bem) */}
+      <rect x="58" y="12" width="204" height="22" rx="8" fill={`url(#${id("marquee")})`} stroke="#57fcff" strokeWidth="1.2" />
+      <rect x="60" y="13.5" width="200" height="19" rx="7" fill="none" stroke="#57fcff" strokeOpacity=".25" strokeWidth="1" />
+      <image href="/img/logo.png" x="124" y="14.5" width="72" height="17" preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
       {/* Moldura escura e funda do monitor (a máscara em volta do tubo) */}
       <path d="M50 42 Q50 38 54 38 H266 Q270 38 270 42 L272 212 H48 Z" fill="#14181b" />
       {/* Vão do tubo: deitado (YOKO) ou em pé (TATE) */}
