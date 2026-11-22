@@ -13,6 +13,7 @@ import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
+import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 
 
 
@@ -109,7 +110,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, onShowCollection, lastRun, startError, others = [] }: RoomViewProps) {
+export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   // INICIAR JOGO e MODO TREINO (plataforma, jogo instalado, MiSTer): ver useGameLauncher.
   const launcher = useGameLauncher(room);
@@ -233,6 +234,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, you: false }))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
   const sorted = [me, ...rest];
+  const avatars = usePublicProfiles([playerId ?? "", ...others.map((o) => o.uid)]);
   const players = sorted;
 
   return (
@@ -243,7 +245,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           <ArcadeCabinet room={room} className="game-room-cabinet" />
           <div className="game-room-main">
             <div className="game-room-title">
-              {onShowCollection && <button type="button" className="game-room-back" onClick={onShowCollection}>{t("← Minhas coleções")}</button>}
               <h1 title={room.title}>{room.title}</h1>
               <p>{t("Chat e presença em tempo real")}</p>
             </div>
@@ -322,7 +323,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <li key={player.id} className={`room-player ${player.you ? "is-you" : ""} ${player.live ? "is-live" : ""}`}
               title={player.live ? t("Clique duas vezes para assistir à live de {name}", { name: player.name }) : undefined}
               onDoubleClick={player.live ? () => void openWatchWindow(room.id, player.id, player.name, t("{name} · ao vivo · {game}", { name: player.name, game: room.title })) : undefined}>
-              <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span>
+              <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src={avatarOf(avatars, player.you ? playerId : player.id)} alt="" /></span>
               <span className="room-player-info">
                 <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
                 <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>

@@ -8,12 +8,15 @@ import ConfigureControllerDialog from "./ConfigureControllerDialog";
 import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
 import MisterConnect from "./MisterConnect";
+import ProfileSettings from "./ProfileSettings";
+import type { PlayerProfile } from "../auth/firebase";
 import { useYouTube } from "../data/useLive";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
 
 const GROUPS = [
+  { id: "profile", title: "Perfil", detail: "Avatar, nome, nick e assinatura", icon: "◉" },
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas, plataformas e MiSTer FPGA", icon: "▦" },
   { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
@@ -128,11 +131,12 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
   </SettingsCard>;
 }
 
-export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate }: {
+export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate, profile, onProfile }: {
   rooms?: GameRoom[]; preferences: ClientPreferences; onPreferences: (value: ClientPreferences) => void; storageError: boolean; onNavigate: (section: Section) => void;
+  profile: PlayerProfile; onProfile: (profile: PlayerProfile) => void;
 }) {
   const { t } = useI18n();
-  const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("interface");
+  const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("profile");
   const [folder, setFolder] = useState("");
   const [folderBusy, setFolderBusy] = useState(false);
   const [controllers, setControllers] = useState<{ id: string; standard: boolean }[]>([]);
@@ -158,6 +162,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
     <div className="settings-layout">
       <nav className="settings-menu" aria-label={t("Grupos de configurações")}>{GROUPS.map((item) => <button key={item.id} aria-current={group === item.id ? "page" : undefined} onClick={() => setGroup(item.id)}><span aria-hidden="true">{item.icon}</span><span><strong>{t(item.title)}</strong><small>{t(item.detail)}</small></span></button>)}</nav>
       <div className="settings-panels">
+        {group === "profile" && <SettingsCard title={t("Perfil")}><ProfileSettings profile={profile} onProfile={onProfile} /></SettingsCard>}
         {group === "interface" && <>
           <SettingsCard title={t("Idioma do sistema")} detail={t("O idioma muda na hora e fica salvo neste dispositivo.")}><label className="settings-field">{t("Idioma do sistema")}<select value={preferences.language} onChange={(event) => onPreferences({ ...preferences, language: event.target.value === "en" ? "en" : "pt-BR" })}><option value="pt-BR">{t("Português (Brasil)")}</option><option value="en">{t("English")}</option></select></label></SettingsCard>
           <SettingsCard title={t("Visual")} detail={t("Escolha a paleta do ShmupX. A mudança vale na hora e fica guardada para a próxima vez.")}>

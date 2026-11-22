@@ -6,6 +6,7 @@
 pub mod commands;
 pub mod mister;
 pub mod notificacoes;
+pub mod perfil;
 
 use std::sync::{Arc, Mutex};
 

@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import type { ChatMessage } from "../types/room";
 import type { ChatStatus } from "../data/useRoomChat";
 import { censor } from "../data/profanity";
+import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 
 interface ChatFeedProps {
   messages: ChatMessage[];
@@ -29,6 +30,8 @@ function horario(timestamp: string, locale: string, agora = new Date()): string 
 export default function ChatFeed({ messages, status = "ready", error, playerId, emptyText }: ChatFeedProps) {
   const { t, locale } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Avatar de cada autor (perfil público), atualizado quando alguém troca.
+  const profiles = usePublicProfiles(messages.map((m) => m.authorId ?? ""));
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -45,7 +48,7 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
         const mine = Boolean(playerId && message.authorId === playerId);
         return (
           <article key={message.id} className={`chat-message ${bot ? "is-bot" : ""} ${mine ? "is-mine" : ""}`} style={message.pending ? { opacity: 0.6 } : undefined}>
-            <span className="chat-avatar" aria-hidden="true">{bot ? "RX" : <img className="avatar-img" src="/img/avatar-default.png" alt="" />}</span>
+            <span className="chat-avatar" aria-hidden="true">{bot ? "RX" : <img className="avatar-img" src={avatarOf(profiles, message.authorId)} alt="" />}</span>
             <div className="chat-body">
               <header>
                 <strong>{message.author}{mine ? ` ${t("(você)")}` : ""}</strong>

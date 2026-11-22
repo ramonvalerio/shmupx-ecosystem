@@ -83,7 +83,7 @@ function useForeground() {
  * servidor). Confirma a cada 30 s e quando o estado muda: jogando, na sala em primeiro plano
  * (online) ou com o Client aberto em outro lugar (away).
  */
-export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null) {
+export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null, away = false) {
   const foreground = useForeground();
   const rooms = openRoomIds.join("\n");
   const liveRoom = live?.roomId ?? null;
@@ -99,14 +99,14 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
         const base = { name: me.displayName, lastSeen: serverTimestamp() };
         const data = liveVideo && liveRoom === roomId
           ? { ...base, state: "live", liveVideoId: liveVideo, liveViewers: viewers }
-          : { ...base, state: recordingRoomId === roomId ? "playing" : foreground && visibleRoomId === roomId ? "online" : "away" };
+          : { ...base, state: recordingRoomId === roomId ? "playing" : !away && foreground && visibleRoomId === roomId ? "online" : "away" };
         setDoc(presenceRef(roomId, me.uid), data).catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
       }
     };
     void beat();
     const timer = window.setInterval(() => void beat(), HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away]);
 }
 
 /** Presença de um jogador (a janela da live acompanha quem transmite). */

@@ -4,7 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { EventsPage, HelpPage, HomePage, RankingPage, type Section } from "./ClientPages";
-import { ProfilePage, SubmissionsPage, SubscriptionPage } from "./AccountPages";
+import { SubmissionsPage, SubscriptionPage } from "./AccountPages";
 import { useBigPicture } from "./useBigPicture";
 import type { SessionRun } from "../types/submission";
 import CollectionPane from "./CollectionPane";
@@ -21,6 +21,8 @@ import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 import { leaveRoomPresence, usePresenceHeartbeat, videoIdFromUrl } from "../data/useRoomPresence";
 import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
+import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
+import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
 import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
@@ -54,6 +56,11 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [section, setSection] = useState<Section>("collection");
   const [storageError, setStorageError] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  // Configurações numa janela (engrenagem acima do avatar); o avatar só tem status e sair.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsDialogRef = useDialogFocus(settingsOpen, () => setSettingsOpen(false));
+  const presenceMode = usePresenceMode();
+  const myPublic = useMyPublicProfile(profile.displayName);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   // O menu do perfil fecha com um clique fora dele (o botão do avatar alterna sozinho).
@@ -98,7 +105,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // Presença em todas as salas abertas: online na que está na tela, away nas outras.
   const liveVideoId = live.state.status === "live" ? videoIdFromUrl(live.state.watch_url) : null;
   usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId,
-    liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null);
+    liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null, presenceMode === "away");
   // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
   const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
   const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;
@@ -196,11 +203,19 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           })}
         </div>
         <div className="profile-menu-anchor">
-          <button ref={profileButtonRef} className="rail-avatar" type="button" aria-label={t("Perfil de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}><img className="avatar-img" src="/img/avatar-default.png" alt="" /></button>
+          <button type="button" className="rail-settings" aria-label={t("Configurações")} title={t("Configurações")} aria-haspopup="dialog" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+          </button>
+          <button ref={profileButtonRef} className="rail-avatar" type="button" aria-label={t("Status de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}>
+            <img className="avatar-img" src={myPublic.profile?.avatar || DEFAULT_AVATAR} alt="" />
+            <span className={`presence-dot rail-status is-${presenceMode}`} aria-hidden="true" />
+          </button>
           {profileMenuOpen && <div id="profile-actions" ref={profileMenuRef} className="profile-menu" role="menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}>
-            <strong>{profile.displayName}</strong><span className="muted">{t("Conta Google")}</span>
-            {([["profile", "Meu perfil"], ["home", "Dashboard"], ["settings", "Configurações"]] as [Section, string][]).map(([id, label]) => (
-              <button key={id} role="menuitem" onClick={() => { setSection(id); setProfileMenuOpen(false); }}>{t(label)}</button>
+            <strong>{profile.displayName}</strong><span className="muted">{myPublic.profile ? `@${myPublic.profile.handle}` : t("Conta Google")}</span>
+            {([["online", "Online"], ["away", "Ausente"]] as const).map(([mode, label]) => (
+              <button key={mode} role="menuitemradio" aria-checked={presenceMode === mode} className="presence-option" onClick={() => { savePresenceMode(mode); setProfileMenuOpen(false); }}>
+                <span className={`presence-dot is-${mode}`} aria-hidden="true" /> {t(label)}{presenceMode === mode && <span aria-hidden="true"> ✓</span>}
+              </button>
             ))}
             <button role="menuitem" onClick={() => { setProfileMenuOpen(false); void onSignOut(); }}>{t("Sair da conta")}</button>
           </div>}
@@ -257,16 +272,25 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       <div className="client-content">
       {bigPicture.error && <p className="mode-error" role="alert">{t(bigPicture.error)}</p>}
       {/* Telas do menu do perfil: voltar para a Coleção (a tela principal). */}
-      {(section === "settings" || section === "profile" || section === "home" || section === "subscription") && (
-        <div className="page-back-bar"><button type="button" className="room-tabs-home" onClick={() => setSection("collection")}>{t("← Minhas coleções")}</button></div>
-      )}
       {section === "submissions" && <SubmissionsPage runs={runs} rooms={rooms} onOpenGame={openGame} />}
-      {section === "profile" && <ProfilePage profile={profile} onProfile={onProfile} onSubscription={() => setSection("subscription")} />}
       {section === "subscription" && <SubscriptionPage onEvents={() => setSection("events")} />}
       {section === "home" && <HomePage rooms={rooms} recordingRoomId={recordingRoomId} onNavigate={setSection} onOpenGame={openGame} />}
       {section === "events" && <EventsPage />}
       {section === "ranking" && <RankingPage rooms={rooms} />}
-      {section === "settings" && <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError} onNavigate={setSection} />}
+      {settingsOpen && (
+        <div className="controller-dialog-backdrop">
+          <div ref={settingsDialogRef} role="dialog" aria-modal="true" aria-label={t("Configurações")} tabIndex={-1} className="controller-dialog settings-modal">
+            <header>
+              <div><h2>{t("Configurações")}</h2></div>
+              <button type="button" className="secondary-action" onClick={() => setSettingsOpen(false)}>{t("Fechar")}</button>
+            </header>
+            <div className="controller-dialog-body">
+              <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError}
+                onNavigate={(next) => { setSettingsOpen(false); setSection(next); }} profile={profile} onProfile={onProfile} />
+            </div>
+          </div>
+        </div>
+      )}
       {section === "help" && <HelpPage />}
       {section === "notification" && <NotificationPage id={notificationId} items={notifications.items} onSelect={setNotificationId} onBack={() => setSection("home")} onRead={notifications.reload} />}
       {/* Sala aberta (sem o ranking): o painel de jogadores sobe até a altura das abas. */}
