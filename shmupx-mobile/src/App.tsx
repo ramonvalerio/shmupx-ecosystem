@@ -8,9 +8,9 @@ import Room from "./Room";
 import MisterSettings from "./MisterSettings";
 
 /**
- * ShmupX Lite (Android): só para acompanhar a plataforma pelo celular. Entra nas salas, conversa
- * no chat, vê quem está na sala e assiste às lives. Joga só no MiSTer da mesma rede (abre o jogo na
- * TV, valendo ranking ou treino); PC e transmissão ficam no Client.
+ * ShmupX Lite (Android): entra nas salas, conversa no chat, vê quem está na sala e assiste às
+ * lives. Joga pela sala (Play Training / Play Ranked): no MiSTer da mesma rede (na TV) ou no PC,
+ * pedindo ao ShmupX Client aberto na mesma conta (Steam e emulador). A transmissão fica no Client.
  */
 export default function App() {
   const { t } = useI18n();

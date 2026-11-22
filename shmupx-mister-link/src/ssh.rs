@@ -1,5 +1,5 @@
 //! Instalação do ShmupX no MiSTer FPGA pelo Client, por SSH (o MiSTer vem com o SSH ligado,
-//! usuário `root`). Faz o mesmo que o `shmupx-mister/scripts/implantar.ps1`, sem o jogador abrir
+//! padrão `root` / `1`). Faz o mesmo que o `shmupx-mister/scripts/implantar.ps1`, sem o jogador abrir
 //! terminal nem mexer no MiSTer:
 //!
 //! 1. baixa o pacote do agente publicado no site (`downloads/mister/latest.json`, conferido pelo
@@ -48,15 +48,15 @@ struct Ssh {
 }
 
 impl Ssh {
-    async fn conectar(host: &str, senha: &str) -> Result<Self, String> {
+    async fn conectar(host: &str, usuario: &str, senha: &str) -> Result<Self, String> {
         let config = Arc::new(client::Config { inactivity_timeout: Some(Duration::from_secs(180)), ..Default::default() });
         let mut sessao = tokio::time::timeout(Duration::from_secs(12), client::connect(config, (host, 22), Cliente))
             .await
             .map_err(|_| format!("o MiSTer em {host} não respondeu ao SSH: confira o IP e se ele está ligado"))?
             .map_err(|e| format!("não foi possível abrir o SSH no MiSTer em {host}: {e}"))?;
-        let resultado = sessao.authenticate_password("root", senha).await.map_err(|e| format!("falha no login SSH do MiSTer: {e}"))?;
+        let resultado = sessao.authenticate_password(usuario, senha).await.map_err(|e| format!("falha no login SSH do MiSTer: {e}"))?;
         if !resultado.success() {
-            return Err("o MiSTer recusou a senha do root (a padrão é 1)".into());
+            return Err(format!("o MiSTer recusou o usuário {usuario} e a senha (padrão: root / 1)"));
         }
         Ok(Self { sessao })
     }
@@ -110,9 +110,9 @@ async fn baixar(url: &str) -> Result<Vec<u8>, String> {
 
 /// Instala (ou atualiza) o ShmupX no MiSTer e liga o jogador `username` à conta com `token`.
 /// `etapa` recebe o andamento para a tela. Devolve a saída do instalador.
-pub async fn instalar(host: &str, senha: &str, username: &str, token: &str, api: &str, etapa: impl Fn(&str)) -> Result<String, String> {
+pub async fn instalar(host: &str, usuario: &str, senha: &str, username: &str, token: &str, api: &str, etapa: impl Fn(&str)) -> Result<String, String> {
     etapa("Conectando ao MiSTer…");
-    let ssh = Ssh::conectar(host, senha).await?;
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
 
     etapa("Baixando o ShmupX para o MiSTer…");
     let manifesto: Manifesto = serde_json::from_slice(&baixar(MANIFESTO).await?).map_err(|e| format!("pacote do MiSTer inválido: {e}"))?;
@@ -191,8 +191,8 @@ fn jogos_do_jogador(listagem: &str, username: &str) -> Vec<JogoNoMenu> {
 }
 
 /// Jogos e modos do menu ShmupX do MiSTer para o jogador `username`.
-pub async fn jogos_no_menu(host: &str, senha: &str, username: &str) -> Result<Vec<JogoNoMenu>, String> {
-    let ssh = Ssh::conectar(host, senha).await?;
+pub async fn jogos_no_menu(host: &str, usuario: &str, senha: &str, username: &str) -> Result<Vec<JogoNoMenu>, String> {
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
     let (_, listagem) = ssh
         .executar(&format!("find {MENU} -mindepth 3 -maxdepth 4 -type f \\( -name '*.mgl' -o -name '*.mra' \\) 2>/dev/null"), None)
         .await?;
@@ -201,7 +201,7 @@ pub async fn jogos_no_menu(host: &str, senha: &str, username: &str) -> Result<Ve
 
 /// Abre um jogo do menu ShmupX no MiSTer (como escolher no menu da TV): o MiSTer carrega o core
 /// e o agente vê o jogador e o modo pelo nome do core.
-pub async fn abrir(host: &str, senha: &str, caminho: &str) -> Result<(), String> {
+pub async fn abrir(host: &str, usuario: &str, senha: &str, caminho: &str) -> Result<(), String> {
     let valido = caminho.starts_with(&format!("{MENU}/"))
         && (caminho.ends_with(".mgl") || caminho.ends_with(".mra"))
         && !caminho.contains(['\'', '\n', '\r'])
@@ -209,17 +209,24 @@ pub async fn abrir(host: &str, senha: &str, caminho: &str) -> Result<(), String>
     if !valido {
         return Err("jogo do MiSTer inválido".into());
     }
-    let ssh = Ssh::conectar(host, senha).await?;
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
     ssh.exigir(&format!("echo 'load_core {caminho}' > /dev/MiSTer_cmd"), None, "abrir o jogo").await?;
     Ok(())
 }
 
 /// Volta o MiSTer ao menu principal (como apertar o menu no controle): o agente vê o jogo fechar
 /// e grava a partida.
-pub async fn voltar_ao_menu(host: &str, senha: &str) -> Result<(), String> {
-    let ssh = Ssh::conectar(host, senha).await?;
+pub async fn voltar_ao_menu(host: &str, usuario: &str, senha: &str) -> Result<(), String> {
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
     ssh.exigir("echo 'load_core /media/fat/menu.rbf' > /dev/MiSTer_cmd", None, "voltar ao menu").await?;
     Ok(())
+}
+
+/// O aparelho em `host` é um MiSTer que aceita este usuário e senha (tem `/media/fat`)?
+pub async fn eh_mister(host: &str, usuario: &str, senha: &str) -> bool {
+    let Ok(ssh) = Ssh::conectar(host, usuario, senha).await else { return false };
+    matches!(ssh.executar("test -d /media/fat/_ShmupX -o -d /media/fat/config && echo mister", None).await,
+        Ok((0, saida)) if saida.contains("mister"))
 }
 
 #[cfg(test)]
@@ -244,7 +251,7 @@ mod tests {
     #[ignore = "depende de um MiSTer na rede"]
     async fn jogos_do_mister_da_rede() {
         let host = std::env::var("MISTER").unwrap_or_else(|_| "192.168.0.23".into());
-        for jogo in jogos_no_menu(&host, "1", "ramonvalerio").await.unwrap() {
+        for jogo in jogos_no_menu(&host, "root", "1", "ramonvalerio").await.unwrap() {
             println!("{} | {} | {}", jogo.jogo, jogo.modo, jogo.caminho);
         }
     }
@@ -256,7 +263,7 @@ mod tests {
     async fn instalar_no_mister_da_rede() {
         let host = std::env::var("MISTER").unwrap_or_else(|_| "192.168.0.23".into());
         let jogador = std::env::var("MISTER_JOGADOR").unwrap_or_else(|_| "ramonvalerio".into());
-        let ssh = Ssh::conectar(&host, "1").await.unwrap();
+        let ssh = Ssh::conectar(&host, "root", "1").await.unwrap();
         let (_, ini) = ssh.executar(&format!("cat {PASTA}/shmupx.ini"), None).await.unwrap();
         let chave = format!("token.{jogador}");
         let token = ini
@@ -265,7 +272,7 @@ mod tests {
             .expect("o jogador não tem token no shmupx.ini");
         drop(ssh);
         let api = "https://shmupx-backend-230979440400.us-central1.run.app";
-        let saida = instalar(&host, "1", &jogador, &token, api, |etapa| println!("etapa: {etapa}")).await.unwrap();
+        let saida = instalar(&host, "root", "1", &jogador, &token, api, |etapa| println!("etapa: {etapa}")).await.unwrap();
         println!("--- instalar.sh ---\n{saida}");
     }
 }

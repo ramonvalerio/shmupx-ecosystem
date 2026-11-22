@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { romsFor } from "./emulatorLibrary";
+import { misterAuth } from "./misterPlayer";
 
 /**
  * Biblioteca do MiSTer FPGA, lida pela rede (FTP): os `.mra` de arcade e os ROMs de MAME. "Ter o
@@ -59,7 +60,7 @@ export function saveMisterLibrary(value: MisterLibrary | null) {
 /** Lê o MiSTer na rede (só no app desktop). */
 export async function scanMister(host: string, password?: string): Promise<{ host: string; mras: string[]; roms: string[] }> {
   if (!isTauri()) throw new Error("A leitura do MiSTer só funciona no aplicativo desktop.");
-  return invoke("mister_biblioteca", { host, senha: password || null });
+  return invoke("mister_biblioteca", { host, ...misterAuth(password) });
 }
 
 /** Biblioteca do MiSTer importada, atualizada em todas as telas quando muda. */

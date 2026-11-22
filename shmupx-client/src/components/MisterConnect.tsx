@@ -3,7 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import { readMisterLibrary } from "../data/misterLibrary";
-import { readMisterPlayer, saveMisterPlayer } from "../data/misterPlayer";
+import { misterAuth, readMisterAccess, readMisterPlayer, saveMisterAccess, saveMisterPlayer } from "../data/misterPlayer";
 
 type Step = "idle" | "loading" | "choose" | "saving" | "done" | "error";
 
@@ -12,11 +12,13 @@ type Step = "idle" | "loading" | "choose" | "saving" | "done" | "error";
  * `shmupx.ini`, pede um token novo e grava no MiSTer (a linha do jogador, a lista e o endereço do
  * ShmupX); o token não aparece na tela. Alternativa: receber o token por e-mail e colar à mão.
  * `host`/`password`: os da tela que já leu o MiSTer (Importar jogos); sem eles, pede aqui.
+ * Usuário e senha vazios usam os de fábrica do MiSTer (`root` / `1`).
  */
 export default function MisterConnect({ host: hostProp, password: passwordProp }: { host?: string; password?: string }) {
   const { t } = useI18n();
   const [host, setHost] = useState(() => hostProp ?? readMisterPlayer()?.host ?? readMisterLibrary()?.host ?? "");
   const [password, setPassword] = useState(passwordProp ?? "");
+  const [user, setUser] = useState(() => readMisterAccess().user ?? "");
   const [step, setStep] = useState<Step>("idle");
   const [players, setPlayers] = useState<string[]>([]);
   const [player, setPlayer] = useState("");
@@ -33,7 +35,8 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
     setStep("loading");
     setMessage(null);
     try {
-      const list = await invoke<string[]>("mister_usuarios", { host: target, senha: secret || null });
+      if (hostProp === undefined) saveMisterAccess({ user, password: secret || readMisterAccess().password });
+      const list = await invoke<string[]>("mister_usuarios", { host: target, ...misterAuth(secret) });
       setPlayers(list);
       setPlayer(list[0] ?? "__new");
       setStep("choose");
@@ -49,7 +52,7 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
     // Andamento da instalação (conectar, baixar, copiar, montar o menu).
     const stop = await listen<string>("mister://etapa", (event) => setProgress(event.payload));
     try {
-      await invoke<string>("mister_conectar", { host: target, senha: secret || null, username: chosen });
+      await invoke<string>("mister_conectar", { host: target, ...misterAuth(secret), username: chosen });
       // INICIAR JOGO › MiSTer usa este jogador e este MiSTer.
       saveMisterPlayer({ host: target.trim(), username: chosen, password: secret || undefined });
       setStep("done");
@@ -77,7 +80,8 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
   return <div className="mister-connect">
     {hostProp === undefined && <div className="mister-connect-form">
       <label className="settings-field">{t("IP do MiSTer")}<input value={host} onChange={(event) => setHost(event.target.value)} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" /></label>
-      <label className="settings-field">{t("Senha do root (vazio = padrão)")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" /></label>
+      <label className="settings-field">{t("Usuário do MiSTer (vazio = root)")}<input value={user} onChange={(event) => setUser(event.target.value)} placeholder="root" autoComplete="off" autoCapitalize="none" /></label>
+      <label className="settings-field">{t("Senha (vazio = padrão 1)")}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" /></label>
     </div>}
     {(step === "idle" || step === "loading" || step === "error") && (
       <button className="primary-action" disabled={step === "loading" || !target.trim()} onClick={() => void loadPlayers()}>
@@ -100,7 +104,7 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
       {progress && <p className="muted" role="status">{t(progress)}</p>}
     </>}
     {message && <p className={step === "error" ? "mode-error" : "success-text"} role="status">{t(message)}</p>}
-    <p className="muted">{t("Pelo SSH do MiSTer (usuário root), o Client instala ou atualiza o ShmupX: o agente, o menu ShmupX por jogador e modo, as telas em Scripts, o serviço no boot e, se faltar, o core MegaDrive do Earthion. Depois grava o seu jogador, o endereço do ShmupX e um token novo no shmupx.ini (o anterior fica em shmupx.ini.bak). O token não aparece na tela.")}</p>
+    <p className="muted">{t("Pelo SSH do MiSTer (padrão root / 1), o Client instala ou atualiza o ShmupX: o agente, o menu ShmupX por jogador e modo, as telas em Scripts, o serviço no boot e, se faltar, o core MegaDrive do Earthion. Depois grava o seu jogador, o endereço do ShmupX e um token novo no shmupx.ini (o anterior fica em shmupx.ini.bak). O token não aparece na tela.")}</p>
     <p className="muted">
       {t("Prefere fazer à mão?")}{" "}
       <button type="button" className="text-action" disabled={mail.kind === "sending"} onClick={() => void sendByEmail()}>{t(mail.kind === "sending" ? "Enviando…" : "Receber o token por e-mail")}</button>

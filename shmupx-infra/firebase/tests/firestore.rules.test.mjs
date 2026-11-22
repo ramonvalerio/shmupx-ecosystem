@@ -160,3 +160,16 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertFails(deleteDoc(doc(db("bob"), "rooms/earthion/presence/alice")));
   await assertSucceeds(deleteDoc(doc(alice, "rooms/earthion/presence/alice")));
 });
+
+test("remote launch: only the owner reads and writes small, known fields", async () => {
+  const command = { id: "c1", action: "play", gameId: "earthion", platform: "steam", kind: "ranked", mode: "1cc", createdAt: 1 };
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { command }));
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { desktop: { seenAt: 2, owned: { earthion: ["steam"] } } }, { mergeFields: ["desktop"] }));
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { result: { id: "c1", status: "started", message: "ok", at: 3 } }, { mergeFields: ["result"] }));
+  await assertSucceeds(getDoc(doc(db("alice"), "remoteLaunch/alice")));
+  await assertFails(getDoc(doc(db("bob"), "remoteLaunch/alice")));
+  await assertFails(setDoc(doc(db("bob"), "remoteLaunch/alice"), { command }));
+  await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { command: { ...command, platform: "mister" } }));
+  await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { command: { ...command, extra: true } }));
+  await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { other: 1 }));
+});

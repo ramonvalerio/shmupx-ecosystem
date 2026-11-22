@@ -2,17 +2,25 @@ import { useState } from "react";
 import { useI18n } from "@client/i18n";
 import { useGameArt } from "@client/data/gameArt";
 import type { GameRoom } from "@client/types/room";
-import { useMisterCompatible } from "./MisterPlay";
+import { romsFor } from "@client/data/emulatorLibrary";
+import { useMisterCompatible } from "./PlayPanel";
 
 function RoomCard({ room, onOpen }: { room: GameRoom; onOpen: () => void }) {
   const art = useGameArt(room);
   const mister = useMisterCompatible(room);
+  // Onde dá para jogar pelo celular: Steam e emulador no PC, MiSTer na TV.
+  const steam = room.steamAppId > 0 || room.platforms.includes("steam");
+  const emulator = romsFor(room).length > 0 || room.platforms.includes("emulator");
   return (
     <button type="button" className="lite-room-card" onClick={onOpen}>
       <img src={art.src} alt="" loading="lazy" onError={art.onError} />
       <span className="lite-room-info">
         <strong>{room.title}</strong>
-        {mister && <span className="lite-mister-badge">MiSTer</span>}
+        {(steam || emulator || mister) && <span className="lite-tags">
+          {steam && <span className="lite-mister-badge">Steam</span>}
+          {emulator && <span className="lite-mister-badge">Emulador</span>}
+          {mister && <span className="lite-mister-badge">MiSTer</span>}
+        </span>}
         {room.developer && <small>{room.developer}{room.year ? ` · ${room.year}` : ""}</small>}
       </span>
       <span className="lite-chevron" aria-hidden="true">›</span>

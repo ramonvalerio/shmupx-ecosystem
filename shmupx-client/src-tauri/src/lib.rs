@@ -52,6 +52,7 @@ pub fn run() {
             steam::commands::mister_jogos_do_jogador,
             steam::commands::mister_iniciar,
             steam::commands::mister_parar,
+            steam::commands::mister_procurar,
             steam::treino::treino_parar,
             session::commands::definir_token_autenticacao,
             session::commands::limpar_token_autenticacao,

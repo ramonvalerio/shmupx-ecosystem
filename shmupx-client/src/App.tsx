@@ -13,6 +13,7 @@ import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
 import { takePendingRunMode } from "./data/gameModes";
+import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -59,6 +60,10 @@ export default function App() {
 
   // Runs "Não enviada" guardadas (vídeo no disco): aparecem no ranking local para analisar de novo.
   const signedUid = auth.state.status === "signed-in" ? auth.state.profile.uid : null;
+  // Jogar no PC pelo celular (ShmupX Lite): este Client recebe os pedidos da conta.
+  const remote = useRemoteLaunchHost(signedUid, { rooms, recordingRoomId, practiceGames });
+  const remoteRef = useRef(remote);
+  remoteRef.current = remote;
   useEffect(() => {
     if (!isTauri() || !signedUid) return;
     invoke<PendingRun[]>("runs_pendentes", { uid: signedUid })
@@ -83,10 +88,13 @@ export default function App() {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: roomId, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);
           setStartErrors(({ [roomId]: _, ...rest }) => rest);
+          remoteRef.current.runStarted(roomId);
         })
         .catch((error) => {
           console.error("falha ao iniciar a corrida segura:", error);
-          setStartErrors((current) => ({ ...current, [roomId]: typeof error === "string" ? error : String(error) }));
+          const message = typeof error === "string" ? error : String(error);
+          setStartErrors((current) => ({ ...current, [roomId]: message }));
+          remoteRef.current.runFailed(roomId, message);
         });
     };
 

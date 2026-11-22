@@ -19,8 +19,12 @@ const BACKEND: &str = match option_env!("SHMUPX_BACKEND_URL") {
 #[derive(Default)]
 pub struct Sessao(pub Mutex<Option<String>>);
 
-fn senha(senha: Option<String>) -> String {
-    senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into())
+/// Acesso ao MiSTer: usuário e senha informados, ou os de fábrica (`root` / `1`).
+fn acesso(usuario: &Option<String>, senha: &Option<String>) -> (String, String) {
+    (
+        shmupx_mister_link::usuario_ou_padrao(usuario.as_deref()).to_string(),
+        shmupx_mister_link::senha_ou_padrao(senha.as_deref()).to_string(),
+    )
 }
 
 async fn backend_post(sessao: &Sessao, caminho: &str) -> Result<Value, String> {
@@ -53,28 +57,35 @@ pub fn limpar_token_autenticacao(sessao: State<'_, Sessao>) {
     *sessao.0.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
+/// Procura o MiSTer na rede Wi-Fi do celular (SSH com o usuário e a senha, padrão `root` / `1`).
+#[tauri::command]
+pub async fn mister_procurar(usuario: Option<String>, senha: Option<String>) -> Result<Vec<String>, String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    shmupx_mister_link::descoberta::procurar(&usuario, &senha).await
+}
+
 /// Jogos de arcade e ROMs do MiSTer (FTP).
 #[tauri::command]
-pub async fn mister_biblioteca(host: String, senha: Option<String>) -> Result<rede::BibliotecaMister, String> {
-    tauri::async_runtime::spawn_blocking(move || rede::ler(&host, senha.as_deref())).await.map_err(|e| e.to_string())?
+pub async fn mister_biblioteca(host: String, usuario: Option<String>, senha: Option<String>) -> Result<rede::BibliotecaMister, String> {
+    tauri::async_runtime::spawn_blocking(move || rede::ler(&host, usuario.as_deref(), senha.as_deref())).await.map_err(|e| e.to_string())?
 }
 
 /// Jogadores do `shmupx.ini` do MiSTer (FTP).
 #[tauri::command]
-pub async fn mister_usuarios(host: String, senha: Option<String>) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || rede::usuarios(&host, senha.as_deref())).await.map_err(|e| e.to_string())?
+pub async fn mister_usuarios(host: String, usuario: Option<String>, senha: Option<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || rede::usuarios(&host, usuario.as_deref(), senha.as_deref())).await.map_err(|e| e.to_string())?
 }
 
 /// Instala/atualiza o ShmupX no MiSTer (SSH) e liga o jogador à conta com um token novo.
 #[tauri::command]
-pub async fn mister_conectar(app: AppHandle, sessao: State<'_, Sessao>, host: String, senha: Option<String>, username: String) -> Result<String, String> {
+pub async fn mister_conectar(app: AppHandle, sessao: State<'_, Sessao>, host: String, usuario: Option<String>, senha: Option<String>, username: String) -> Result<String, String> {
     if !rede::username_valido(&username) {
         return Err("nome de jogador inválido: use letras, números, _ e -".into());
     }
     let resposta = backend_post(&sessao, "/api/mister/tokens/direct").await?;
     let token = resposta["token"].as_str().filter(|t| t.starts_with("sxm_")).ok_or("o ShmupX não devolveu o token do MiSTer")?.to_string();
-    let senha = self::senha(senha);
-    ssh::instalar(host.trim(), &senha, &username, &token, BACKEND, |etapa| {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    ssh::instalar(host.trim(), &usuario, &senha, &username, &token, BACKEND, |etapa| {
         let _ = app.emit("mister://etapa", etapa.to_string());
     })
     .await
@@ -88,18 +99,21 @@ pub async fn mister_enviar_token(sessao: State<'_, Sessao>) -> Result<Value, Str
 
 /// Modos em que o jogador tem cada jogo no menu ShmupX do MiSTer (SSH).
 #[tauri::command]
-pub async fn mister_jogos_do_jogador(host: String, senha: Option<String>, username: String) -> Result<Vec<ssh::JogoNoMenu>, String> {
-    ssh::jogos_no_menu(host.trim(), &self::senha(senha), &username).await
+pub async fn mister_jogos_do_jogador(host: String, usuario: Option<String>, senha: Option<String>, username: String) -> Result<Vec<ssh::JogoNoMenu>, String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    ssh::jogos_no_menu(host.trim(), &usuario, &senha, &username).await
 }
 
 /// Abre o jogo na TV (como escolher no menu do MiSTer).
 #[tauri::command]
-pub async fn mister_iniciar(host: String, senha: Option<String>, caminho: String) -> Result<(), String> {
-    ssh::abrir(host.trim(), &self::senha(senha), &caminho).await
+pub async fn mister_iniciar(host: String, usuario: Option<String>, senha: Option<String>, caminho: String) -> Result<(), String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    ssh::abrir(host.trim(), &usuario, &senha, &caminho).await
 }
 
 /// Para o jogo: o MiSTer volta ao menu e o agente grava a partida.
 #[tauri::command]
-pub async fn mister_parar(host: String, senha: Option<String>) -> Result<(), String> {
-    ssh::voltar_ao_menu(host.trim(), &self::senha(senha)).await
+pub async fn mister_parar(host: String, usuario: Option<String>, senha: Option<String>) -> Result<(), String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    ssh::voltar_ao_menu(host.trim(), &usuario, &senha).await
 }

@@ -59,6 +59,7 @@ pub fn run() {
             mister::mister_jogos_do_jogador,
             mister::mister_iniciar,
             mister::mister_parar,
+            mister::mister_procurar,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o ShmupX Lite");

@@ -1,4 +1,4 @@
-//! MiSTer FPGA pela rede, por FTP (o MiSTer vem com o ProFTPD, usuário `root`):
+//! MiSTer FPGA pela rede, por FTP (o MiSTer vem com o ProFTPD; padrão `root` / `1`):
 //! - Biblioteca: os jogos de arcade (`.mra` em `/media/fat/_*`, um nível de subpastas) e os ROMs
 //!   de MAME (`games/mame` e `games/hbmame`). Só lista nomes; quem cruza com o catálogo é a
 //!   interface.
@@ -50,7 +50,7 @@ impl Ftp {
         let (codigo, _) = ftp.comando(&format!("USER {usuario}"), &[230, 331])?;
         if codigo == 331 {
             ftp.comando(&format!("PASS {senha}"), &[230])
-                .map_err(|_| "o MiSTer recusou o usuário e a senha do FTP (padrão: root / 1)".to_string())?;
+                .map_err(|_| "o MiSTer recusou o usuário e a senha (padrão: root / 1)".to_string())?;
         }
         ftp.comando("TYPE A", &[200])?;
         Ok(ftp)
@@ -234,19 +234,19 @@ pub fn ini_com_token(texto: &str, username: &str, token: &str, api: &str) -> Str
 }
 
 /// Jogadores já configurados no MiSTer (para escolher qual ligar à conta).
-pub fn usuarios(host: &str, senha: Option<&str>) -> Result<Vec<String>, String> {
+pub fn usuarios(host: &str, usuario: Option<&str>, senha: Option<&str>) -> Result<Vec<String>, String> {
     let host = host.trim();
     if !host_valido(host) {
         return Err("informe o IP do MiSTer (ex.: 192.168.0.23)".into());
     }
-    let mut ftp = Ftp::conectar(host, "root", senha.filter(|s| !s.is_empty()).unwrap_or("1"))?;
+    let mut ftp = Ftp::conectar(host, crate::usuario_ou_padrao(usuario), crate::senha_ou_padrao(senha))?;
     let texto = ftp.baixar(INI)?.map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
     let _ = ftp.comando("QUIT", &[221]);
     Ok(usuarios_do_ini(&texto))
 }
 
 /// Grava o token do jogador no `shmupx.ini` do MiSTer (guarda a versão anterior em `.bak`).
-pub fn gravar_token(host: &str, senha: Option<&str>, username: &str, token: &str, api: &str) -> Result<(), String> {
+pub fn gravar_token(host: &str, usuario: Option<&str>, senha: Option<&str>, username: &str, token: &str, api: &str) -> Result<(), String> {
     let host = host.trim();
     if !host_valido(host) {
         return Err("informe o IP do MiSTer (ex.: 192.168.0.23)".into());
@@ -254,7 +254,7 @@ pub fn gravar_token(host: &str, senha: Option<&str>, username: &str, token: &str
     if !username_valido(username) {
         return Err("nome de jogador inválido: use letras, números, _ e -".into());
     }
-    let mut ftp = Ftp::conectar(host, "root", senha.filter(|s| !s.is_empty()).unwrap_or("1"))?;
+    let mut ftp = Ftp::conectar(host, crate::usuario_ou_padrao(usuario), crate::senha_ou_padrao(senha))?;
     let atual = ftp.baixar(INI)?;
     if ftp.listar("/media/fat/shmupx")?.is_empty() && atual.is_none() {
         return Err("o ShmupX não está instalado neste MiSTer (falta /media/fat/shmupx)".into());
@@ -268,12 +268,12 @@ pub fn gravar_token(host: &str, senha: Option<&str>, username: &str, token: &str
     Ok(())
 }
 
-pub fn ler(host: &str, senha: Option<&str>) -> Result<BibliotecaMister, String> {
+pub fn ler(host: &str, usuario: Option<&str>, senha: Option<&str>) -> Result<BibliotecaMister, String> {
     let host = host.trim();
     if !host_valido(host) {
         return Err("informe o IP do MiSTer (ex.: 192.168.0.23)".into());
     }
-    let mut ftp = Ftp::conectar(host, "root", senha.filter(|s| !s.is_empty()).unwrap_or("1"))?;
+    let mut ftp = Ftp::conectar(host, crate::usuario_ou_padrao(usuario), crate::senha_ou_padrao(senha))?;
     let mut mras: Vec<String> = Vec::new();
     let guardar = |nomes: &[String], mras: &mut Vec<String>| {
         for nome in nomes {
@@ -350,7 +350,7 @@ mod tests {
     #[ignore = "depende de um MiSTer na rede"]
     fn mister_da_rede() {
         let host = std::env::var("MISTER").unwrap_or_else(|_| "192.168.0.23".into());
-        let b = ler(&host, None).unwrap();
+        let b = ler(&host, None, None).unwrap();
         println!("mras={} roms={} darius={:?}", b.mras.len(), b.roms.len(), b.mras.iter().filter(|m| m.contains("Darius")).collect::<Vec<_>>());
     }
 }

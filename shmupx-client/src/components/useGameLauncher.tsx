@@ -4,7 +4,7 @@ import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import { readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
+import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
 import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
 import { useDialogFocus } from "./useDialogFocus";
@@ -122,7 +122,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       if (!target) {
         // Treino no MiSTer: pelo CONVIDADO (sem token), sem ficha e sem ranking online.
         const username = forPractice ? "convidado" : player.username;
-        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, senha: player.password ?? null, username });
+        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, ...misterAuth(player.password), username });
         const names = new Set([slug(room.title), slug(room.id)]);
         const modes = games.filter((g) => names.has(slug(g.jogo)));
         if (modes.length === 0) {
@@ -138,7 +138,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         else target = modes[0];
       }
       setMisterModes(null);
-      await invoke("mister_iniciar", { host: player.host, senha: player.password ?? null, caminho: target.caminho });
+      await invoke("mister_iniciar", { host: player.host, ...misterAuth(player.password), caminho: target.caminho });
       setMisterGame({ host: player.host, password: player.password, practice: forPractice });
       setNotice(forPractice
         ? t("Modo treino: abrindo {game} no MiSTer ({mode}) como CONVIDADO, sem gastar ficha nem ir para o ranking online.", { game: room.title, mode: target.modo })
@@ -153,7 +153,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
   async function loadMisterPlayers(host: string) {
     setLinking({ host, players: null, busy: true, error: null });
     try {
-      const players = await invoke<string[]>("mister_usuarios", { host: host.trim(), senha: null });
+      const players = await invoke<string[]>("mister_usuarios", { host: host.trim(), ...misterAuth() });
       setLinking({ host, players, busy: false, error: players.length ? null : t("Nenhum jogador no shmupx.ini desse MiSTer. Use Conectar ao meu MiSTer em Importar jogos para instalar o ShmupX nele.") });
     } catch (failure) {
       setLinking({ host, players: null, busy: false, error: describe(failure, "Não foi possível ler o MiSTer.") });
@@ -173,7 +173,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
     setIsStopping(true);
     setError(null);
     try {
-      await invoke("mister_parar", { host: misterGame.host, senha: misterGame.password ?? null });
+      await invoke("mister_parar", { host: misterGame.host, ...misterAuth(misterGame.password) });
       setNotice(misterGame.practice
         ? t("Treino encerrado: o MiSTer voltou ao menu.")
         : t("O MiSTer voltou ao menu: o agente registrou a partida com o placar."));

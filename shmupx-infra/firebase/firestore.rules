@@ -59,6 +59,30 @@ service cloud.firestore {
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;
     }
+    // Jogar no PC pelo celular: o ShmupX Lite grava o pedido (command), o Client do PC avisa que
+    // está aberto (desktop) e responde (result). Só o dono; mapas pequenos, sem outros campos.
+    function validRemote(data) {
+      return data.keys().hasOnly(['desktop', 'command', 'result'])
+        && (!data.keys().hasAny(['command']) || (data.command is map
+          && data.command.keys().hasOnly(['id', 'action', 'gameId', 'platform', 'kind', 'mode', 'createdAt'])
+          && data.command.id is string && data.command.id.size() <= 64
+          && data.command.action in ['play', 'stop']
+          && data.command.gameId is string && data.command.gameId.size() <= 128
+          && (!data.command.keys().hasAny(['platform']) || data.command.platform in ['steam', 'emulator'])
+          && (!data.command.keys().hasAny(['kind']) || data.command.kind in ['training', 'ranked'])
+          && (!data.command.keys().hasAny(['mode']) || data.command.mode in ['highscore', '1cc', 'caravan'])
+          && data.command.createdAt is int))
+        && (!data.keys().hasAny(['result']) || (data.result is map
+          && data.result.keys().hasOnly(['id', 'status', 'message', 'at'])
+          && data.result.id is string && data.result.id.size() <= 64
+          && data.result.status in ['started', 'failed', 'stopped']
+          && (!data.result.keys().hasAny(['message']) || (data.result.message is string && data.result.message.size() <= 500))
+          && data.result.at is int))
+        && (!data.keys().hasAny(['desktop']) || (data.desktop is map
+          && data.desktop.keys().hasOnly(['seenAt', 'owned'])
+          && data.desktop.seenAt is int && data.desktop.owned is map
+          && data.desktop.owned.size() <= 500));
+    }
 
     match /users/{uid} {
       allow read: if owns(uid);
@@ -103,6 +127,10 @@ service cloud.firestore {
       allow read: if signedIn() && publishedGame(gameId);
       allow create, update: if owns(uid) && publishedGame(gameId) && validPresence(request.resource.data);
       allow delete: if owns(uid);
+    }
+    match /remoteLaunch/{uid} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid) && validRemote(request.resource.data);
     }
     match /gameplays/{runId} {
       allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
