@@ -3,6 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import { readMisterLibrary } from "../data/misterLibrary";
+import { readMisterPlayer, saveMisterPlayer } from "../data/misterPlayer";
 
 type Step = "idle" | "loading" | "choose" | "saving" | "done" | "error";
 
@@ -14,7 +15,7 @@ type Step = "idle" | "loading" | "choose" | "saving" | "done" | "error";
  */
 export default function MisterConnect({ host: hostProp, password: passwordProp }: { host?: string; password?: string }) {
   const { t } = useI18n();
-  const [host, setHost] = useState(() => hostProp ?? readMisterLibrary()?.host ?? "");
+  const [host, setHost] = useState(() => hostProp ?? readMisterPlayer()?.host ?? readMisterLibrary()?.host ?? "");
   const [password, setPassword] = useState(passwordProp ?? "");
   const [step, setStep] = useState<Step>("idle");
   const [players, setPlayers] = useState<string[]>([]);
@@ -49,6 +50,8 @@ export default function MisterConnect({ host: hostProp, password: passwordProp }
     const stop = await listen<string>("mister://etapa", (event) => setProgress(event.payload));
     try {
       await invoke<string>("mister_conectar", { host: target, senha: secret || null, username: chosen });
+      // INICIAR JOGO › MiSTer usa este jogador e este MiSTer.
+      saveMisterPlayer({ host: target.trim(), username: chosen, password: secret || undefined });
       setStep("done");
       setMessage(t("Pronto: o ShmupX está instalado no MiSTer e {player} está ligado à sua conta. No MiSTer, abra a pasta ShmupX no menu principal; as partidas desse jogador entram no seu perfil e no ranking.", { player: chosen.toUpperCase() }));
     } catch (error) {

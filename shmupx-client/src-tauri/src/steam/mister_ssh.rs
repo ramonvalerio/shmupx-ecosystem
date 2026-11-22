@@ -150,9 +150,96 @@ pub async fn instalar(host: &str, senha: &str, username: &str, token: &str, api:
     Ok(saida)
 }
 
+/// Um jogo no menu ShmupX do MiSTer, para um jogador e um modo.
+#[derive(Debug, serde::Serialize, PartialEq)]
+pub struct JogoNoMenu {
+    /// Nome no menu (`Earthion`, `Darius Gaiden`): o título do jogo no catálogo.
+    pub jogo: String,
+    /// Modo como aparece no menu (`Hi-Score`, `1CC`, `Caravan · Sprint (2 min)`).
+    pub modo: String,
+    /// Caminho do `.mgl`/`.mra` no MiSTer.
+    pub caminho: String,
+}
+
+const MENU: &str = "/media/fat/_ShmupX";
+
+/// Pasta do jogador no menu (`_1 RAMONVALERIO`, `_02 KWAYD`) é deste `username`?
+fn pasta_do_jogador(pasta: &str, username: &str) -> bool {
+    let Some(resto) = pasta.strip_prefix('_') else { return false };
+    let Some((numero, nome)) = resto.split_once(' ') else { return false };
+    numero.chars().all(|c| c.is_ascii_digit()) && !nome.is_empty() && username.to_uppercase().starts_with(&nome.to_uppercase())
+}
+
+/// Lê as linhas do `find` no menu e fica com os jogos do jogador, com o modo de cada um.
+fn jogos_do_jogador(listagem: &str, username: &str) -> Vec<JogoNoMenu> {
+    let mut jogos: Vec<JogoNoMenu> = listagem
+        .lines()
+        .filter_map(|caminho| {
+            let relativo = caminho.trim().strip_prefix(MENU)?.strip_prefix('/')?;
+            let partes: Vec<&str> = relativo.split('/').collect();
+            if partes.len() < 3 || !pasta_do_jogador(partes[0], username) {
+                return None;
+            }
+            let arquivo = partes[partes.len() - 1];
+            let jogo = arquivo.strip_suffix(".mgl").or_else(|| arquivo.strip_suffix(".mra"))?;
+            let modo = partes[1..partes.len() - 1].iter().map(|p| p.trim_start_matches('_')).collect::<Vec<_>>().join(" · ");
+            Some(JogoNoMenu { jogo: jogo.to_string(), modo, caminho: caminho.trim().to_string() })
+        })
+        .collect();
+    jogos.sort_by(|a, b| (&a.jogo, &a.modo).cmp(&(&b.jogo, &b.modo)));
+    jogos
+}
+
+/// Jogos e modos do menu ShmupX do MiSTer para o jogador `username`.
+pub async fn jogos_no_menu(host: &str, senha: &str, username: &str) -> Result<Vec<JogoNoMenu>, String> {
+    let ssh = Ssh::conectar(host, senha).await?;
+    let (_, listagem) = ssh
+        .executar(&format!("find {MENU} -mindepth 3 -maxdepth 4 -type f \\( -name '*.mgl' -o -name '*.mra' \\) 2>/dev/null"), None)
+        .await?;
+    Ok(jogos_do_jogador(&listagem, username))
+}
+
+/// Abre um jogo do menu ShmupX no MiSTer (como escolher no menu da TV): o MiSTer carrega o core
+/// e o agente vê o jogador e o modo pelo nome do core.
+pub async fn abrir(host: &str, senha: &str, caminho: &str) -> Result<(), String> {
+    let valido = caminho.starts_with(&format!("{MENU}/"))
+        && (caminho.ends_with(".mgl") || caminho.ends_with(".mra"))
+        && !caminho.contains(['\'', '\n', '\r'])
+        && !caminho.contains("..");
+    if !valido {
+        return Err("jogo do MiSTer inválido".into());
+    }
+    let ssh = Ssh::conectar(host, senha).await?;
+    ssh.exigir(&format!("echo 'load_core {caminho}' > /dev/MiSTer_cmd"), None, "abrir o jogo").await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jogos_do_menu_ficam_com_o_jogador_e_o_modo() {
+        let listagem = "/media/fat/_ShmupX/_1 RAMONVALERIO/_Hi-Score/Earthion.mgl\n\
+            /media/fat/_ShmupX/_1 RAMONVALERIO/_Caravan/_Sprint (2 min)/Darius Gaiden.mra\n\
+            /media/fat/_ShmupX/_2 KWAYD/_Hi-Score/Earthion.mgl\n\
+            /media/fat/_ShmupX/cores/x.mra\n";
+        let jogos = jogos_do_jogador(listagem, "ramonvalerio");
+        assert_eq!(jogos.len(), 2);
+        assert_eq!((jogos[0].jogo.as_str(), jogos[0].modo.as_str()), ("Darius Gaiden", "Caravan · Sprint (2 min)"));
+        assert_eq!((jogos[1].jogo.as_str(), jogos[1].modo.as_str()), ("Earthion", "Hi-Score"));
+        assert!(pasta_do_jogador("_10 KWAYD", "kwayd") && !pasta_do_jogador("cores", "kwayd") && !pasta_do_jogador("_1 KWAYD", "ramon"));
+    }
+
+    /// Só lê: `cargo test -- --ignored jogos_do_mister_da_rede --nocapture`.
+    #[tokio::test]
+    #[ignore = "depende de um MiSTer na rede"]
+    async fn jogos_do_mister_da_rede() {
+        let host = std::env::var("MISTER").unwrap_or_else(|_| "192.168.0.23".into());
+        for jogo in jogos_no_menu(&host, "1", "ramonvalerio").await.unwrap() {
+            println!("{} | {} | {}", jogo.jogo, jogo.modo, jogo.caminho);
+        }
+    }
 
     /// Instala no MiSTer da rede mantendo o token que já está lá (não pede um novo ao backend):
     /// `MISTER=192.168.0.23 MISTER_JOGADOR=ramonvalerio cargo test -- --ignored instalar_no_mister_da_rede --nocapture`.

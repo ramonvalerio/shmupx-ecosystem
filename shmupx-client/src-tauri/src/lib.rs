@@ -42,6 +42,8 @@ pub fn run() {
             steam::commands::mister_biblioteca,
             steam::commands::mister_usuarios,
             steam::commands::mister_conectar,
+            steam::commands::mister_jogos_do_jogador,
+            steam::commands::mister_iniciar,
             session::commands::definir_token_autenticacao,
             session::commands::limpar_token_autenticacao,
             session::commands::definir_sala_ativa,

@@ -12,6 +12,7 @@ import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import { readMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { openWatchWindow } from "./WatchWindow";
 import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
 import { useDialogFocus } from "./useDialogFocus";
@@ -19,6 +20,9 @@ import type { PlayOn } from "../types/room";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
+
+/** Nome comparável (sem acento, minúsculas, hífens): o menu do MiSTer usa o título do jogo. */
+const slug = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export interface RoomViewProps {
   room: GameRoom;
@@ -121,6 +125,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   /** Plataformas para escolher ao iniciar (o jogador tem o jogo em mais de uma). */
   const [choosing, setChoosing] = useState<PlayOn[] | null>(null);
   const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
+  /** Modos do jogo no menu ShmupX do MiSTer, para escolher qual abrir na TV. */
+  const [misterModes, setMisterModes] = useState<MisterMenuGame[] | null>(null);
+  const misterDialogRef = useDialogFocus(misterModes !== null, () => setMisterModes(null));
   /** Jogo desinstalado (ou sem o ROM) na plataforma escolhida. */
   const [notFound, setNotFound] = useState<PlayOn | null>(null);
   const notFoundDialogRef = useDialogFocus(notFound !== null, () => setNotFound(null));
@@ -144,6 +151,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     setLaunchError(null);
     setLaunchNotice(null);
     setChoosing(null);
+    setMisterModes(null);
     setNotFound(null);
     setIsLaunching(false);
     setIsStopping(false);
@@ -216,13 +224,43 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     void launchOn(options[0]);
   }
 
+  /** Abre o jogo no MiSTer pela rede (SSH): no menu ShmupX, com o jogador da conta e o modo. */
+  async function openOnMister(game?: MisterMenuGame) {
+    const player = readMisterPlayer();
+    if (!player) {
+      setLaunchError(t("Ligue seu MiSTer à conta em Importar jogos › MiSTer FPGA (Conectar ao meu MiSTer) para abrir o jogo nele."));
+      return;
+    }
+    setIsLaunching(true);
+    try {
+      let target = game;
+      if (!target) {
+        const games = await invoke<MisterMenuGame[]>("mister_jogos_do_jogador", { host: player.host, senha: player.password ?? null, username: player.username });
+        const names = new Set([slug(room.title), slug(room.id)]);
+        const modes = games.filter((g) => names.has(slug(g.jogo)));
+        if (modes.length === 0) {
+          setLaunchError(t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
+          return;
+        }
+        if (modes.length > 1) { setMisterModes(modes); return; }
+        target = modes[0];
+      }
+      setMisterModes(null);
+      await invoke("mister_iniciar", { host: player.host, senha: player.password ?? null, caminho: target.caminho });
+      setLaunchNotice(t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
+    } catch (error) {
+      setLaunchError(typeof error === "string" ? error : error instanceof Error ? error.message : "Falha ao abrir o jogo no MiSTer.");
+    } finally {
+      setIsLaunching(false);
+    }
+  }
+
   async function launchOn(platform: PlayOn) {
     setChoosing(null);
     setLaunchError(null);
     setLaunchNotice(null);
     if (platform === "mister") {
-      // O MiSTer é outro aparelho: a partida começa nele (a integração ShmupX do MiSTer grava a run).
-      setLaunchNotice(t("Inicie {game} no MiSTer. A partida entra no seu perfil pela integração ShmupX do MiSTer.", { game: room.title }));
+      await openOnMister();
       return;
     }
     setIsLaunching(true);
@@ -346,6 +384,27 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}
         {launchError && <p className="room-banner warning" role="alert">{t(launchError)}</p>}
         {launchNotice && <p className="room-banner" role="status">{launchNotice}</p>}
+        {misterModes && (
+          <div className="controller-dialog-backdrop">
+            <div ref={misterDialogRef} role="dialog" aria-modal="true" aria-labelledby="mister-mode-title" tabIndex={-1} className="controller-dialog close-room-dialog">
+              <header>
+                <div>
+                  <h2 id="mister-mode-title">{t("{game} no MiSTer", { game: room.title })}</h2>
+                  <p>{t("Escolha o modo. O jogo abre na TV, já com o seu jogador.")}</p>
+                </div>
+              </header>
+              <div className="controller-dialog-body choose-platform-list">
+                {misterModes.map((game) => (
+                  <button key={game.caminho} type="button" className="import-source-option" onClick={() => void openOnMister(game)}>
+                    <span className="platform-mark" aria-hidden="true">M</span>
+                    <span><strong>{game.modo}</strong><small>{game.jogo}</small></span>
+                  </button>
+                ))}
+              </div>
+              <footer><span /><button type="button" className="secondary-action" onClick={() => setMisterModes(null)}>{t("Cancelar")}</button></footer>
+            </div>
+          </div>
+        )}
         {notFound && (
           <div className="controller-dialog-backdrop">
             <div ref={notFoundDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="not-found-title" tabIndex={-1} className="controller-dialog close-room-dialog">
@@ -374,7 +433,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                 {PLAY_ON.filter((p) => choosing.includes(p.id)).map((p) => (
                   <button key={p.id} type="button" className="import-source-option" onClick={() => void launchOn(p.id)}>
                     <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
-                    <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : "Você inicia o jogo no próprio MiSTer")}</small></span>
+                    <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
                   </button>
                 ))}
               </div>

@@ -173,6 +173,20 @@ pub async fn mister_conectar(
     .await
 }
 
+/// Modos em que um jogador tem cada jogo no menu ShmupX do MiSTer (por SSH).
+#[tauri::command]
+pub async fn mister_jogos_do_jogador(host: String, senha: Option<String>, username: String) -> Result<Vec<super::mister_ssh::JogoNoMenu>, String> {
+    let senha = senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into());
+    super::mister_ssh::jogos_no_menu(host.trim(), &senha, &username).await
+}
+
+/// INICIAR JOGO › MiSTer: abre o jogo do menu ShmupX no MiSTer, já com o jogador e o modo.
+#[tauri::command]
+pub async fn mister_iniciar(host: String, senha: Option<String>, caminho: String) -> Result<(), String> {
+    let senha = senha.filter(|s| !s.is_empty()).unwrap_or_else(|| "1".into());
+    super::mister_ssh::abrir(host.trim(), &senha, &caminho).await
+}
+
 /// Jogos do MiSTer FPGA na rede (FTP, usuário root). `senha`: a do MiSTer, se não for a padrão.
 #[tauri::command]
 pub async fn mister_biblioteca(host: String, senha: Option<String>) -> Result<super::mister::BibliotecaMister, String> {
