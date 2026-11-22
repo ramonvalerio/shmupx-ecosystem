@@ -1,4 +1,4 @@
-# ShmupX Lite para Android (APK assinado). Só salas, chat e lives: não joga nem transmite. O APK
+# ShmupX Lite para Android (APK e AAB assinados). Só salas, chat e lives: não joga nem transmite. O APK
 # fica como artefato da execução; a publicação no site é manual (S3), como a dos instaladores.
 name: mobile-android
 
@@ -59,10 +59,12 @@ jobs:
           SHMUPX_BACKEND_URL: https://shmupx-backend-230979440400.us-central1.run.app
           VITE_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.VITE_GOOGLE_DESKTOP_CLIENT_ID }}
         run: |
-          npx tauri android build --apk --target aarch64 armv7
+          # APK para o site; AAB para a Google Play (mesma chave de upload).
+          npx tauri android build --apk --aab --target aarch64 armv7
           mkdir -p "$RUNNER_TEMP/out"
           versao=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "$RUNNER_TEMP/out/ShmupX-Lite-$versao.apk"
+          cp src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab "$RUNNER_TEMP/out/ShmupX-Lite-$versao.aab"
           ls -la "$RUNNER_TEMP/out"
 
       - uses: actions/upload-artifact@v4
