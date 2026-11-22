@@ -39,8 +39,8 @@ url = "2.5"
 tauri-plugin-process = "2"
 # Janela do sistema para escolher a pasta das gravações.
 tauri-plugin-dialog = "=2.8.4"
-# SSH em Rust puro (criptografia ring): instala o ShmupX no MiSTer pela rede.
-russh = { version = "=0.65.1", default-features = false, features = ["ring", "flate2", "rsa"] }
+# MiSTer FPGA pela rede (FTP e SSH), o mesmo código do ShmupX Lite.
+shmupx-mister-link = { path = "../../shmupx-mister-link" }
 
 # Captura da janela do jogo para a live (Windows Graphics Capture).
 [target.'cfg(windows)'.dependencies]

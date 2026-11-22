@@ -8,7 +8,7 @@ if [ -z "${VITE_GOOGLE_DESKTOP_CLIENT_ID:-}" ]; then
     echo "erro: VITE_GOOGLE_DESKTOP_CLIENT_ID não definida (shmupx/client no OpenBao)" >&2
     exit 1
 fi
-mkdir -p /work/shmupx-client /work/shmupx-lab/validators
+mkdir -p /work/shmupx-client /work/shmupx-lab/validators /work/shmupx-mister-link
 
 rsync -a --delete \
     --exclude node_modules --exclude target --exclude dist --exclude .venv --exclude .venv-build \
@@ -16,6 +16,8 @@ rsync -a --delete \
     /src/shmupx-client/ /work/shmupx-client/
 rsync -a --delete --exclude .venv --exclude .venv-build --exclude build --exclude dist \
     /src/shmupx-lab/validators/ /work/shmupx-lab/validators/
+# Código do MiSTer (FTP/SSH), compartilhado com o ShmupX Lite: dependência por caminho.
+rsync -a --delete --exclude target /src/shmupx-mister-link/ /work/shmupx-mister-link/
 
 # Motor de validação (PyInstaller). No Linux, o OpenCV "headless" (mesma API, sem depender de libGL).
 cd /work/shmupx-lab/validators
