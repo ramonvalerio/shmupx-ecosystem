@@ -27,15 +27,15 @@ function formatDuration(ms: number): string {
 interface RoomRankingViewProps {
   room: GameRoom;
   runs: SessionRun[];
-  onBack: () => void;
 }
 
 /**
  * Ranking do jogo, aberto na aba da sala. Local: runs deste jogo observadas nesta sessão (o
  * placar ainda não é exposto a esta tela). Online: `GET /api/ranking/jogos/{id}` do backend
- * (melhor placar de cada jogador no modo escolhido).
+ * (melhor placar de cada jogador no modo escolhido). Sem painel de título: o caminho no topo
+ * (Minhas coleções › jogo › Ranking) mostra onde se está e volta para a sala.
  */
-export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewProps) {
+export default function RoomRankingView({ room, runs }: RoomRankingViewProps) {
   const { t, locale } = useI18n();
   const [scope, setScope] = useState<Scope>("local");
   const [mode, setMode] = useState<Mode>("highscore");
@@ -76,13 +76,6 @@ export default function RoomRankingView({ room, runs, onBack }: RoomRankingViewP
 
   return (
     <section className="room-ranking" aria-label={t("Ranking de {game}", { game: room.title })}>
-      <header className="room-ranking-header">
-        <div>
-          <h1>{room.title}</h1>
-          <p>{t("RANKING DA SALA")}</p>
-        </div>
-        <button type="button" className="room-action" onClick={onBack}>{t("← Voltar para a sala")}</button>
-      </header>
 
       <div className="room-ranking-filters">
         <div className="filter-group">

@@ -14,7 +14,7 @@ export default function CreditsBadge({ uid, className = "", spin = 0, onPlay, pl
   onPlay?: () => void;
   playDisabled?: boolean;
   playTitle?: string;
-  /** Play Ranked com live: aparece o selo LIVE na chamada. */
+  /** Play Ranked com live (só muda o nome do botão para leitores de tela). */
   live?: boolean;
 }) {
   const { t } = useI18n();
@@ -36,9 +36,6 @@ export default function CreditsBadge({ uid, className = "", spin = 0, onPlay, pl
         : coin}
       <strong>{credits ?? "—"}</strong>
       <span className="credits-label">{t(credits === 1 ? "ficha" : "fichas")}</span>
-      {onPlay && !playDisabled && (
-        <span className="credits-cta" aria-hidden="true">{t("Insert coin")}{live && <span className="play-live-chip">{t("Live")}</span>}</span>
-      )}
     </div>
   );
 }

@@ -339,7 +339,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           {activeRoom === null ? (
             <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => openGame(id, true)} compact={false} bigPicture={bigPicture.active} />
           ) : rankingRoomIds.includes(activeRoom.id) ? (
-            <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} onBack={() => setRanking(activeRoom.id, false)} />
+            <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} />
           ) : (
             renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true), showCollection: () => setActiveRoomId(null) })
           )}
