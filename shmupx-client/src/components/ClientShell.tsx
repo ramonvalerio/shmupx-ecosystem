@@ -173,14 +173,16 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => { if (isTauri()) getVersion().then(setVersion).catch(() => {}); }, []);
 
-  // Menu de navegação no topo: "Minhas coleções" fixo; na sala, o jogo; no ranking do jogo, "Ranking".
+  // Menu de navegação no topo: "Minhas coleções" fixo; na sala, o jogo e o Ranking dele (sempre à
+  // mostra, para abrir o ranking dali). A tela atual fica marcada.
   function showCollection() { setSection("collection"); setActiveRoomId(null); }
   function showRoom(id: string) { setSection("collection"); setRanking(id, false); activateRoom(id); }
   const crumbRoom = isLibrary ? activeRoom : null;
-  const crumbs: { label: string; onClick?: () => void }[] = [{ label: t("Minhas coleções"), onClick: showCollection }];
+  const crumbs: { label: string; onClick: () => void; current: boolean }[] = [{ label: t("Minhas coleções"), onClick: showCollection, current: !crumbRoom }];
   if (crumbRoom) {
-    crumbs.push({ label: crumbRoom.title, onClick: () => showRoom(crumbRoom.id) });
-    if (rankingRoomIds.includes(crumbRoom.id)) crumbs.push({ label: t("Ranking") });
+    const inRanking = rankingRoomIds.includes(crumbRoom.id);
+    crumbs.push({ label: crumbRoom.title, onClick: () => showRoom(crumbRoom.id), current: !inRanking });
+    crumbs.push({ label: t("Ranking"), onClick: () => setRanking(crumbRoom.id, true), current: inRanking });
   }
 
   // Esc volta um nível no menu de navegação: Ranking → sala → Minhas coleções; telas internas
@@ -252,11 +254,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         <nav className="topbar-breadcrumb" aria-label={t("Você está em")}>
           <ol>
             {crumbs.map((crumb, index) => {
-              const last = index === crumbs.length - 1;
               return (
                 <li key={index}>
-                  {last || !crumb.onClick
-                    ? <span className="crumb" aria-current={last ? "page" : undefined} title={crumb.label}><span className="crumb-label">{crumb.label}</span></span>
+                  {crumb.current
+                    ? <span className="crumb" aria-current="page" title={crumb.label}><span className="crumb-label">{crumb.label}</span></span>
                     : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label}><span className="crumb-label">{crumb.label}</span></button>}
                 </li>
               );

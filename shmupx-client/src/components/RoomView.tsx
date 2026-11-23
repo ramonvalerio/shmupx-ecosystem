@@ -309,9 +309,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           <div className="room-header-side">
             <CreditsBadge uid={playerId} className="room-credits" />
             <div className="room-coin-actions">
-              <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>
-                <span className="action-icon is-star" aria-hidden="true">☆</span>{t("Ranking")}
-              </button>
               <button type="button" className="room-action primary" onClick={playRanked} disabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
                 title={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : undefined}>
                 <span className="action-icon is-play" aria-hidden="true" />{t("Play Ranked")}
