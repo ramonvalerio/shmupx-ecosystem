@@ -21,8 +21,43 @@ pub fn ip_local() -> Option<Ipv4Addr> {
     }
 }
 
-/// Por que este aparelho não alcançou o MiSTer em `host`, para a mensagem de erro: fora de uma rede
-/// local, numa sub-rede diferente da do MiSTer, ou na mesma (aí é o roteador ou o MiSTer).
+/// Espera da conferência rápida antes de falar com o MiSTer (em vez dos 12 s do SSH).
+const TEMPO_ALCANCE: Duration = Duration::from_millis(1500);
+
+/// Por que o MiSTer está fora de alcance, para a interface explicar com palavras simples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemConexao {
+    /// Este aparelho não está numa rede local.
+    SemRede,
+    /// Este aparelho e o MiSTer estão em redes diferentes.
+    OutraRede,
+    /// Mesma rede, mas o MiSTer não respondeu (desligado, fora da rede ou o roteador separa).
+    SemResposta,
+}
+
+fn classificar(host: &str) -> SemConexao {
+    let Some(proprio) = ip_local() else { return SemConexao::SemRede };
+    match host.trim().parse::<Ipv4Addr>() {
+        Ok(alvo) if alvo.octets()[..3] != proprio.octets()[..3] => SemConexao::OutraRede,
+        _ => SemConexao::SemResposta,
+    }
+}
+
+/// Conferência rápida (1,5 s) se o MiSTer em `host` responde na rede, antes de abrir um jogo.
+pub async fn alcance(host: &str) -> Result<(), SemConexao> {
+    let host = host.trim();
+    if host.is_empty() {
+        return Err(SemConexao::SemResposta);
+    }
+    match tokio::time::timeout(TEMPO_ALCANCE, TcpStream::connect((host, 22))).await {
+        Ok(Ok(_)) => Ok(()),
+        _ => Err(classificar(host)),
+    }
+}
+
+/// Por que este aparelho não alcançou o MiSTer em `host`, para o log: fora de uma rede local, numa
+/// sub-rede diferente da do MiSTer, ou na mesma (aí é o roteador ou o MiSTer).
 pub fn motivo_sem_conexao(host: &str) -> String {
     let Some(proprio) = ip_local() else {
         return "este aparelho não está numa rede Wi-Fi local; ligue o Wi-Fi da mesma rede do MiSTer".into();

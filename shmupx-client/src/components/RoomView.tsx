@@ -221,6 +221,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   /** Play Live Ranked na plataforma escolhida: a Steam a live abre sozinha; o emulador abre antes. */
   async function startLive(platform: PlayOn) {
     setLiveError(null);
+    if (!(await launcher.ensureInstalled(platform))) return;
     try {
       if (platform === "emulator") {
         await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });

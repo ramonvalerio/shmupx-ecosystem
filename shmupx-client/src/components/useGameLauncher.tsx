@@ -7,7 +7,9 @@ import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { tableRomsFor } from "../data/emulatorRoms";
 import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
-import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
+import { PLAY_ON, installCheck, usePlatformOwnership } from "../data/platforms";
+import { checkMister, logFailure } from "../data/launchFailure";
+import { LaunchProblemDialog, type LaunchProblemKind } from "./LaunchProblemDialog";
 import { useDialogFocus } from "./useDialogFocus";
 import { getAccountPlaying, playingWhere, setClientMisterGame } from "../data/playing";
 
@@ -16,8 +18,6 @@ const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 
 
 /** Nome comparável (sem acento, minúsculas, hífens): o menu do MiSTer usa o título do jogo. */
 const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-const describe = (error: unknown, fallback: string) => typeof error === "string" ? error : error instanceof Error ? error.message : fallback;
 
 /**
  * Abrir o jogo (INICIAR JOGO e MODO TREINO), usado pela sala e pelo painel da coleção: escolhe a
@@ -50,16 +50,15 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
   /** Ligar o MiSTer na hora (IP e jogador), quando o jogador escolhe MiSTer sem ter conectado. */
   const [linking, setLinking] = useState<{ host: string; players: string[] | null; busy: boolean; error: string | null } | null>(null);
   const linkDialogRef = useDialogFocus(linking !== null, () => setLinking(null));
-  /** Jogo desinstalado (ou sem o ROM) na plataforma escolhida. */
-  const [notFound, setNotFound] = useState<PlayOn | null>(null);
-  const notFoundDialogRef = useDialogFocus(notFound !== null, () => setNotFound(null));
+  /** O jogo não abriu (MiSTer fora da rede, jogo desinstalado, ROM faltando…): aviso simples. */
+  const [problem, setProblem] = useState<{ kind: LaunchProblemKind; retry?: () => void } | null>(null);
 
   useEffect(() => {
     setError(null);
     setNotice(null);
     setChoosing(null);
     setMisterModes(null);
-    setNotFound(null);
+    setProblem(null);
     setMode(null);
     setIsLaunching(false);
     setMisterGame(null);
@@ -144,7 +143,10 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       return;
     }
     setIsLaunching(true);
+    const retry = () => void openOnMister(game, forPractice, chosenMode);
     try {
+      const reach = await checkMister(player.host);
+      if (reach) { setProblem({ kind: `mister-${reach}`, retry }); return; }
       let target = game;
       if (!target) {
         // Treino no MiSTer: pelo CONVIDADO (sem token), sem ficha e sem ranking online.
@@ -153,9 +155,8 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         const names = new Set([slug(room.title), slug(room.id)]);
         const modes = games.filter((g) => names.has(slug(g.jogo)));
         if (modes.length === 0) {
-          setError(forPractice
-            ? t("O jogador CONVIDADO do seu MiSTer não tem {game}. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title })
-            : t("{game} não está no menu ShmupX do seu MiSTer. Conecte o MiSTer de novo em Importar jogos para atualizar o menu.", { game: room.title }));
+          logFailure("mister", `${room.title} não está no menu ShmupX de ${username} em ${player.host}`);
+          setProblem({ kind: "mister-not-in-menu" });
           return;
         }
         // Entrada do menu do modo escolhido no Play; sem uma só que bata, o jogador escolhe.
@@ -172,7 +173,8 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         ? t("Modo treino: abrindo {game} no MiSTer ({mode}) como CONVIDADO, sem gastar ficha nem ir para o ranking online.", { game: room.title, mode: target.modo })
         : t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
     } catch (failure) {
-      setError(describe(failure, "Falha ao abrir o jogo no MiSTer."));
+      logFailure("mister", failure);
+      setProblem({ kind: "mister-failed", retry });
     } finally {
       setIsLaunching(false);
     }
@@ -180,11 +182,21 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
 
   async function loadMisterPlayers(host: string) {
     setLinking({ host, players: null, busy: true, error: null });
+    const reach = await checkMister(host.trim());
+    if (reach) {
+      setLinking({ host, players: null, busy: false, error: reach === "outra_rede"
+        ? t("Este computador e o MiSTer estão em redes diferentes. Conecte os dois à mesma internet de casa.")
+        : reach === "sem_rede"
+          ? t("Este computador está sem internet. Conecte-o à internet de casa e tente de novo.")
+          : t("O MiSTer não respondeu. Confira o endereço e se ele está ligado e conectado à internet de casa.") });
+      return;
+    }
     try {
       const players = await invoke<string[]>("mister_usuarios", { host: host.trim(), ...misterAuth() });
       setLinking({ host, players, busy: false, error: players.length ? null : t("Nenhum jogador no shmupx.ini desse MiSTer. Use Conectar ao meu MiSTer em Importar jogos para instalar o ShmupX nele.") });
     } catch (failure) {
-      setLinking({ host, players: null, busy: false, error: describe(failure, "Não foi possível ler o MiSTer.") });
+      logFailure("mister", failure);
+      setLinking({ host, players: null, busy: false, error: t("Não foi possível ler o MiSTer. Confira o endereço e tente de novo.") });
     }
   }
 
@@ -208,10 +220,25 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       setMisterGame(null);
       setClientMisterGame(null);
     } catch (failure) {
-      setError(describe(failure, "Não foi possível parar o jogo no MiSTer."));
+      logFailure("mister", failure);
+      const reach = await checkMister(misterGame.host);
+      setProblem({ kind: reach ? `mister-${reach}` : "mister-stop-failed", retry: () => void stopMister() });
     } finally {
       setIsStopping(false);
     }
+  }
+
+  /**
+   * Confere se o jogo está instalado (Steam) ou com o ROM no Fightcade (emulador) antes de abrir;
+   * se não, mostra o aviso do que falta. Usado também pela live da sala.
+   */
+  async function ensureInstalled(platform: PlayOn, retry?: () => void): Promise<boolean> {
+    if (platform === "mister") return true;
+    const check = await installCheck(room, platform);
+    if (check === "ok") return true;
+    logFailure(platform === "steam" ? "steam" : "emulador", `${room.title}: ${check === "no-app" ? (platform === "steam" ? "Steam não encontrada" : "Fightcade não encontrado") : "jogo/ROM não encontrado"}`);
+    setProblem({ kind: platform === "steam" ? (check === "no-app" ? "steam-app-missing" : "steam-missing") : (check === "no-app" ? "fightcade-missing" : "rom-missing"), retry });
+    return false;
   }
 
   async function launchOn(platform: PlayOn, forPractice = practice, chosenMode: GameMode | null = mode) {
@@ -223,8 +250,9 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       return;
     }
     setIsLaunching(true);
+    const retry = () => void launchOn(platform, forPractice, chosenMode);
     try {
-      if (!(await stillInstalled(room, platform))) { setNotFound(platform); return; }
+      if (!(await ensureInstalled(platform, retry))) return;
       if (platform === "steam") {
         if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
@@ -233,7 +261,8 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       }
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gravar run nem gastar ficha.", { game: room.title }));
     } catch (failure) {
-      setError(describe(failure, "Falha ao iniciar o jogo."));
+      logFailure(platform === "steam" ? "steam" : "emulador", failure);
+      setProblem({ kind: "launch-failed", retry });
     } finally {
       setIsLaunching(false);
     }
@@ -289,21 +318,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         </div>
       </div>
     )}
-    {notFound && (
-      <div className="controller-dialog-backdrop">
-        <div ref={notFoundDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="not-found-title" tabIndex={-1} className="controller-dialog close-room-dialog">
-          <header>
-            <div>
-              <h2 id="not-found-title">{t("Jogo não encontrado")}</h2>
-              <p>{notFound === "steam"
-                ? t("{game} não está instalado na Steam deste computador. Instale o jogo na Steam e tente de novo.", { game: room.title })
-                : t("O ROM de {game} não está no Fightcade deste computador. Baixe o jogo pelo Fightcade e tente de novo.", { game: room.title })}</p>
-            </div>
-          </header>
-          <footer><span /><button type="button" className="primary-action" onClick={() => setNotFound(null)}>{t("Entendi")}</button></footer>
-        </div>
-      </div>
-    )}
+    {problem && <LaunchProblemDialog kind={problem.kind} game={room.title} onRetry={problem.retry} onClose={() => setProblem(null)} />}
     {choosing && (
       <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setChoosing(null); }}>
         <div ref={chooseDialogRef} role="dialog" aria-modal="true" aria-labelledby="choose-platform-title" tabIndex={-1} className="controller-dialog close-room-dialog play-dialog">
@@ -352,7 +367,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
   </>;
 
   return {
-    start, play, playNow, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister,
+    start, play, playNow, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister, ensureInstalled,
     /** Plataformas em que dá para abrir o jogo por aqui, e se o jogador já tem o jogo nela. */
     platforms: options(),
     owns: (platform: PlayOn) => playable.owns(room, platform),

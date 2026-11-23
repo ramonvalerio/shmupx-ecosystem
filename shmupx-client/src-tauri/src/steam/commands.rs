@@ -126,7 +126,8 @@ struct EmuladorAbertoPayload {
 pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>) -> Result<(), String> {
     let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms))
         .await
-        .map_err(|e| e.to_string())??;
+        .map_err(|e| e.to_string())?
+        .inspect_err(|e| log::warn!("emulador: {e}"))?;
     let treino = treino.unwrap_or(false);
     let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
     if treino {
@@ -197,21 +198,38 @@ pub async fn mister_conectar(
 #[tauri::command]
 pub async fn mister_jogos_do_jogador(host: String, usuario: Option<String>, senha: Option<String>, username: String) -> Result<Vec<super::mister_ssh::JogoNoMenu>, String> {
     let (usuario, senha) = acesso(&usuario, &senha);
-    super::mister_ssh::jogos_no_menu(host.trim(), &usuario, &senha, &username).await
+    super::mister_ssh::jogos_no_menu(host.trim(), &usuario, &senha, &username).await.inspect_err(|e| log::warn!("mister: menu do jogador em {host}: {e}"))
 }
 
 /// PARAR JOGO › MiSTer: volta o MiSTer ao menu; o agente registra a partida (com o placar).
 #[tauri::command]
 pub async fn mister_parar(host: String, usuario: Option<String>, senha: Option<String>) -> Result<(), String> {
     let (usuario, senha) = acesso(&usuario, &senha);
-    super::mister_ssh::voltar_ao_menu(host.trim(), &usuario, &senha).await
+    super::mister_ssh::voltar_ao_menu(host.trim(), &usuario, &senha).await.inspect_err(|e| log::warn!("mister: parar o jogo em {host}: {e}"))
 }
 
 /// INICIAR JOGO › MiSTer: abre o jogo do menu ShmupX no MiSTer, já com o jogador e o modo.
 #[tauri::command]
 pub async fn mister_iniciar(host: String, usuario: Option<String>, senha: Option<String>, caminho: String) -> Result<(), String> {
     let (usuario, senha) = acesso(&usuario, &senha);
-    super::mister_ssh::abrir(host.trim(), &usuario, &senha, &caminho).await
+    super::mister_ssh::abrir(host.trim(), &usuario, &senha, &caminho).await.inspect_err(|e| log::warn!("mister: abrir {caminho} em {host}: {e}"))
+}
+
+/// Falha vista pela interface (abrir o jogo, ler a biblioteca…): o detalhe técnico fica no log do
+/// sistema, e o jogador vê só a explicação simples.
+#[tauri::command]
+pub fn registrar_falha(origem: String, detalhe: String) {
+    let detalhe: String = detalhe.chars().take(2000).collect();
+    log::warn!("{}: {detalhe}", origem.chars().take(60).collect::<String>());
+}
+
+/// Conferência rápida (1,5 s) se o MiSTer responde na rede, antes de abrir ou parar um jogo nele.
+/// `None` = respondeu; senão, o motivo para a interface (o detalhe técnico vai para o log).
+#[tauri::command]
+pub async fn mister_alcance(host: String) -> Option<shmupx_mister_link::descoberta::SemConexao> {
+    let motivo = shmupx_mister_link::descoberta::alcance(&host).await.err()?;
+    log::warn!("mister: {} fora de alcance ({motivo:?}): {}", host.trim(), shmupx_mister_link::descoberta::motivo_sem_conexao(&host));
+    Some(motivo)
 }
 
 /// Procura o MiSTer na rede local (SSH com o usuário e a senha, padrão `root` / `1`).

@@ -447,3 +447,14 @@
 .navigation-rail .rail-avatar { width: 46px; height: 46px; margin: 14px 0 16px; }
 .navigation-rail .rail-status { right: -2px; bottom: -2px; width: 14px; height: 14px; border-width: 2px; }
 .profile-menu, .navigation-rail .notification-panel { left: 88px; }
+
+/* Caminho no topo com o mesmo tamanho do título do jogo na sala (24px). */
+.topbar-breadcrumb .crumb { font-size: 24px; letter-spacing: .06em; max-width: 480px; }
+@media (max-width: 700px) { .topbar-breadcrumb .crumb { font-size: 16px; max-width: 200px; } }
+
+/* Aviso de jogo que não abriu: o que houve e os passos para resolver. */
+.launch-problem-dialog { width: min(500px, 100%); }
+.launch-problem-steps { list-style: decimal; display: grid; gap: 8px; margin: 2px 22px 18px; padding-left: 20px; color: #cfe3ea; font-size: 13.5px; line-height: 1.45; }
+.launch-problem-steps li::marker { color: #57fcff; font-weight: 700; }
+.theme-light .launch-problem-steps { color: #10233f; }
+.theme-light .launch-problem-steps li::marker { color: #1f6feb; }

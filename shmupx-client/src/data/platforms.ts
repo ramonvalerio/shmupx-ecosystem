@@ -56,22 +56,30 @@ export function usePlatformOwnership() {
  * volta ao preto e branco na coleção. O MiSTer é outro aparelho: não é conferido aqui.
  */
 export async function stillInstalled(room: GameRoom, platform: PlayOn): Promise<boolean> {
+  return (await installCheck(room, platform)) === "ok";
+}
+
+/**
+ * Como `stillInstalled`, dizendo o que falta: `no-app` = a Steam ou o Fightcade não estão neste PC;
+ * `missing` = o jogo (ou o ROM) não está neles.
+ */
+export async function installCheck(room: GameRoom, platform: PlayOn): Promise<"ok" | "missing" | "no-app"> {
   if (platform === "steam") {
     const result = await scanSteam();
-    if (!result.found) return false;
+    if (!result.found) return "no-app";
     const installed = result.games.filter((g) => g.installed).map((g) => g.app_id);
     // Só regrava se a Steam já estava importada (iniciar não conecta a biblioteca sozinho).
     if (localStorageHas("shmupx.client.steamLibrary.v1")) saveSteamLibrary(installed, result.games.length);
-    return installed.includes(room.steamAppId);
+    return installed.includes(room.steamAppId) ? "ok" : "missing";
   }
   if (platform === "emulator") {
     const current = readEmulatorLibrary();
     const result = await scanEmulator(current?.root || undefined);
-    if (!result.found) return false;
+    if (!result.found) return "no-app";
     if (current) saveEmulatorLibrary({ root: result.root ?? current.root, roms: result.roms, importedAt: Date.now() });
-    return romsFor(room).some((rom) => result.roms.includes(rom));
+    return romsFor(room).some((rom) => result.roms.includes(rom)) ? "ok" : "missing";
   }
-  return true;
+  return "ok";
 }
 
 function localStorageHas(key: string) {

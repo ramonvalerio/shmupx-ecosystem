@@ -51,6 +51,8 @@ pub fn run() {
             steam::commands::mister_conectar,
             steam::commands::mister_jogos_do_jogador,
             steam::commands::mister_iniciar,
+            steam::commands::mister_alcance,
+            steam::commands::registrar_falha,
             steam::commands::mister_parar,
             steam::commands::mister_sincronizar_menu,
             steam::trailer::steam_trailer,
@@ -82,13 +84,14 @@ pub fn run() {
             live::commands::live_abrir,
         ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Log do sistema (arquivo na pasta de logs do app): os detalhes técnicos das falhas ficam
+            // aqui, e a interface mostra ao jogador só o que ele pode fazer. Na versão instalada, só
+            // avisos e erros.
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(if cfg!(debug_assertions) { log::LevelFilter::Info } else { log::LevelFilter::Warn })
+                    .build(),
+            )?;
 
             capture::ffmpeg::usar_empacotado(app.path().resource_dir().ok());
             input::spawn_listener(app.handle().clone());
