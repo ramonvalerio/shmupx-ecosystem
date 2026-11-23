@@ -174,11 +174,12 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   useEffect(() => { if (isTauri()) getVersion().then(setVersion).catch(() => {}); }, []);
 
   // Menu de navegação no topo: "Minhas coleções" fixo; na sala, o jogo e o Ranking dele (sempre à
-  // mostra, para abrir o ranking dali). A tela atual fica marcada.
+  // mostra, para abrir o ranking dali). A tela atual fica marcada; em outras telas (notificações,
+  // perfil…) Minhas coleções é um botão de volta.
   function showCollection() { setSection("collection"); setActiveRoomId(null); }
   function showRoom(id: string) { setSection("collection"); setRanking(id, false); activateRoom(id); }
   const crumbRoom = isLibrary ? activeRoom : null;
-  const crumbs: { label: string; onClick: () => void; current: boolean }[] = [{ label: t("Minhas coleções"), onClick: showCollection, current: !crumbRoom }];
+  const crumbs: { label: string; onClick: () => void; current: boolean }[] = [{ label: t("Minhas coleções"), onClick: showCollection, current: isLibrary && !crumbRoom }];
   if (crumbRoom) {
     const inRanking = rankingRoomIds.includes(crumbRoom.id);
     crumbs.push({ label: crumbRoom.title, onClick: () => showRoom(crumbRoom.id), current: !inRanking });
