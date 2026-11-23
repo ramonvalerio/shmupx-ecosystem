@@ -36,9 +36,6 @@ const SCREEN = {
   tate: { x: 102, y: 47, width: 116, height: 155, rx: 6 },
 };
 
-/** O vídeo volta ao início aos 30 s: a tela do gabinete é um "attract mode" curto. */
-const LOOP_SECONDS = 30;
-
 function SpeakerIcon({ silent }: { silent: boolean }) {
   return (
     <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -63,8 +60,6 @@ function CabinetVideo({ src, paused, resume, onFail, onExpand }: { src: string; 
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const updateRef = useRef<() => void>(() => undefined);
-  // Fim do trecho em loop: 30 s; ao voltar da modal depois disso, segue mais 30 s dali antes de recomeçar.
-  const loopEndRef = useRef(LOOP_SECONDS);
 
   useEffect(() => {
     const video = ref.current;
@@ -105,20 +100,14 @@ function CabinetVideo({ src, paused, resume, onFail, onExpand }: { src: string; 
     const video = ref.current;
     if (!video || !resume) return;
     video.currentTime = resume.time;
-    loopEndRef.current = Math.max(LOOP_SECONDS, resume.time + LOOP_SECONDS);
   }, [resume]);
   useEffect(() => updateRef.current(), [paused]);
 
   const expand = () => onExpand(ref.current?.currentTime ?? 0);
   return (
     <div className="cabinet-video" onDoubleClick={expand} title={t("Duplo clique para ver o vídeo grande")}>
-      <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail}
-        onTimeUpdate={(event) => {
-          if (event.currentTarget.currentTime < loopEndRef.current) return;
-          event.currentTarget.currentTime = 0;
-          loopEndRef.current = LOOP_SECONDS;
-        }}
-        onEnded={() => { loopEndRef.current = LOOP_SECONDS; }} />
+      {/* O trailer inteiro, recomeçando ao terminar. */}
+      <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail} />
       <div className="cabinet-controls" onDoubleClick={(event) => event.stopPropagation()}>
         <button type="button" className="cabinet-control" aria-label={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")} title={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")}
           onClick={() => { if (blocked) { setBlocked(false); setCabinetMuted(false); } else setCabinetMuted(!muted); }}>
