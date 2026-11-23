@@ -196,9 +196,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const { mode, platform } = play;
   // Coming soon (sem script de validação): só treino; ranked e live ranked esperam o script.
   const comingSoon = !isSupported(room);
-  // Abre direto: na plataforma marcada ou, sem nenhuma (jogo ainda não importado), na primeira dele.
-  const target = platform ?? launcher.platforms[0] ?? null;
-  const playTraining = () => (target ? launcher.playNow("training", target, mode) : launcher.play("training"));
 
   // INICIAR JOGO vira PARAR JOGO (vermelho) com o jogo aberto: run no PC (encerra a gravação e
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
@@ -243,16 +240,14 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               </div>
             </div>
             <PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} />
-            <div className="game-room-actions">
-              {gameOpen || stopping
-                ? <button type="button" className="room-action stop stop-action" onClick={stopGame ?? undefined} disabled={stopping || !stopGame}>
-                    <span className="action-icon is-square" aria-hidden="true" />{t(stopping ? "Encerrando o jogo…" : "Parar jogo")}
-                  </button>
-                : <button type="button" className="room-action practice-action" onClick={playTraining} disabled={launcher.isLaunching || liveOn}
-                    title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
-                    <span className="action-icon is-play-outline" aria-hidden="true" />{t(launcher.isLaunching ? "Abrindo o jogo…" : "Play Training")}
-                  </button>}
-            </div>
+            {/* Jogar é pela ficha (Training ou Ranked); aqui só o Parar jogo, com um jogo aberto. */}
+            {(gameOpen || stopping) && (
+              <div className="game-room-actions">
+                <button type="button" className="room-action stop stop-action" onClick={stopGame ?? undefined} disabled={stopping || !stopGame}>
+                  <span className="action-icon is-square" aria-hidden="true" />{t(stopping ? "Encerrando o jogo…" : "Parar jogo")}
+                </button>
+              </div>
+            )}
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
