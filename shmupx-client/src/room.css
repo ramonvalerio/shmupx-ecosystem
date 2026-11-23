@@ -554,3 +554,19 @@
 .room-header-side.is-compact .room-credits .credits-coin { width: 132px; height: 132px; }
 .room-header-side.is-compact .room-credits strong { font-size: 46px; }
 .room-header-side.is-compact .room-coin-actions { width: 100%; }
+
+/* Depois da ficha: Training Mode (grátis, sem ranking) ou Ranked Mode (1 ficha), lado a lado. */
+.play-mode-dialog { width: min(560px, 100%); }
+.play-mode-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 20px 22px; }
+.play-mode-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-recessed); color: inherit; text-align: left; cursor: pointer; transition: border-color .12s, background .12s; }
+.play-mode-choice strong { display: flex; align-items: center; gap: 8px; font-size: 17px; letter-spacing: .04em; text-transform: uppercase; color: #57fcff; }
+.play-mode-choice small { font-size: 12px; line-height: 1.45; color: #a8c1cc; }
+.play-mode-cost { padding: 2px 8px; border: 1px solid #57fcff59; border-radius: 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #57fcff; }
+.play-mode-choice:hover:not(:disabled), .play-mode-choice:focus-visible { border-color: var(--cyan); background: #57fcff12; outline: none; }
+.play-mode-choice.is-ranked strong { color: #ffd76a; }
+.play-mode-choice.is-ranked .play-mode-cost { border-color: #f2c14e80; color: #ffd76a; }
+.play-mode-choice.is-ranked:hover:not(:disabled), .play-mode-choice.is-ranked:focus-visible { border-color: #f2c14e; background: #f2c14e14; }
+.play-mode-choice:disabled { opacity: .5; cursor: not-allowed; }
+.theme-light .play-mode-choice strong { color: #0b4fb8; }
+.theme-light .play-mode-choice small { color: #475569; }
+@media (max-width: 560px) { .play-mode-choices { grid-template-columns: 1fr; } }
