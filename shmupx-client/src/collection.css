@@ -62,6 +62,9 @@
 .collection-details > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-left: 12px; border-left: 3px solid var(--cyan); }
 .collection-details h2 { margin: 0; font-size: 19px; font-weight: 600; color: #f0fcff; text-transform: uppercase; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collection-details > header .favorite-action { position: static; transform: none; border: 0; background: transparent; font-size: 20px; color: #d7e4e8; }
+/* Estrela dos favoritos: amarela quando marcada (e no hover), no card e no painel; vence a cor clara padrão acima. */
+.collection-layout .collection-card > .favorite-action:is(.is-favorite, :hover),
+.collection-details > header .favorite-action:is(.is-favorite, :hover) { color: #f2c14e; }
 .arcade-cabinet { display: block; flex-shrink: 0; width: 100%; max-width: 300px; margin: 4px auto 0; }
 .arcade-cabinet-label { fill: #c9d3d8; font-size: 6px; letter-spacing: .1em; }
 .collection-facts { display: flex; flex-direction: column; gap: 9px; margin: 0; font-size: 12px; }
