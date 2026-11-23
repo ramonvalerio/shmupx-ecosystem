@@ -36,6 +36,6 @@
 .theme-light :is(.room-ranking-row.is-head, .rank-position, .empty-state, .gameplay-placeholder) { color: #475569; }
 
 /* Mais ajustes achados na revisão das telas. */
-.theme-light .collection-layout .unsupported { color: #f2c14e; }
+.theme-light .collection-layout .coming-soon { color: #f2c14e; }
 .theme-light .integration-icon { color: #b4232c; }
 .theme-light .capture-source-preview span:last-child { color: #475569; }

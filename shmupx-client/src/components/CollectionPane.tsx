@@ -12,7 +12,10 @@ import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 // Scripts de validação que o instalador leva (só os aprovados no Lab): o mesmo arquivo do build.
 import scriptsAceitos from "../../src-tauri/scripts-aceitos.json";
 
-/** Suportado: o Client tem o script de validação do jogo, então a run é validada e entra no ranking. */
+/**
+ * O Client tem o script de validação do jogo (a run é validada e entra no ranking). Sem ele, o jogo
+ * aparece como Coming soon.
+ */
 const SUPPORTED = new Set(scriptsAceitos.map((script) => script.game));
 export const isSupported = (room: GameRoom) => SUPPORTED.has(room.id);
 
@@ -36,12 +39,17 @@ function PlatformTags({ tags }: { tags: PlatformTag[] }) {
     </span>
   );
 }
-const PLATFORM_FILTERS = [
-  { id: "all", label: "Todas" },
+type PlatformFilter = "emulator" | "mister" | "steam" | "soon";
+const PLATFORM_FILTERS: { id: PlatformFilter; label: string }[] = [
   { id: "emulator", label: "Emulador" },
   { id: "mister", label: "MiSTer" },
   { id: "steam", label: "Steam" },
-  { id: "unsupported", label: "Não suportados" },
+  { id: "soon", label: "Coming soon" },
+];
+type LibraryFilter = "owned" | "missing";
+const LIBRARY_FILTERS: { id: LibraryFilter; label: string }[] = [
+  { id: "owned", label: "Na biblioteca" },
+  { id: "missing", label: "Não tenho ainda" },
 ];
 
 const SORTS: { id: CollectionPreferences["sort"]; label: string }[] = [
@@ -53,6 +61,25 @@ const SORTS: { id: CollectionPreferences["sort"]; label: string }[] = [
 const RUN_STATUS: Record<SessionRun["status"], string> = {
   recording: "Gravando", analyzing: "Em análise", submitted: "Enviada", expired: "Tempo esgotado", failed: "Não enviada",
 };
+
+/**
+ * Filtro de seleção múltipla. "Todas/Todos" fica marcado com todas as opções marcadas; clicar nele
+ * marca todas (ou desmarca todas, se já estavam). Desmarcar uma opção desmarca o "Todas".
+ */
+function MultiSegmented<T extends string>({ label, allLabel, value, options, onChange }: { label: string; allLabel: string; value: T[]; options: { id: T; label: string }[]; onChange: (ids: T[]) => void }) {
+  const { t } = useI18n();
+  const all = options.every((option) => value.includes(option.id));
+  const toggle = (id: T) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id]);
+  return (
+    <div className="collection-segment">
+      <span>{t(label)}</span>
+      <div role="group" aria-label={t(label)}>
+        <button type="button" aria-pressed={all} onClick={() => onChange(all ? [] : options.map((option) => option.id))}>{t(allLabel)}</button>
+        {options.map((option) => <button type="button" key={option.id} aria-pressed={value.includes(option.id)} onClick={() => toggle(option.id)}>{t(option.label)}</button>)}
+      </div>
+    </div>
+  );
+}
 
 function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; label: string }[]; onChange: (id: T) => void }) {
   const { t } = useI18n();
@@ -66,12 +93,10 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
   );
 }
 
-/** Selo de compatibilidade: validado pelo Client ou ainda não (a run não entra no ranking). */
-function SupportBadge({ room }: { room: GameRoom }) {
+/** Jogo ainda sem script de validação: as runs dele ainda não entram no ranking. */
+function ComingSoonBadge({ room }: { room: GameRoom }) {
   const { t } = useI18n();
-  return isSupported(room)
-    ? <span className="supported">✓ {t("Suportado")}</span>
-    : <span className="unsupported" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Não suportado")}</span>;
+  return isSupported(room) ? null : <span className="coming-soon" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Coming soon")}</span>;
 }
 
 /** MODO TREINO no painel: abre o jogo sem gravar run nem gastar ficha (as mesmas regras da sala). */
@@ -105,12 +130,12 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   const { t, locale } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
   const [query, setQuery] = useState("");
-  const [platform, setPlatform] = useState("all");
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter[]>(() => PLATFORM_FILTERS.map((option) => option.id));
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
   const playable = usePlatformOwnership();
-  const [ownedOnly, setOwnedOnly] = useState<"all" | "owned">("all");
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter[]>(() => LIBRARY_FILTERS.map((option) => option.id));
   const [refreshing, setRefreshing] = useState(false);
   /** O jogador tem o jogo em alguma plataforma (Steam, emulador ou MiSTer)? */
   const inLibrary = (room: GameRoom) => playable.tags(room).some((tag) => tag.owned);
@@ -120,17 +145,24 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   }
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(preferences)); setStorageError(false); } catch { setStorageError(true); } }, [preferences]);
 
-  // Só as plataformas que existem no catálogo viram filtro.
-  // Filtro por origem: Steam ou emulador (arcade, Neo Geo, consoles… tudo o que não é Steam).
-  const platforms = PLATFORM_FILTERS;
-  const visible = selectCollection(rooms, runs, preferences, query, "all")
-    .filter((room) => platform === "all" || (platform === "unsupported" ? !isSupported(room) : playable.tags(room).some((tag) => tag.id === platform)))
-    .filter((room) => ownedOnly === "all" || inLibrary(room) === true);
+  // Plataformas marcadas: os jogos que rodam em alguma delas. Coming soon soma os jogos ainda sem
+  // script de validação (sozinho, mostra só eles). Biblioteca: os que tenho e/ou os que não tenho.
+  const platformIds = platformFilter.filter((id): id is Exclude<PlatformFilter, "soon"> => id !== "soon");
+  const soon = platformFilter.includes("soon");
+  const showPlatform = (room: GameRoom) => platformIds.length === 0
+    ? soon && !isSupported(room)
+    : (soon || isSupported(room)) && playable.tags(room).some((tag) => (platformIds as string[]).includes(tag.id));
+  const showLibrary = (room: GameRoom) => !playable.anyLibrary || libraryFilter.includes(inLibrary(room) ? "owned" : "missing");
+  const visible = selectCollection(rooms, runs, preferences, query, "all").filter((room) => showPlatform(room) && showLibrary(room));
   const selected = rooms.find((room) => room.id === selectedRoomId) ?? null;
   const selectionHidden = selected && !visible.some((room) => room.id === selected.id);
   const view = bigPicture ? "grid" : preferences.view;
   const toggleFavorite = (id: string) => setPreferences((current) => ({ ...current, favorites: current.favorites.includes(id) ? current.favorites.filter((f) => f !== id) : [...current.favorites, id] }));
-  function resetFilters() { setQuery(""); setPlatform("all"); }
+  function resetFilters() {
+    setQuery("");
+    setPlatformFilter(PLATFORM_FILTERS.map((option) => option.id));
+    setLibraryFilter(LIBRARY_FILTERS.map((option) => option.id));
+  }
 
   const selectedRuns = selected ? runs.filter((run) => run.gameId === selected.id).sort((a, b) => b.startedAt - a.startedAt) : [];
   const lastRun = selectedRuns[0];
@@ -146,14 +178,14 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <span aria-hidden="true">⌕</span>
         </label>
         <button type="button" className="collection-import" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
-        <Segmented label="Plataforma" value={platform} options={platforms} onChange={setPlatform} />
-        {playable.anyLibrary && <Segmented label="Biblioteca" value={ownedOnly} options={[{ id: "all", label: "Todos" }, { id: "owned", label: "Na biblioteca" }]} onChange={setOwnedOnly} />}
+        <MultiSegmented label="Plataforma" allLabel="Todas" value={platformFilter} options={PLATFORM_FILTERS} onChange={setPlatformFilter} />
+        {playable.anyLibrary && <MultiSegmented label="Biblioteca" allLabel="Todos" value={libraryFilter} options={LIBRARY_FILTERS} onChange={setLibraryFilter} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
-        {!bigPicture && <div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
+        {!bigPicture && <div className="collection-segment"><span>{t("Visualização")}</span><div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>
           <button type="button" aria-pressed={view === "grid"} aria-label={t("Grade")} onClick={() => setPreferences((current) => ({ ...current, view: "grid" }))}>▦</button>
           <button type="button" aria-pressed={view === "list"} aria-label={t("Lista")} onClick={() => setPreferences((current) => ({ ...current, view: "list" }))}>☰</button>
-        </div>}
+        </div></div>}
       </div>
 
       {selectionHidden && <p className="selection-notice">{selected.title} {t(" continua selecionado no painel de detalhes, mas está fora do filtro atual. ")}<button className="text-action" onClick={resetFilters}>{t("Limpar filtros")}</button></p>}
@@ -164,10 +196,10 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           const count = runs.filter((run) => run.gameId === room.id).length;
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
             <button type="button" className="game-card" aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
-              <GameArt room={room} decorative />
+              <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>
-                <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /><SupportBadge room={room} /></span>
+                <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /><ComingSoonBadge room={room} /></span>
                 <span className="game-card-runs"><i aria-hidden="true">◇</i>{t("Runs nesta sessão: {count}", { count })}</span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
@@ -197,7 +229,11 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
         <ArcadeCabinet room={selected} />
         <dl className="collection-facts two-columns">
           <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
-          <div><dt>{t("Compatibilidade")}</dt><dd><SupportBadge room={selected} /></dd></div>
+          <div><dt>{t("Status")}</dt><dd className="collection-status">
+            <ComingSoonBadge room={selected} />
+            {!inLibrary(selected) && <span className="not-owned">{t("Não tenho ainda")}</span>}
+            {isSupported(selected) && inLibrary(selected) && <span>{t("Na biblioteca")}</span>}
+          </dd></div>
         </dl>
         <dl className="collection-facts">
           <div><dt>{t("Desenvolvedora")}</dt><dd>{selected.developer ?? "—"}</dd></div>

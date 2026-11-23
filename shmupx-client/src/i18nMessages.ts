@@ -121,6 +121,12 @@ const LITE_ENGLISH: Record<string, string> = {
 };
 for (const [key, value] of Object.entries(LITE_ENGLISH)) ENGLISH[key] ??= value;
 
+// Coleção: filtros de seleção múltipla, Coming soon (sem script de validação) e Não tenho ainda.
+const COLLECTION_ENGLISH: Record<string, string> = {
+  "Coming soon": "Coming soon", "Não tenho ainda": "Don't have it yet", "Visualização": "View",
+};
+for (const [key, value] of Object.entries(COLLECTION_ENGLISH)) ENGLISH[key] ??= value;
+
 export function translate(language: Language, text: string, values: Record<string, string | number> = {}): string {
   const trimmed = text.trim();
   const translated = language === "pt-BR" ? undefined : ENGLISH[trimmed];

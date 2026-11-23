@@ -20,6 +20,8 @@
 .collection-segment button:first-child { margin-left: 0; }
 .collection-segment button[aria-pressed=true], .collection-layout .collection-view-tools button[aria-pressed=true] { background: var(--cyan); border-color: var(--cyan); color: #06181b; font-weight: 600; }
 .collection-segment button:hover:not([aria-pressed=true]) { background: #1f1f1f; }
+/* Filtros de seleção múltipla: um divisor entre opções marcadas lado a lado. */
+.collection-segment button[aria-pressed=true] + button[aria-pressed=true] { border-left-color: #06181b55; }
 .collection-layout .collection-view-tools { margin: 0; gap: 4px; }
 .collection-layout .collection-view-tools button { margin-left: 0; min-width: 30px; font-size: 13px; }
 .collection-layout .collection-view-tools button:first-child { font-size: 10px; color: var(--cyan); }
@@ -111,11 +113,14 @@
 .collection-layout .game-art img { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 /* Importar jogos ao lado da busca, no tamanho dos botões de filtro. */
-.collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid #ffffff1a; border-radius: 0; background: #141414; color: #d7e4e8; font-size: 11.5px; white-space: nowrap; }
-.collection-layout .collection-import:hover { border-color: var(--cyan); color: var(--cyan); }
-.theme-light .collection-layout .collection-import { background: var(--surface-recessed); color: #10233f; }
-.collection-layout .unsupported { color: #f2c14e; white-space: nowrap; }
-.theme-light .unsupported { color: #865315; }
+/* Importar jogos: ação principal da barra, em azul como os filtros marcados. */
+.collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid var(--cyan); border-radius: 0; background: var(--cyan); color: #06181b; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.collection-layout .collection-import:hover { filter: brightness(1.12); }
+.theme-light .collection-layout .collection-import { color: #fff; }
+/* Coming soon: jogo ainda sem script de validação. Não tenho ainda: fora das bibliotecas (capa em preto e branco). */
+.collection-layout .coming-soon { color: #f2c14e; white-space: nowrap; }
+.collection-layout .not-owned-chip { position: absolute; left: 8px; top: 8px; padding: 3px 7px; border: 1px solid #ffffff40; border-radius: 3px; background: #000000b8; color: #f0fcff; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
+.collection-status { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 
 /* Importar do MiSTer: IP e senha do FTP lado a lado, botão embaixo. */
 .mister-connect-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 12px 0; }
