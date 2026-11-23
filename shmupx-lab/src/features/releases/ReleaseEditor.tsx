@@ -14,7 +14,7 @@ import {
   type ReleaseLead,
   type ReleaseSection,
 } from "../../lib/backend";
-import { formatSize, getClientNotes, getLocalInstaller, publishInstaller, type LocalInstaller } from "../../lib/installer";
+import { buildInstaller, formatSize, getClientNotes, getLocalInstaller, onInstallerBuild, publishInstaller, type LocalInstaller } from "../../lib/installer";
 import type { ScriptInfo } from "../../lib/validation";
 import { getAmbiente } from "../../auth/firebase";
 import { emailLabel, formatDateTime, fromLines, LEADS, noticePreview, STATUS_LABEL, STATUS_TONE, toLines } from "./options";
@@ -69,6 +69,9 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
   const [autoUpdate, setAutoUpdate] = useState(Boolean(release?.installer));
   const [sendEmail, setSendEmail] = useState(true);
   const [local, setLocal] = useState<LocalInstaller | null>(null);
+  // Build do instalador pelo Lab: as últimas linhas da saída, o erro e quando começou.
+  const [build, setBuild] = useState<{ running: boolean; lines: string[]; error: string | null; startedAt: number } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [autosave, setAutosave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [version, setVersion] = useState(release?.version ?? suggestedVersion);
@@ -170,6 +173,39 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
     if (isNew || !editable) return;
     getLocalInstaller(version.trim()).then(setLocal).catch(() => setLocal(null));
   }, [isNew, editable, version]);
+
+  // Andamento do build: cada linha da saída; no fim, relê o build local para liberar o envio.
+  useEffect(() => {
+    const target = version.trim();
+    const unlisten = onInstallerBuild((event) => {
+      if (event.versao !== target) return;
+      if (event.fase === "rodando" && event.linha) {
+        const line = event.linha;
+        setBuild((current) => current && { ...current, running: true, lines: [...current.lines, line].slice(-6) });
+        return;
+      }
+      setBuild((current) => current && { ...current, running: false, error: event.fase === "falhou" ? event.erro ?? "o build falhou" : null });
+      getLocalInstaller(target).then(setLocal).catch(() => setLocal(null));
+    });
+    return () => { void unlisten.then((stop) => stop()); };
+  }, [version]);
+  useEffect(() => {
+    if (!build?.running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [build?.running]);
+
+  async function onBuildInstaller() {
+    const target = version.trim();
+    setError(null);
+    setBuild({ running: true, lines: [], error: null, startedAt: Date.now() });
+    setNow(Date.now());
+    try {
+      await buildInstaller(target);
+    } catch (e) {
+      setBuild((current) => current && { ...current, running: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   function onRemoveAuto(key: string) {
     if (!release) return;
@@ -357,16 +393,35 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
                 {local?.found ? (
                   <p className="text-zinc-500">
                     Build local: {formatSize(local.size)} · gerado em {formatDateTime(local.built_at_ms ? new Date(local.built_at_ms) : undefined)}
-                    {local.signed ? " · assinado" : " · sem assinatura do updater (gere com TAURI_SIGNING_PRIVATE_KEY)"}
+                    {local.signed ? " · assinado" : " · sem assinatura do updater: gere de novo (a chave vem do OpenBao, shmupx/updater)"}
                   </p>
                 ) : (
                   <p className="text-zinc-500">
-                    Nenhum build local da versão {version}. Gere o Client com essa versão (ShmupX_{version}_x64-setup.exe) para enviar.
+                    Nenhum build local da versão {version}. Gere o instalador aqui (ShmupX_{version}_x64-setup.exe) e depois envie.
                   </p>
                 )}
-                <Button size="sm" variant="info" onClick={onPublishInstaller} disabled={busy || !local?.found || !local.signed} loading={busy}>
-                  {release?.installer ? "Enviar de novo" : "Enviar instalador"}
-                </Button>
+                {build && (build.running || build.error) && (
+                  <div className="space-y-1.5 rounded-md border border-white/5 bg-black/40 p-2">
+                    {build.running && (
+                      <p className="text-cyan-200">
+                        Gerando o instalador {version}… {elapsed(now - build.startedAt)} (leva uns 10 a 20 minutos; pode seguir usando o Lab)
+                      </p>
+                    )}
+                    {build.lines.length > 0 && build.running && (
+                      <pre className="max-h-28 overflow-hidden font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap text-zinc-500">{build.lines.join("\n")}</pre>
+                    )}
+                    {build.error && <p role="alert" className="whitespace-pre-wrap text-red-300">{build.error}</p>}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant={local?.found && local.signed ? "secondary" : "primary"} onClick={() => void onBuildInstaller()} disabled={busy || Boolean(build?.running)} loading={Boolean(build?.running)}
+                    title={`Ajusta o Client para a versão ${version}, gera e assina o instalador neste PC (npm run bundle)`}>
+                    {local?.found ? "Gerar de novo" : "Gerar instalador"}
+                  </Button>
+                  <Button size="sm" variant="info" onClick={onPublishInstaller} disabled={busy || Boolean(build?.running) || !local?.found || !local.signed} loading={busy}>
+                    {release?.installer ? "Enviar de novo" : "Enviar instalador"}
+                  </Button>
+                </div>
               </div>
             </Section>
           )}
@@ -447,4 +502,10 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
       </form>
     </aside>
   );
+}
+
+/** Tempo decorrido do build: `3min 05s`. */
+function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}min ${String(seconds % 60).padStart(2, "0")}s`;
 }

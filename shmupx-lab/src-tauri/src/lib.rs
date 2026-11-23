@@ -18,6 +18,7 @@ pub fn run() {
       capa::publicar_capa,
       instalador::instalador_local,
       instalador::publicar_instalador,
+      instalador::gerar_instalador,
       notas::notas_do_client,
       validacao::commands::validacao_ambiente,
       validacao::commands::validacao_instalar_ytdlp,
