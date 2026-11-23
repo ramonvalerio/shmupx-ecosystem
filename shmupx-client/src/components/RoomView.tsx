@@ -120,6 +120,21 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
+interface LivePrefs { on: boolean; public: boolean }
+const LIVE_PREFS_KEY = "shmupx.client.livePrefs.v1";
+function readLivePrefs(): LivePrefs {
+  try {
+    const value = JSON.parse(localStorage.getItem(LIVE_PREFS_KEY) ?? "{}") as Partial<LivePrefs>;
+    return { on: value.on === true, public: value.public === true };
+  } catch {
+    return { on: false, public: false };
+  }
+}
+function saveLivePrefs(prefs: LivePrefs): LivePrefs {
+  try { localStorage.setItem(LIVE_PREFS_KEY, JSON.stringify(prefs)); } catch { /* fica só nesta sessão */ }
+  return prefs;
+}
+
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   const presenceMode = usePresenceMode();
@@ -134,7 +149,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const knowledge = room.robotx ?? [];
   const live = useLive();
   const youtube = useYouTube();
-  const [publicLive, setPublicLive] = useState(false);
+  // Opções do Play Ranked: transmitir no YouTube e se a live é pública (lembradas entre as salas).
+  const [livePrefs, setLivePrefs] = useState(readLivePrefs);
+  const chooseLive = (next: Partial<LivePrefs>) => setLivePrefs((current) => saveLivePrefs({ ...current, ...next }));
+  // A cada Play Ranked, a moeda das fichas é lançada e gira.
+  const [coinSpin, setCoinSpin] = useState(0);
   const [liveError, setLiveError] = useState<string | null>(null);
   const countdown = useCountdown(live.state.status === "live" ? live.state.ends_at_ms : null);
   const liveHere = live.state.game_id === room.id;
@@ -204,13 +223,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const playTraining = () => (platform ? launcher.playNow("training", platform, mode) : launcher.play("training"));
   const playRanked = () => (platform ? launcher.playNow("ranked", platform, mode) : launcher.start(false));
 
-  async function toggleLive() {
+  async function stopLive() {
     setLiveError(null);
-    if (!liveOn) {
-      if (platform && platform !== "mister") launcher.playNow("live", platform, mode);
-      else launcher.play("live");
-      return;
-    }
     try {
       await live.stop();
     } catch (error) {
@@ -225,37 +239,44 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     try {
       if (platform === "emulator") {
         await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });
-        await live.start(room.id, `${room.title} · ShmupX`, publicLive, 0);
+        await live.start(room.id, `${room.title} · ShmupX`, livePrefs.public, 0);
       } else {
-        await live.start(room.id, `${room.title} · ShmupX`, publicLive, room.steamAppId);
+        await live.start(room.id, `${room.title} · ShmupX`, livePrefs.public, room.steamAppId);
       }
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : String(error));
     }
   }
   const youtubeConnected = Boolean(youtube.connection?.connected);
-  const liveOnMister = platform === "mister";
-  const liveBlocked = !liveOn && (comingSoon || liveOnMister || !youtubeConnected || isRecording || (live.state.status !== "idle" && live.state.status !== "failed"));
-  const liveTitle = !liveOn && comingSoon
-    ? t("Coming soon: a live ranked fica disponível quando o jogo tiver o script de validação.")
-    : !liveOn && liveOnMister ? t("A live captura a janela do jogo neste PC: escolha Steam ou Emulador para transmitir.")
-    : !youtubeConnected
-    ? t("Conecte seu canal em Configurações › Integrações para transmitir.")
-    : isRecording ? t("Termine a gravação da run antes de começar uma live.")
-    : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : undefined;
+  // Live indisponível: no MiSTer (a live transmite a janela do jogo neste PC) ou sem canal conectado.
+  const liveUnavailable = platform === "mister"
+    ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
+    : !youtubeConnected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
+  const withLive = livePrefs.on && !liveUnavailable;
   const liveLabel = live.state.status === "waiting" ? t("Abrindo o jogo…")
     : live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
     : live.state.status === "ending" ? t("Encerrando…")
-    : liveOn ? t("End live") : t("Play Live Ranked");
-
-  const tip = t("Dica: para uma captura estável, jogue em janela ou em tela cheia sem bordas. A tela cheia exclusiva pode não ser capturada. A gravação começa quando a run é autorizada.");
+    : t("End live");
 
   // INICIAR JOGO vira PARAR JOGO (vermelho) com o jogo aberto: run no PC (encerra a gravação e
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
   // treino no PC (fecha o jogo).
   const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
   const stopping = isStopping || launcher.isStopping;
+  // Opções presas enquanto há jogo ou live em andamento (e no Coming soon, sem ranked).
+  const optionsLocked = comingSoon || gameOpen || liveOn || stopping;
+  // Live desta sala no ar (ou abrindo): as opções mostram como ela está.
+  const liveHereOn = liveOn && liveHere;
+
+  /** O único botão de partida valendo ranking: com Live On, abre o jogo já transmitindo. */
+  function playRankedNow() {
+    setCoinSpin((n) => n + 1);
+    if (!withLive) { playRanked(); return; }
+    setLiveError(null);
+    if (platform && platform !== "mister") launcher.playNow("live", platform, mode);
+    else launcher.play("live");
+  }
   // PARAR JOGO: run no PC (encerra a gravação e a análise tira o placar), jogo no MiSTer (volta ao
   // menu; o agente registra o placar) ou treino no PC (fecha o jogo).
   const stopGame = isRecording ? handleStopGame
@@ -305,23 +326,42 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             </div>
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
-          {/* Destaque à direita: as runs que gastam coins (saldo, ranking, ranked e live ranked). */}
+          {/* Destaque à direita: as fichas e o Play Ranked, com as opções de live logo abaixo. */}
           <div className="room-header-side">
-            <CreditsBadge uid={playerId} className="room-credits" />
+            <CreditsBadge uid={playerId} className="room-credits" spin={coinSpin} />
             <div className="room-coin-actions">
-              <button type="button" className="room-action primary" onClick={playRanked} disabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
-                title={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : undefined}>
-                <span className="action-icon is-play" aria-hidden="true" />{t("Play Ranked")}
-              </button>
-              <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
-                <span className={`action-icon ${liveOn ? "is-square" : "is-dot"}`} aria-hidden="true" />{liveLabel}
-              </button>
-              <div className="room-live-options">
-                <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
-                  <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn || comingSoon} onChange={(event) => setPublicLive(event.target.checked)} />
-                  {t("Live pública")}
-                </label>
-                <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
+              {liveHereOn
+                ? <button type="button" className="room-action live-action is-on" onClick={() => void stopLive()} disabled={live.state.status === "ending"}>
+                    <span className="action-icon is-square" aria-hidden="true" />{liveLabel}
+                  </button>
+                : <button type="button" className={`room-action primary play-ranked-action ${withLive ? "with-live" : ""}`} onClick={playRankedNow}
+                    disabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
+                    title={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : liveOn ? t("Há uma live em andamento em outra sala.") : undefined}>
+                    <span className="action-icon is-play" aria-hidden="true" />{t("Play Ranked")}
+                    {withLive && <span className="play-live-chip">{t("Live")}</span>}
+                  </button>}
+              {/* Como a partida valendo ranking vai acontecer: com ou sem live, e quem pode assistir. */}
+              <div className="ranked-options" role="group" aria-label={t("Opções do Play Ranked")}>
+                <div className="room-setup-group">
+                  <span id="ranked-live-label">{t("Live no YouTube")}</span>
+                  <div className="room-chips" role="radiogroup" aria-labelledby="ranked-live-label">
+                    <button type="button" role="radio" aria-checked={liveHereOn ? false : !withLive} disabled={optionsLocked} onClick={() => chooseLive({ on: false })}>{t("Off")}</button>
+                    <button type="button" role="radio" aria-checked={liveHereOn ? true : withLive} disabled={optionsLocked} title={liveUnavailable ?? undefined} onClick={() => chooseLive({ on: true })}>
+                      <span className="live-dot" aria-hidden="true" />{t("On")}
+                    </button>
+                  </div>
+                </div>
+                <div className={`room-setup-group ${withLive || liveHereOn ? "" : "is-muted"}`}>
+                  <span id="ranked-public-label">{t("Quem pode assistir")}</span>
+                  <div className="room-chips" role="radiogroup" aria-labelledby="ranked-public-label">
+                    <button type="button" role="radio" aria-checked={!(liveHereOn ? live.state.public : livePrefs.public)} disabled={optionsLocked || !withLive} onClick={() => chooseLive({ public: false })}
+                      title={t("Só quem tem o link da live assiste.")}>{t("Só com link")}</button>
+                    <button type="button" role="radio" aria-checked={liveHereOn ? live.state.public : livePrefs.public} disabled={optionsLocked || !withLive} onClick={() => chooseLive({ public: true })}
+                      title={t("Qualquer pessoa encontra a live no YouTube.")}>{t("Pública")}</button>
+                  </div>
+                </div>
+                {/* "On" sem como transmitir (MiSTer ou sem canal): explica aqui, e o Play Ranked segue sem live. */}
+                {liveUnavailable && !comingSoon && livePrefs.on && <p className="ranked-options-note" role="status">{liveUnavailable}</p>}
               </div>
             </div>
           </div>

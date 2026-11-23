@@ -227,6 +227,11 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Este computador está sem internet. Conecte-o à internet de casa e tente de novo.": "This computer has no internet. Connect it to your home internet and try again.",
   "O MiSTer não respondeu. Confira o endereço e se ele está ligado e conectado à internet de casa.": "The MiSTer didn't answer. Check the address and that it's on and connected to your home internet.",
   "Não foi possível ler o MiSTer. Confira o endereço e tente de novo.": "Couldn't read the MiSTer. Check the address and try again.",
+  "No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.": "You can't stream from the MiSTer: the live shows the game window on this computer.",
+  "Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.": "To stream, connect your YouTube channel in Settings › Integrations.",
+  "Live": "Live", "Opções do Play Ranked": "Play Ranked options", "Live no YouTube": "YouTube live", "Off": "Off", "On": "On",
+  "Quem pode assistir": "Who can watch", "Só quem tem o link da live assiste.": "Only people with the live link can watch.", "Só com link": "Link only",
+  "Qualquer pessoa encontra a live no YouTube.": "Anyone can find the live on YouTube.", "Pública": "Public",
 };
 for (const [key, value] of Object.entries(LAUNCH_PROBLEM_ENGLISH)) ENGLISH[key] ??= value;
 

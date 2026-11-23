@@ -389,7 +389,7 @@
 .room-credits { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 14px; align-items: center; }
 .room-credits .credits-coin { grid-row: 1 / 3; width: 160px; height: 160px; }
 .room-credits strong { align-self: end; font-size: 52px; line-height: 1; }
-.room-credits span { align-self: start; font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
+.room-credits .credits-label { align-self: start; font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
@@ -458,8 +458,50 @@
 .launch-problem-steps li::marker { color: #57fcff; font-weight: 700; }
 .theme-light .launch-problem-steps { color: #10233f; }
 .theme-light .launch-problem-steps li::marker { color: #1f6feb; }
-/* Tela atual no caminho do topo: fundo vermelho e letra branca (os outros botões seguem em ciano). */
-.topbar-breadcrumb .crumb[aria-current], .theme-light .topbar-breadcrumb .crumb[aria-current] { background: linear-gradient(180deg, #ff5a62, #d9363f); color: #fff; }
+/* Tela atual no caminho do topo: vermelho escuro (sem estourar ao lado do ciano) e letra branca. */
+.topbar-breadcrumb .crumb[aria-current], .theme-light .topbar-breadcrumb .crumb[aria-current] { background: linear-gradient(180deg, #a3303a, #7a1f28); color: #fff; }
 /* Status no centro do espaço que sobra na barra (não por cima do caminho, que ficou maior). */
 .client-status-group { position: static; transform: none; margin: 0 auto; }
 .client-topbar .env-badge { flex-shrink: 0; }
+
+/* Moeda das fichas: frente e verso em 3D. No Play Ranked ela é lançada, gira no ar e cai de frente. */
+.credits-coin { position: relative; display: inline-block; flex-shrink: 0; perspective: 700px; }
+.credits-coin-3d { position: absolute; inset: 0; transform-style: preserve-3d; }
+.credits-coin-face { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; backface-visibility: hidden; -webkit-backface-visibility: hidden; user-select: none; -webkit-user-drag: none; }
+.credits-coin-face.is-back { transform: rotateY(180deg); }
+.credits-coin::before, .credits-coin::after { content: ""; position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; }
+.credits-coin::before { inset: -22%; background: radial-gradient(circle, #ffd76a59 0%, #57fcff1f 45%, transparent 70%); }
+.credits-coin::after { inset: 2%; border: 2px solid #ffd76a; }
+.credits-coin.is-spinning .credits-coin-3d { animation: coin-toss 1.6s cubic-bezier(.22, .61, .36, 1) both; }
+.credits-coin.is-spinning::before { animation: coin-glow 1.6s ease-out both; }
+.credits-coin.is-spinning::after { animation: coin-ring .55s ease-out 1.1s both; }
+@keyframes coin-toss {
+  0% { transform: translateY(0) rotateY(0deg) scale(1); }
+  10% { transform: translateY(4%) rotateY(0deg) scale(.95); }
+  40% { transform: translateY(-3%) rotateY(1080deg) scale(1.06); }
+  68% { transform: translateY(0) rotateY(1620deg) scale(1); }
+  80% { transform: translateY(-2%) rotateY(1740deg) scale(1.03); }
+  90% { transform: translateY(0) rotateY(1790deg) scale(1); }
+  100% { transform: translateY(0) rotateY(1800deg) scale(1); }
+}
+@keyframes coin-glow { 0% { opacity: 0; transform: scale(.8); } 35% { opacity: 1; transform: scale(1.08); } 100% { opacity: 0; transform: scale(1.25); } }
+@keyframes coin-ring { 0% { opacity: 0; transform: scale(1); } 15% { opacity: .9; } 100% { opacity: 0; transform: scale(1.4); } }
+@keyframes coin-pulse { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) {
+  .credits-coin.is-spinning .credits-coin-3d { animation: coin-pulse .5s ease-out both; }
+  .credits-coin.is-spinning::before, .credits-coin.is-spinning::after { animation: none; }
+}
+
+/* Um só Play Ranked; abaixo, as opções dele: live no YouTube (Off/On) e quem pode assistir. */
+.play-ranked-action { gap: 10px; }
+.play-live-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 3px; background: #fd4851; color: #fff; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+.play-live-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: live-chip-blink 1.2s ease-in-out infinite; }
+@keyframes live-chip-blink { 50% { opacity: .35; } }
+.ranked-options { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.ranked-options .room-chips { width: 100%; }
+.ranked-options .room-chips button { flex: 1; justify-content: center; padding: 0 8px; }
+.ranked-options .room-setup-group { transition: opacity .15s; }
+.ranked-options .room-setup-group.is-muted { opacity: .45; }
+.ranked-options .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #fd4851; }
+.ranked-options .room-chips button[aria-checked=true] .live-dot { box-shadow: 0 0 8px #fd4851; }
+.ranked-options-note { margin: 0; font-size: 11.5px; line-height: 1.4; color: #f2c14e; }
