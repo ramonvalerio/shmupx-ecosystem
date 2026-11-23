@@ -1,5 +1,6 @@
 //! Pasta de destino dos vídeos das runs (Configurações › Armazenamento). Padrão: `recordings`
-//! dentro da pasta de dados do app. A escolha do jogador fica em `<pasta de dados>/gravacoes.json`; se a pasta escolhida
+//! na pasta onde o Client foi instalado (o instalador a cria com escrita liberada aos usuários);
+//! se ela não aceitar escrita, e em desenvolvimento, `recordings` na pasta de dados do app. A escolha do jogador fica em `<pasta de dados>/gravacoes.json`; se a pasta escolhida
 //! deixar de existir ou de aceitar escrita (disco removido), a gravação volta ao padrão.
 
 use std::path::{Path, PathBuf};
@@ -80,10 +81,23 @@ fn gravavel(pasta: &Path) -> bool {
     ok
 }
 
-/// Destino atual (a escolha do jogador, se disponível; senão a pasta de dados).
+/// Pasta padrão: `recordings` ao lado do Client instalado (junto de `validator`, `games` e
+/// `ffmpeg`); se não der para gravar nela, ou em desenvolvimento, a dos dados do app.
+fn pasta_padrao(app: &AppHandle) -> Result<PathBuf, String> {
+    if !cfg!(debug_assertions) {
+        if let Some(instalacao) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) {
+            let pasta = instalacao.join("recordings");
+            if gravavel(&pasta) {
+                return Ok(pasta);
+            }
+        }
+    }
+    Ok(pasta_de_dados(app)?.join("recordings"))
+}
+
+/// Destino atual (a escolha do jogador, se disponível; senão a pasta padrão).
 pub fn atual(app: &AppHandle) -> Result<Destino, String> {
-    // Padrão: a subpasta `recordings` dos dados do app (separada do motor, dos scripts e do FFmpeg).
-    let padrao = pasta_de_dados(app)?.join("recordings");
+    let padrao = pasta_padrao(app)?;
     std::fs::create_dir_all(&padrao).map_err(|e| e.to_string())?;
     if let Some(escolhida) = ler_config(app).pasta {
         let caminho = PathBuf::from(&escolhida);
