@@ -3,7 +3,8 @@
 /* Fonte do ShmupX em todo o Client (antes só no login). Botões, campos e listas herdam (por
    padrão usam a do sistema). */
 @font-face { font-family: "Share Tech"; src: url(/fonts/ShareTech-Regular.ttf) format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
-:root { color-scheme: dark; font-family: "Share Tech", "Segoe UI", system-ui, sans-serif; color: #fff; background: #262626; --cyan: #57fcff; --stroke: #ffffff1f; }
+/* A Share Tech só tem o peso normal: sem negrito artificial do navegador em lugar nenhum. */
+:root { color-scheme: dark; font-family: "Share Tech", "Segoe UI", system-ui, sans-serif; font-synthesis: none; color: #fff; background: #262626; --cyan: #57fcff; --stroke: #ffffff1f; }
 button, input, select, textarea, optgroup { font-family: inherit; }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
