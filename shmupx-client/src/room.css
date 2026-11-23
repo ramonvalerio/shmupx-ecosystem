@@ -303,6 +303,14 @@
 .presence-dot.is-away { background: #fd4851; box-shadow: 0 0 6px #fd485199; }
 .presence-dot.is-offline { background: #6b757c; }
 .close-room-dialog { width: min(460px, 100%); }
+/* Limite de salas abertas: lista das abertas para escolher qual trocar pela nova. */
+.room-limit-dialog { width: min(480px, 100%); }
+.room-limit-list { list-style: none; margin: 4px 22px 14px; padding: 0; display: grid; gap: 6px; }
+.room-limit-list button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-raised); color: inherit; font-size: 14px; text-align: left; }
+.room-limit-list button:hover:not(:disabled) { border-color: #fd4851; background: #fd485114; }
+.room-limit-list button small { flex-shrink: 0; color: #fd4851; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.room-limit-list button:disabled { opacity: .55; cursor: not-allowed; }
+.room-limit-list button:disabled small { color: var(--muted, #8a9aa6); }
 
 /* Menu de navegação no topo (no lugar do logo): Minhas coleções › jogo › Ranking. */
 /* Caminho no topo (Minhas coleções › jogo › Ranking): segmentos geométricos em chevron, da altura

@@ -29,10 +29,13 @@ import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
+/** Salas abertas ao mesmo tempo (abas e menu lateral). */
+const MAX_OPEN_ROOMS = 5;
+
 function readOpenRooms(uid: string): string[] {
   try {
     const value = JSON.parse(localStorage.getItem(openRoomsKey(uid)) ?? "[]");
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string").slice(0, MAX_OPEN_ROOMS) : [];
   } catch {
     return [];
   }
@@ -122,12 +125,30 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     setActiveRoomId((current) => (current === null || valid(current) ? current : null));
   }, [rooms]);
 
-  function openGame(id: string) {
+  // Com 5 salas abertas, abrir outra pergunta qual sair (a nova entra no lugar dela).
+  const [pendingOpen, setPendingOpen] = useState<{ id: string; ranking: boolean } | null>(null);
+  const pendingRoom = rooms.find((room) => room.id === pendingOpen?.id) ?? null;
+  const limitDialogRef = useDialogFocus(pendingRoom !== null, () => setPendingOpen(null));
+
+  function enterRoom(id: string, ranking: boolean, replacing?: string) {
+    if (replacing) {
+      void leaveRoomPresence(replacing, profile.uid);
+      clearRoomSession(profile.uid, replacing);
+      setRankingRoomIds((current) => current.filter((roomId) => roomId !== replacing));
+    }
     roomJoinedAt(profile.uid, id);
-    setOpenRoomIds((current) => (current.includes(id) ? current : [...current, id]));
+    setOpenRoomIds((current) => {
+      if (current.includes(id)) return current;
+      return replacing && current.includes(replacing) ? current.map((roomId) => (roomId === replacing ? id : roomId)) : [...current, id];
+    });
     setActiveRoomId(id);
     onSelectRoom(id);
     setSection("collection");
+    if (ranking) setRanking(id, true);
+  }
+  function openGame(id: string, ranking = false) {
+    if (!openRoomIds.includes(id) && openRoomIds.length >= MAX_OPEN_ROOMS) { setPendingOpen({ id, ranking }); return; }
+    enterRoom(id, ranking);
   }
   function activateRoom(id: string) { setActiveRoomId(id); onSelectRoom(id); }
   function closeRoom(id: string) {
@@ -315,7 +336,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {/* As abas de cima saíram por enquanto: os jogos abertos ficam no menu lateral. */}
         <div className="room-stage">
           {activeRoom === null ? (
-            <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => { openGame(id); setRanking(id, true); }} compact={false} bigPicture={bigPicture.active} />
+            <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => openGame(id, true)} compact={false} bigPicture={bigPicture.active} />
           ) : rankingRoomIds.includes(activeRoom.id) ? (
             <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} onBack={() => setRanking(activeRoom.id, false)} />
           ) : (
@@ -324,6 +345,37 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         </div>
       </div>
       </div>
+      {pendingRoom && pendingOpen && (
+        <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingOpen(null); }}>
+          <div ref={limitDialogRef} role="dialog" aria-modal="true" aria-labelledby="room-limit-title" tabIndex={-1} className="controller-dialog room-limit-dialog">
+            <header>
+              <div>
+                <h2 id="room-limit-title">{t("Até {count} salas abertas ao mesmo tempo", { count: MAX_OPEN_ROOMS })}</h2>
+                <p>{t("Escolha de qual sala sair para entrar em {game} no lugar dela.", { game: pendingRoom.title })}</p>
+              </div>
+            </header>
+            <ul className="room-limit-list">
+              {openRoomIds.map((id) => {
+                const room = rooms.find((candidate) => candidate.id === id);
+                if (!room) return null;
+                const recording = recordingRoomId === id;
+                return (
+                  <li key={id}>
+                    <button type="button" disabled={recording} title={recording ? t("Há uma run sendo gravada nesta sala.") : undefined}
+                      onClick={() => { enterRoom(pendingOpen.id, pendingOpen.ranking, id); setPendingOpen(null); }}>
+                      <span>{room.title}</span>
+                      <small>{recording ? t("Gravando") : t("Sair e trocar")}</small>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <footer>
+              <button type="button" className="secondary-action" onClick={() => setPendingOpen(null)}>{t("Cancelar")}</button>
+            </footer>
+          </div>
+        </div>
+      )}
       {closingRoom && (
         <div className="controller-dialog-backdrop">
           <div ref={closeDialogRef} role="dialog" aria-modal="true" aria-labelledby="close-room-title" tabIndex={-1} className="controller-dialog close-room-dialog">
