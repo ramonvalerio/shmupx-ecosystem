@@ -153,3 +153,17 @@
 .mister-link-form { display: flex; align-items: flex-end; gap: 10px; }
 .mister-link-form .settings-field { flex: 1; margin: 0; }
 .mister-link-form .settings-field input { width: 100%; }
+
+/* Painel da Coleção: área de jogar (modo, plataforma, PLAY TRAINING e Ranking) e a ficha do jogo. */
+.collection-play { display: flex; flex-direction: column; gap: 12px; margin: 14px 0 6px; }
+.room-play-setup.is-compact { flex-direction: column; gap: 10px; }
+.room-play-setup.is-compact .room-chips { display: flex; width: 100%; }
+.room-play-setup.is-compact .room-chips button { flex: 1; justify-content: center; padding: 0 8px; }
+.collection-play .collection-actions { margin: 0; }
+.collection-info { margin-top: 8px; }
+
+/* Trailer na tela do gabinete arcade, com o alto-falante no canto. */
+.cabinet-video { position: relative; width: 100%; height: 100%; background: #000; }
+.cabinet-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.cabinet-sound { position: absolute; right: 4px; bottom: 4px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1px solid #ffffff40; border-radius: 4px; background: #000000a6; color: #f0fcff; cursor: pointer; opacity: .75; }
+.cabinet-sound:hover, .cabinet-sound:focus-visible { opacity: 1; border-color: var(--cyan); outline: none; }

@@ -375,13 +375,13 @@
 .game-room-title > div { min-width: 0; }
 /* Coluna da direita do cabeçalho: moeda (toda a altura) e Ranking. */
 .game-room-header:has(> .room-header-side) { grid-template-columns: auto minmax(0, 1fr) auto; }
-.room-header-side { display: flex; align-items: center; gap: 18px; flex-shrink: 0; margin-right: 34px; align-self: center; }
-.room-action.room-ranking-action { flex-shrink: 0; padding: 7px 14px; font-size: 12px; }
+.room-header-side { display: flex; align-items: center; gap: 22px; flex-shrink: 0; margin-right: 34px; align-self: center; }
+
 /* Fichas no cabeçalho da sala: a moeda grande o bastante para ler o desenho. */
-.room-credits { gap: 10px; }
-.room-credits .credits-coin { width: 160px; height: 160px; }
-.room-credits strong { font-size: 30px; }
-.room-credits span { font-size: 14px; }
+.room-credits { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 14px; align-items: center; }
+.room-credits .credits-coin { grid-row: 1 / 3; width: 160px; height: 160px; }
+.room-credits strong { align-self: end; font-size: 52px; line-height: 1; }
+.room-credits span { align-self: start; font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
@@ -393,8 +393,7 @@
 .room-chips button[aria-checked=true] { position: relative; z-index: 1; border-color: var(--cyan); background: #1d4b50; color: #57fcff; }
 .room-chips button:hover:not(:disabled):not([aria-checked=true]) { background: #1c1c1c; }
 .room-chips button:disabled { opacity: .5; cursor: not-allowed; }
-.room-chip-dot { width: 7px; height: 7px; flex-shrink: 0; border: 1px solid #8a9aa1; border-radius: 50%; }
-.room-chip-dot.is-owned { border-color: #3fd98b; background: #3fd98b; }
+
 .room-soon-note { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12px; color: #a8c1cc; }
 .coming-soon-tag { padding: 2px 7px; border: 1px solid #f2c14e66; border-radius: 3px; color: #f2c14e; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
 
@@ -406,3 +405,19 @@
 .open-game-banner .presence-dot { width: 12px; height: 12px; }
 .open-game-banner .open-game-error { color: #ff8b92; }
 .open-game-banner .room-action { padding: 8px 16px; }
+
+/* Runs que gastam coins (direita): Ranking, Play Ranked e Play Live Ranked empilhados, mesma largura. */
+.room-coin-actions { display: flex; flex-direction: column; gap: 8px; width: 230px; }
+.room-coin-actions > .room-action { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 42px; padding: 0 16px; }
+.room-live-options { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.room-live-options .live-public { font-size: 12px; }
+/* Ícones dos botões, no mesmo tamanho: ▶ play, ▷ treino, ■ parar, ● live, ☆ ranking. */
+.action-icon { display: inline-block; flex-shrink: 0; margin-right: 10px; background: currentColor; }
+.action-icon.is-play { width: 11px; height: 13px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.action-icon.is-play-outline { width: 12px; height: 14px; background: none; border: 0; position: relative; }
+.action-icon.is-play-outline::before { content: ""; position: absolute; inset: 0; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%, 0 0, 2px 3.2px, 2px 10.8px, 9.2px 7px, 2px 3.2px); }
+.action-icon.is-square { width: 12px; height: 12px; border-radius: 1px; }
+.action-icon.is-dot { width: 13px; height: 13px; border-radius: 50%; }
+.action-icon.is-star { width: auto; height: auto; background: none; font-size: 16px; line-height: 1; }
+.game-room-actions .room-action { display: inline-flex; align-items: center; min-height: 42px; }
+.room-action.stop-action { min-width: 190px; justify-content: center; }

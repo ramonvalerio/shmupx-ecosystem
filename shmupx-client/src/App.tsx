@@ -17,6 +17,8 @@ import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
 import { useRemoteLaunch } from "./data/remoteLaunch";
 import { setAccountPlaying, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
+import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./data/misterLibrary";
+import { readMisterPlayer } from "./data/misterPlayer";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -82,6 +84,25 @@ export default function App() {
     : practiceRoomId ? { gameId: practiceRoomId, kind: "training" as const, platform: launchPlatforms[practiceRoomId] ?? "emulator" }
     : clientMister ? { gameId: clientMister.gameId, kind: clientMister.kind, platform: "mister" as const }
     : null;
+  // MiSTer já conhecido (IP salvo): a biblioteca dele se atualiza sozinha ao abrir o Client (se nunca
+  // foi importada aqui ou tem mais de 6 h), e o menu ShmupX do MiSTer ganha os jogos do Lab que faltam.
+  const misterSynced = useRef(false);
+  useEffect(() => {
+    if (!isTauri() || !signedUid || rooms.length === 0 || misterSynced.current) return;
+    const library = readMisterLibrary();
+    const player = readMisterPlayer();
+    const host = library?.host || player?.host;
+    if (!host) return;
+    misterSynced.current = true;
+    if (library && Date.now() - library.importedAt < 6 * 60 * 60_000) return;
+    scanMister(host, player?.password)
+      .then((result) => {
+        saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, importedAt: Date.now() });
+        return syncMisterMenu(result.host, player?.password, rooms, result);
+      })
+      .catch((error) => console.warn("MiSTer: falha ao atualizar a biblioteca:", error));
+  }, [signedUid, rooms]);
+
   usePlayingClaim(signedUid, ownGame
     ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? clientMister?.title ?? ownGame.gameId, device: "pc" }
     : null);

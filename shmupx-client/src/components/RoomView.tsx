@@ -16,9 +16,9 @@ import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
 import { formatPlayTime, useGameStats } from "../data/useGameStats";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import type { GameMode, PlayOn } from "../types/room";
-import { GAME_MODES, modesFor } from "../data/gameModes";
-import { PLAY_ON } from "../data/platforms";
+import type { PlayOn } from "../types/room";
+import { useRoomPlay } from "../data/roomPlay";
+import PlaySetup from "./PlaySetup";
 import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
@@ -120,19 +120,6 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-/** Modo e plataforma escolhidos no cabeçalho de cada sala (lembrados entre as aberturas). */
-const ROOM_PLAY_KEY = "shmupx.client.roomPlay.v1";
-type RoomPlay = { mode?: GameMode; platform?: PlayOn };
-function readRoomPlay(roomId: string): RoomPlay {
-  try { return (JSON.parse(localStorage.getItem(ROOM_PLAY_KEY) ?? "{}") as Record<string, RoomPlay>)[roomId] ?? {}; } catch { return {}; }
-}
-function saveRoomPlay(roomId: string, play: RoomPlay) {
-  try {
-    const all = JSON.parse(localStorage.getItem(ROOM_PLAY_KEY) ?? "{}") as Record<string, RoomPlay>;
-    localStorage.setItem(ROOM_PLAY_KEY, JSON.stringify({ ...all, [roomId]: play }));
-  } catch { /* fica só nesta sessão */ }
-}
-
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   const presenceMode = usePresenceMode();
@@ -210,19 +197,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   }
 
   // Modo de jogo e plataforma: escolhidos no cabeçalho, antes dos botões de Play.
-  const modes = GAME_MODES.filter((m) => modesFor(room).includes(m.id));
-  const platformOptions = PLAY_ON.filter((p) => launcher.platforms.includes(p.id));
-  const [roomPlay, setRoomPlay] = useState<RoomPlay>(() => readRoomPlay(room.id));
-  useEffect(() => setRoomPlay(readRoomPlay(room.id)), [room.id]);
-  const mode: GameMode = roomPlay.mode && modes.some((m) => m.id === roomPlay.mode) ? roomPlay.mode : modes[0]?.id ?? "highscore";
-  const platform: PlayOn | null = roomPlay.platform && launcher.platforms.includes(roomPlay.platform)
-    ? roomPlay.platform
-    : launcher.platforms.find(launcher.owns) ?? launcher.platforms[0] ?? null;
-  function choose(next: RoomPlay) {
-    const merged = { mode, platform: platform ?? undefined, ...next };
-    setRoomPlay(merged);
-    saveRoomPlay(room.id, merged);
-  }
+  const play = useRoomPlay(room, launcher.platforms, launcher.owns);
+  const { mode, platform } = play;
   // Coming soon (sem script de validação): só treino; ranked e live ranked esperam o script.
   const comingSoon = !isSupported(room);
   const playTraining = () => (platform ? launcher.playNow("training", platform, mode) : launcher.play("training"));
@@ -278,33 +254,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
   // treino no PC (fecha o jogo).
   const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
-  let mainLabel = "Play Ranked";
-  let mainAction = playRanked;
-  let mainDisabled = launcher.isLaunching || comingSoon;
-  let mainVariant = "primary";
-  if (isStopping || launcher.isStopping) {
-    mainLabel = "Encerrando o jogo…";
-    mainDisabled = true;
-    mainVariant = "stop";
-  } else if (isRecording) {
-    mainLabel = "Parar jogo";
-    mainAction = handleStopGame;
-    mainDisabled = false;
-    mainVariant = "stop";
-  } else if (launcher.misterGame) {
-    mainLabel = "Parar jogo";
-    mainAction = () => void launcher.stopMister();
-    mainDisabled = false;
-    mainVariant = "stop";
-  } else if (practicePid !== undefined) {
-    mainLabel = "Parar jogo";
-    mainAction = () => void invoke("treino_parar", { pid: practicePid }).catch((error) => launcher.setError(String(error)));
-    mainDisabled = false;
-    mainVariant = "stop";
-  } else if (launcher.isLaunching) {
-    mainLabel = "Abrindo o jogo…";
-    mainVariant = "";
-  }
+  const stopping = isStopping || launcher.isStopping;
+  // PARAR JOGO: run no PC (encerra a gravação e a análise tira o placar), jogo no MiSTer (volta ao
+  // menu; o agente registra o placar) ou treino no PC (fecha o jogo).
+  const stopGame = isRecording ? handleStopGame
+    : launcher.misterGame ? () => void launcher.stopMister()
+    : practicePid !== undefined ? () => void invoke("treino_parar", { pid: practicePid }).catch((error) => launcher.setError(String(error)))
+    : null;
 
   // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
   // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
@@ -335,57 +291,41 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                 </dl>
               </div>
             </div>
-            <div className="room-play-setup">
-              {modes.length > 0 && (
-                <div className="room-setup-group">
-                  <span id="room-mode-label">{t("Modo de jogo")}</span>
-                  <div className="room-chips" role="radiogroup" aria-labelledby="room-mode-label">
-                    {modes.map((m) => (
-                      <button key={m.id} type="button" role="radio" aria-checked={mode === m.id} disabled={gameOpen || liveOn} title={t(m.detail)} onClick={() => choose({ mode: m.id })}>{m.label}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {platformOptions.length > 0 && (
-                <div className="room-setup-group">
-                  <span id="room-platform-label">{t("Plataforma")}</span>
-                  <div className="room-chips" role="radiogroup" aria-labelledby="room-platform-label">
-                    {platformOptions.map((p) => {
-                      const owned = launcher.owns(p.id);
-                      return (
-                        <button key={p.id} type="button" role="radio" aria-checked={platform === p.id} disabled={gameOpen || liveOn} onClick={() => choose({ platform: p.id })}
-                          title={t(owned ? "Na sua biblioteca" : "Não importado")}>
-                          <span className={`room-chip-dot ${owned ? "is-owned" : ""}`} aria-hidden="true" />{t(p.label)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            <PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} />
             <div className="game-room-actions">
-              {!gameOpen && !isStopping && (
-                <button type="button" className="room-action practice-action" onClick={playTraining} disabled={launcher.isLaunching || liveOn}
-                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>▷ {t("Play Training")}</button>
-              )}
-              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}
-                title={comingSoon && !gameOpen ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : undefined}>
-                {!gameOpen && "▶ "}{t(mainLabel)}
-              </button>
-              <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
-                <span aria-hidden="true">{liveOn ? "■" : "●"}</span> {liveLabel}
-              </button>
-              <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
-                <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn || comingSoon} onChange={(event) => setPublicLive(event.target.checked)} />
-                {t("Live pública")}
-              </label>
-              <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
+              {gameOpen || stopping
+                ? <button type="button" className="room-action stop stop-action" onClick={stopGame ?? undefined} disabled={stopping || !stopGame}>
+                    <span className="action-icon is-square" aria-hidden="true" />{t(stopping ? "Encerrando o jogo…" : "Parar jogo")}
+                  </button>
+                : <button type="button" className="room-action practice-action" onClick={playTraining} disabled={launcher.isLaunching || liveOn}
+                    title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
+                    <span className="action-icon is-play-outline" aria-hidden="true" />{t(launcher.isLaunching ? "Abrindo o jogo…" : "Play Training")}
+                  </button>}
             </div>
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
+          {/* Destaque à direita: as runs que gastam coins (saldo, ranking, ranked e live ranked). */}
           <div className="room-header-side">
             <CreditsBadge uid={playerId} className="room-credits" />
-            <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
+            <div className="room-coin-actions">
+              <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>
+                <span className="action-icon is-star" aria-hidden="true">☆</span>{t("Ranking")}
+              </button>
+              <button type="button" className="room-action primary" onClick={playRanked} disabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
+                title={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : undefined}>
+                <span className="action-icon is-play" aria-hidden="true" />{t("Play Ranked")}
+              </button>
+              <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
+                <span className={`action-icon ${liveOn ? "is-square" : "is-dot"}`} aria-hidden="true" />{liveLabel}
+              </button>
+              <div className="room-live-options">
+                <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
+                  <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn || comingSoon} onChange={(event) => setPublicLive(event.target.checked)} />
+                  {t("Live pública")}
+                </label>
+                <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
+              </div>
+            </div>
           </div>
         </header>
 

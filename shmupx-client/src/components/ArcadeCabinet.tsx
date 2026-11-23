@@ -1,6 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { GameRoom } from "../types/room";
 import { useGameArt } from "../data/gameArt";
+import { setCabinetMuted, useCabinetMuted, useGameVideo } from "../data/gameVideo";
+import { useI18n } from "../i18n";
 
 /**
  * Monitor TATE (vertical) quando a arte do jogo é mais alta que larga: as artes de jogos de tela
@@ -32,10 +34,77 @@ const SCREEN = {
   tate: { x: 102, y: 47, width: 116, height: 155, rx: 6 },
 };
 
-/** Gabinete arcade com a capa do jogo na tela. */
+/** O vídeo volta ao início aos 30 s: a tela do gabinete é um "attract mode" curto. */
+const LOOP_SECONDS = 30;
+
+/**
+ * Trailer na tela do gabinete: toca só com o gabinete visível e o Client em foco (ao abrir o
+ * jogo a janela perde o foco e o vídeo pausa, sem som por cima do jogo). Com som; o alto-falante
+ * silencia (e se o sistema bloquear o som automático, o vídeo segue mudo até um clique).
+ */
+function CabinetVideo({ src, onFail }: { src: string; onFail: () => void }) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLVideoElement>(null);
+  const muted = useCabinetMuted();
+  const [blocked, setBlocked] = useState(false);
+  const silent = muted || blocked;
+
+  useEffect(() => {
+    const video = ref.current;
+    if (video) video.muted = silent;
+  }, [silent]);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    let visible = false;
+    let focused = document.hasFocus();
+    const update = () => {
+      if (!visible || !focused) { video.pause(); return; }
+      video.play().catch(() => {
+        // Som automático bloqueado: segue mudo (o alto-falante mostra e religa).
+        if (!video.muted) { video.muted = true; setBlocked(true); void video.play().catch(() => undefined); }
+      });
+    };
+    const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; update(); });
+    observer.observe(video);
+    const onFocus = () => { focused = true; update(); };
+    const onBlur = () => { focused = false; update(); };
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+      video.pause();
+    };
+  }, [src]);
+
+  return (
+    <div className="cabinet-video">
+      <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail}
+        onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= LOOP_SECONDS) event.currentTarget.currentTime = 0; }} />
+      <button type="button" className="cabinet-sound" aria-label={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")} title={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")}
+        onClick={(event) => { event.stopPropagation(); if (blocked) { setBlocked(false); setCabinetMuted(false); } else setCabinetMuted(!muted); }}>
+        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+          {silent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/** Gabinete arcade com a capa do jogo na tela (ou o trailer, quando o jogo tem um). */
 export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; className?: string }) {
   const art = useGameArt(room);
-  const tate = useTate(art.src);
+  const video = useGameVideo(room);
+  const [videoFailed, setVideoFailed] = useState(false);
+  useEffect(() => setVideoFailed(false), [video]);
+  const showVideo = Boolean(video) && !videoFailed;
+  const artTate = useTate(art.src);
+  // Trailers são largos (16:9): com vídeo, a tela fica deitada.
+  const tate = artTate && !showVideo;
   const screen = tate ? SCREEN.tate : SCREEN.yoko;
   const bezel = tate ? BEZEL.tate : BEZEL.yoko;
   // Ids únicos: a Coleção e a sala podem mostrar dois gabinetes ao mesmo tempo.
@@ -62,7 +131,9 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       {/* Vão do tubo: deitado (YOKO) ou em pé (TATE) */}
       <rect {...bezel} fill="#050708" stroke="#2a3136" strokeWidth="2" />
       <rect {...screen} fill="#000" />
-      <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />
+      {showVideo
+        ? <foreignObject {...screen} clipPath={`url(#${id("screen")})`}><CabinetVideo src={video!} onFail={() => setVideoFailed(true)} /></foreignObject>
+        : <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />}
       <rect {...screen} fill={`url(#${id("glass")})`} pointerEvents="none" />
       {/* Painel, corpo de baixo e portas: abaixo do monitor */}
       <g transform="translate(0 36)">

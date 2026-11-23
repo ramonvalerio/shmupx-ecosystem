@@ -53,6 +53,7 @@ pub fn run() {
             steam::commands::mister_iniciar,
             steam::commands::mister_parar,
             steam::commands::mister_sincronizar_menu,
+            steam::trailer::steam_trailer,
             steam::commands::mister_procurar,
             steam::treino::treino_parar,
             session::commands::definir_token_autenticacao,

@@ -157,6 +157,16 @@ const MISTER_MENU_ENGLISH: Record<string, string> = {
 };
 for (const [key, value] of Object.entries(MISTER_MENU_ENGLISH)) ENGLISH[key] ??= value;
 
+// Sala e painel da Coleção: plataforma não sincronizada, Versão do jogo e som do gabinete.
+const ROOM_LAYOUT_ENGLISH: Record<string, string> = {
+  "Este jogo não está sincronizado em {platform}: importe a biblioteca em Importar jogos.": "This game isn't synced on {platform}: import the library in Import games.",
+  "PLAY TRAINING": "PLAY TRAINING", "Versão": "Version",
+  "PC (Steam)": "PC (Steam)", "Mega Drive": "Mega Drive", "Neo Geo": "Neo Geo", "Arcade": "Arcade", "Xbox 360": "Xbox 360",
+  "PlayStation": "PlayStation", "Nintendo Switch": "Nintendo Switch",
+  "Ligar o som do vídeo": "Turn video sound on", "Silenciar o vídeo": "Mute video",
+};
+for (const [key, value] of Object.entries(ROOM_LAYOUT_ENGLISH)) ENGLISH[key] ??= value;
+
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {
   if (/ficha/i.test(key)) ENGLISH[key] = value.replace(/\b(C|c)redit(s?)\b/g, (_match, c: string, plural: string) => `${c === "C" ? "C" : "c"}oin${plural}`);

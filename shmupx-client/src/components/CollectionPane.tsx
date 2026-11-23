@@ -5,6 +5,8 @@ import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
 import ImportGamesDialog from "./ImportGamesDialog";
 import { useGameLauncher } from "./useGameLauncher";
+import { useRoomPlay } from "../data/roomPlay";
+import PlaySetup from "./PlaySetup";
 import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
@@ -52,10 +54,6 @@ const SORTS: { id: CollectionPreferences["sort"]; label: string }[] = [
   { id: "favorites", label: "Favoritos" },
 ];
 
-const RUN_STATUS: Record<SessionRun["status"], string> = {
-  recording: "Gravando", analyzing: "Em análise", submitted: "Enviada", expired: "Tempo esgotado", failed: "Não enviada",
-};
-
 /**
  * Filtro de seleção múltipla. "Todas/Todos" fica marcado com todas as opções marcadas; clicar nele
  * marca todas (ou desmarca todas, se já estavam). Desmarcar uma opção desmarca o "Todas".
@@ -94,22 +92,31 @@ function ComingSoonBadge({ room }: { room: GameRoom }) {
 }
 
 /** MODO TREINO no painel: abre o jogo sem gravar run nem gastar ficha (as mesmas regras da sala). */
-function PracticeButton({ room }: { room: GameRoom }) {
+/** Jogar pelo painel: modo e plataforma (os mesmos da sala) e PLAY TRAINING, que abre direto. */
+function PlayPanel({ room, onOpenRanking }: { room: GameRoom; onOpenRanking?: () => void }) {
   const { t } = useI18n();
   const launcher = useGameLauncher(room);
-  return <>
-    <button type="button" className="collection-secondary-action practice-action" disabled={launcher.isLaunching} onClick={() => launcher.start(true)} title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
-      ⟳ {t(launcher.isLaunching ? "Abrindo o jogo…" : "MODO TREINO")}
-    </button>
+  const play = useRoomPlay(room, launcher.platforms, launcher.owns);
+  const playTraining = () => (play.platform ? launcher.playNow("training", play.platform, play.mode) : launcher.play("training"));
+  return <section className="collection-play" aria-label={t("Jogar")}>
+    <PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching} compact />
+    <div className="collection-actions">
+      <button type="button" className="collection-main-action practice-action" disabled={launcher.isLaunching} onClick={playTraining} title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
+        ▷ {t(launcher.isLaunching ? "Abrindo o jogo…" : "PLAY TRAINING")}
+      </button>
+      {onOpenRanking && <button type="button" className="collection-secondary-action" onClick={onOpenRanking}>☆ {t("RANKING")}</button>}
+    </div>
     {launcher.banners}
     {launcher.dialogs}
-  </>;
+  </section>;
 }
 
-function formatDuration(ms: number) {
-  const minutes = Math.max(1, Math.round(ms / 60000));
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-}
+/** Versão do jogo: a plataforma original do catálogo (Lab), para mostrar no painel. */
+const VERSION_LABEL: Record<string, string> = {
+  steam: "PC (Steam)", megadrive: "Mega Drive", neogeo: "Neo Geo", arcade: "Arcade", xbox360: "Xbox 360",
+  playstation: "PlayStation", switch: "Nintendo Switch", mister: "MiSTer FPGA", other: "Outra",
+};
+const versionOf = (room: GameRoom) => room.platform ? VERSION_LABEL[room.platform] ?? room.platform : undefined;
 
 
 export default function CollectionPane({ rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, onOpenRoom, onOpenRanking, compact, bigPicture }: {
@@ -121,7 +128,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
   onOpenRanking?: (id: string) => void;
   compact: boolean; bigPicture: boolean;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
   const [query, setQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter[]>(() => PLATFORM_FILTERS.map((option) => option.id));
@@ -158,10 +165,6 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
     setLibraryFilter(LIBRARY_FILTERS.map((option) => option.id));
   }
 
-  const selectedRuns = selected ? runs.filter((run) => run.gameId === selected.id).sort((a, b) => b.startedAt - a.startedAt) : [];
-  const lastRun = selectedRuns[0];
-  const recordedMs = selectedRuns.reduce((total, run) => total + Math.max(0, (run.endedAt ?? Date.now()) - run.startedAt), 0);
-  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" });
 
   return <div className={`collection-layout ${compact ? "compact" : ""}`}>
     <section className="collection-pane" aria-label={t("Coleção de jogos")}>
@@ -229,25 +232,14 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
             {isSupported(selected) && inLibrary(selected) && <span>{t("Na biblioteca")}</span>}
           </dd></div>
         </dl>
-        <dl className="collection-facts">
+        <PlayPanel key={selected.id} room={selected} onOpenRanking={onOpenRanking ? () => onOpenRanking(selected.id) : undefined} />
+        <dl className="collection-facts collection-info">
+          <div><dt>{t("Versão")}</dt><dd>{versionOf(selected) ? t(versionOf(selected)!) : "—"}</dd></div>
           <div><dt>{t("Desenvolvedora")}</dt><dd>{selected.developer ?? "—"}</dd></div>
           <div><dt>{t("Publicadora")}</dt><dd>{selected.publisher ?? "—"}</dd></div>
+          <div><dt>{t("Gênero")}</dt><dd>{selected.genre ?? "—"}</dd></div>
+          <div><dt>{t("Ano")}</dt><dd>{selected.year ?? "—"}</dd></div>
         </dl>
-        <div className="collection-actions">
-          <button type="button" className="collection-main-action" onClick={() => onOpenRoom(selected.id)}>▷ {t("ABRIR SALA")}</button>
-          <PracticeButton room={selected} />
-          {onOpenRanking && <button type="button" className="collection-secondary-action" onClick={() => onOpenRanking(selected.id)}>☆ {t("RANKING")}</button>}
-        </div>
-        <section className="collection-last">
-          <h3>{t("ÚLTIMA GAMEPLAY")}</h3>
-          <p>{lastRun ? t("{status} · {date}", { status: t(RUN_STATUS[lastRun.status]), date: dateFormat.format(lastRun.startedAt) }) : t("Nenhuma gameplay deste jogo nesta sessão. Abra a sala e clique em Iniciar jogo para gravar.")}</p>
-          <dl className="collection-facts">
-            <div><dt>{t("Gênero")}</dt><dd>{selected.genre ?? "—"}</dd></div>
-            <div><dt>{t("Ano")}</dt><dd>{selected.year ?? "—"}</dd></div>
-            <div><dt>{t("Última gameplay gravada")}</dt><dd>{lastRun ? dateFormat.format(lastRun.startedAt) : "—"}</dd></div>
-            <div><dt>{t("Tempo de gameplay gravado")}</dt><dd>{selectedRuns.length ? formatDuration(recordedMs) : "—"}</dd></div>
-          </dl>
-        </section>
       </> : <p className="collection-details-empty">{t("Selecione um jogo para ver os detalhes.")}</p>}
     </aside>}
   </div>;

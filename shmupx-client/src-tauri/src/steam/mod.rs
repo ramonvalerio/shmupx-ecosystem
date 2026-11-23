@@ -8,6 +8,7 @@ pub mod emulador;
 pub mod mister;
 pub mod mister_ssh;
 pub mod treino;
+pub mod trailer;
 
 pub use commands::inicializar_jogo_steam;
 pub use detector::{DetectedGame, GameDetector, is_steam_running};
