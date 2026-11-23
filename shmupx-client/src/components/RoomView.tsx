@@ -334,10 +334,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                   <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
                 </dl>
               </div>
-              <div className="room-header-side">
-                <CreditsBadge uid={playerId} className="room-credits" />
-                <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
-              </div>
             </div>
             <div className="room-play-setup">
               {modes.length > 0 && (
@@ -386,6 +382,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
             </div>
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
+          </div>
+          <div className="room-header-side">
+            <CreditsBadge uid={playerId} className="room-credits" />
+            <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
           </div>
         </header>
 

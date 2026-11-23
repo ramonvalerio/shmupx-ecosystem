@@ -363,11 +363,13 @@
  * (que abrem o jogo direto); Coming soon quando o jogo ainda não tem script de validação. */
 .game-room-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .game-room-title > div { min-width: 0; }
-.room-header-side { display: flex; align-items: center; gap: 18px; flex-shrink: 0; margin-right: 34px; }
+/* Coluna da direita do cabeçalho: moeda (toda a altura) e Ranking. */
+.game-room-header:has(> .room-header-side) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.room-header-side { display: flex; align-items: center; gap: 18px; flex-shrink: 0; margin-right: 34px; align-self: center; }
 .room-action.room-ranking-action { flex-shrink: 0; padding: 7px 14px; font-size: 12px; }
 /* Fichas no cabeçalho da sala: a moeda grande o bastante para ler o desenho. */
 .room-credits { gap: 10px; }
-.room-credits .credits-coin { width: 80px; height: 80px; }
+.room-credits .credits-coin { width: 160px; height: 160px; }
 .room-credits strong { font-size: 30px; }
 .room-credits span { font-size: 14px; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
