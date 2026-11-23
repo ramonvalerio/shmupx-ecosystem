@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import type { PlayPreset } from "./prefs";
+import { useBackLayer } from "./back";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isTauri } from "@tauri-apps/api/core";
 import { useI18n } from "@client/i18n";
@@ -51,10 +53,11 @@ function LiveViewer({ roomId, uid, name, onClose }: { roomId: string; uid: strin
 }
 
 /** Sala no celular: chat e jogadores (com as lives). Sair pela seta deixa a sala. */
-export default function Room({ room, profile, onBack, onSettings }: { room: GameRoom; profile: PlayerProfile; onBack: () => void; onSettings: () => void }) {
+export default function Room({ room, profile, preset, onBack, onSettings }: { room: GameRoom; profile: PlayerProfile; preset: PlayPreset; onBack: () => void; onSettings: () => void }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<"chat" | "players">("chat");
   const [watching, setWatching] = useState<{ uid: string; name: string } | null>(null);
+  useBackLayer(watching !== null, () => setWatching(null));
   const author = useMemo(() => ({ uid: profile.uid, displayName: profile.displayName }), [profile.uid, profile.displayName]);
   // Só as mensagens desde que entrou: sair pela seta e voltar começa com o chat limpo.
   const [since] = useState(() => Date.now());
@@ -70,6 +73,9 @@ export default function Room({ room, profile, onBack, onSettings }: { room: Game
   ];
   const liveCount = others.filter((o) => o.live).length;
 
+  // Voltar do Android dentro da sala: sai da sala (como a seta) e volta para a tela inicial.
+  useBackLayer(true, () => leave());
+
   function leave() {
     void leaveRoomPresence(room.id, profile.uid);
     onBack();
@@ -81,7 +87,7 @@ export default function Room({ room, profile, onBack, onSettings }: { room: Game
         <button type="button" className="lite-icon-button" onClick={leave} aria-label={t("Sair da sala")}>‹</button>
         <h1 className="lite-room-title" title={room.title}>{room.title}</h1>
       </header>
-      <PlayPanel room={room} uid={profile.uid} onSettings={onSettings} />
+      <PlayPanel room={room} preset={preset} onSettings={onSettings} />
       <div className="lite-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "chat"} onClick={() => setTab("chat")}>{t("Chat")}</button>
         <button type="button" role="tab" aria-selected={tab === "players"} onClick={() => setTab("players")}>

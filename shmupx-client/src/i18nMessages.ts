@@ -102,6 +102,25 @@ for (const panel of ["Desempenho por modo", "Seus jogos", "Jogos da comunidade",
   ENGLISH[`${panel} redimensionado.`] = `${ENGLISH[panel] ?? panel} resized.`;
 }
 
+// ShmupX Lite (Android): tela inicial com configuração de jogo e ▶, Ranking, tema e idioma.
+const LITE_ENGLISH: Record<string, string> = {
+  "MiSTer": "MiSTer", "Interface": "Interface", "Tema": "Theme", "Idioma": "Language", "Português": "Português", "English": "English",
+  "Preto": "Black", "Branco": "White", "Ranking": "Ranking",
+  "Já tem um jogo aberto: pare o {game} antes de abrir outro.": "A game is already open: stop {game} before opening another.",
+  "{game} não abre em {platform}. Escolha outra plataforma acima ou entre na sala.": "{game} doesn't run on {platform}. Pick another platform above or open the room.",
+  "Pare o jogo aberto para jogar esta sala.": "Stop the open game to play this room.",
+  "{count} jogos": "{count} games", "{count} continues": "{count} continues", "1 jogo": "1 game", "1 continue": "1 continue",
+  "Soma das notas dos 5 jogos mais jogados de cada jogador.": "Sum of each player's ratings in their 5 most played games.",
+  "Melhor placar de cada jogador neste modo.": "Each player's best score in this mode.",
+  "* Resultado em revisão.": "* Result under review.",
+  "Entrar na sala de {game}": "Open the {game} room", "Jogar {game} agora": "Play {game} now", "Jogar com a configuração acima": "Play with the setup above",
+  "Ligue o MiSTer para jogar na TV.": "Link your MiSTer to play on the TV.",
+  "Steam e Emulador abrem no seu PC: deixe o ShmupX Client aberto no PC com a mesma conta.": "Steam and Emulator open on your PC: keep the ShmupX Client open on the PC with the same account.",
+  "Treino ou ranking": "Training or ranked", "Treino": "Training", "Ranked": "Ranked",
+  "Toque no jogo para entrar na sala, ou no ▶ para jogar direto com a configuração acima.": "Tap a game to open its room, or ▶ to play right away with the setup above.",
+};
+for (const [key, value] of Object.entries(LITE_ENGLISH)) ENGLISH[key] ??= value;
+
 export function translate(language: Language, text: string, values: Record<string, string | number> = {}): string {
   const trimmed = text.trim();
   const translated = language === "pt-BR" ? undefined : ENGLISH[trimmed];

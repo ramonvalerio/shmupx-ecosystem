@@ -5,6 +5,8 @@ import MisterConnect from "@client/components/MisterConnect";
 import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, useMisterLibrary } from "@client/data/misterLibrary";
 import { misterAuth, readMisterAccess, readMisterPlayer, saveMisterAccess } from "@client/data/misterPlayer";
 import type { GameRoom } from "@client/types/room";
+import type { Language } from "@client/i18nMessages";
+import { THEMES, saveLanguage, type Theme } from "./prefs";
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -13,8 +15,8 @@ const describe = (error: unknown) => (error instanceof Error ? error.message : S
  * acesso de fábrica (root / 1) e já lê os jogos; usuário e senha só precisam ser trocados se o
  * MiSTer não usa os padrão. Depois, ligar o jogador à conta (instala o ShmupX no MiSTer).
  */
-export default function MisterSettings({ rooms, onBack }: { rooms: GameRoom[]; onBack: () => void }) {
-  const { t } = useI18n();
+export default function MisterSettings({ rooms, theme, onTheme, onBack }: { rooms: GameRoom[]; theme: Theme; onTheme: (next: Theme) => void; onBack: () => void }) {
+  const { t, language, setLanguage } = useI18n();
   const library = useMisterLibrary();
   const player = readMisterPlayer();
   const [host, setHost] = useState(() => readMisterLibrary()?.host ?? player?.host ?? "");
@@ -87,6 +89,23 @@ export default function MisterSettings({ rooms, onBack }: { rooms: GameRoom[]; o
         <h1 className="lite-room-title">{t("Ajustes")}</h1>
       </header>
       <div className="lite-content lite-settings">
+        <section className="lite-card">
+          <h2>{t("Interface")}</h2>
+          <h3 className="lite-sheet-label">{t("Tema")}</h3>
+          <div className="lite-preset-row" role="radiogroup" aria-label={t("Tema")}>
+            {THEMES.map((item) => (
+              <button key={item.id} type="button" role="radio" aria-checked={theme === item.id} onClick={() => onTheme(item.id)}>
+                <span className={`lite-swatch is-${item.id}`} aria-hidden="true" />{t(item.label)}
+              </button>
+            ))}
+          </div>
+          <h3 className="lite-sheet-label">{t("Idioma")}</h3>
+          <div className="lite-preset-row" role="radiogroup" aria-label={t("Idioma")}>
+            {([{ id: "pt-BR", label: "Português" }, { id: "en", label: "English" }] as { id: Language; label: string }[]).map((item) => (
+              <button key={item.id} type="button" role="radio" aria-checked={language === item.id} onClick={() => { setLanguage(item.id); saveLanguage(item.id); }}>{item.label}</button>
+            ))}
+          </div>
+        </section>
         <section className="lite-card">
           <h2>{t("MiSTer FPGA")}</h2>
           <p className="lite-muted">{t("Com o celular no mesmo Wi-Fi do MiSTer, dá para abrir os jogos nele pela sala, valendo ranking ou em treino.")}</p>
