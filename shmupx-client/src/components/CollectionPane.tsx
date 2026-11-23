@@ -223,7 +223,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <h2>{selected.title}</h2>
           <button className={`favorite-action ${preferences.favorites.includes(selected.id) ? "is-favorite" : ""}`} aria-pressed={preferences.favorites.includes(selected.id)} aria-label={t(preferences.favorites.includes(selected.id) ? "Remover {game} dos favoritos" : "Adicionar {game} aos favoritos", { game: selected.title })} onClick={() => toggleFavorite(selected.id)}>{preferences.favorites.includes(selected.id) ? "★" : "☆"}</button>
         </header>
-        <ArcadeCabinet room={selected} />
+        <ArcadeCabinet room={selected} video />
         <dl className="collection-facts two-columns">
           <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
           <div><dt>{t("Status")}</dt><dd className="collection-status">

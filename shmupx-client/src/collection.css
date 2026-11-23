@@ -163,7 +163,20 @@
 .collection-info { margin-top: 8px; }
 
 /* Trailer na tela do gabinete arcade, com o alto-falante no canto. */
-.cabinet-video { position: relative; width: 100%; height: 100%; background: #000; }
+.cabinet-video { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 6px; background: #000; }
 .cabinet-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
-.cabinet-sound { position: absolute; right: 4px; bottom: 4px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1px solid #ffffff40; border-radius: 4px; background: #000000a6; color: #f0fcff; cursor: pointer; opacity: .75; }
-.cabinet-sound:hover, .cabinet-sound:focus-visible { opacity: 1; border-color: var(--cyan); outline: none; }
+.cabinet-video { cursor: zoom-in; }
+/* Barra do vídeo (aparece ao passar o mouse): som, volume e expandir. */
+.cabinet-controls { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex; align-items: center; gap: 5px; padding: 3px 5px; border-radius: 5px; background: #000000b8; opacity: 0; transition: opacity .15s; cursor: default; }
+.cabinet-video:hover .cabinet-controls, .cabinet-controls:focus-within { opacity: 1; }
+.cabinet-control { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #f0fcff; cursor: pointer; }
+.cabinet-control:hover, .cabinet-control:focus-visible { color: var(--cyan); outline: none; }
+.cabinet-expand { margin-left: auto; }
+.cabinet-volume { flex: 1; min-width: 0; max-width: 90px; height: 3px; margin: 0; accent-color: #57fcff; cursor: pointer; }
+/* Vídeo grande, centralizado (expandir ou duplo clique). */
+.video-modal-backdrop { z-index: 80; }
+.video-modal { width: min(1100px, 86vw); display: flex; flex-direction: column; border: 1px solid #57fcff55; border-radius: 8px; background: #0b0b0b; box-shadow: 0 24px 80px #000c; overflow: hidden; }
+.video-modal header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #ffffff1a; color: #f0fcff; font-size: 15px; letter-spacing: .04em; }
+.video-modal-close { width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: #f0fcff; font-size: 16px; cursor: pointer; }
+.video-modal-close:hover, .video-modal-close:focus-visible { background: #ffffff14; color: var(--cyan); outline: none; }
+.video-modal video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }

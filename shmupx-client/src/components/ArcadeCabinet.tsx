@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { GameRoom } from "../types/room";
 import { useGameArt } from "../data/gameArt";
-import { setCabinetMuted, useCabinetMuted, useGameVideo } from "../data/gameVideo";
+import { createPortal } from "react-dom";
+import { setCabinetMuted, setCabinetVolume, useCabinetMuted, useCabinetVolume, useGameVideo } from "../data/gameVideo";
+import { useDialogFocus } from "./useDialogFocus";
 import { useI18n } from "../i18n";
 
 /**
@@ -37,22 +39,37 @@ const SCREEN = {
 /** O vídeo volta ao início aos 30 s: a tela do gabinete é um "attract mode" curto. */
 const LOOP_SECONDS = 30;
 
+function SpeakerIcon({ silent }: { silent: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+      {silent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
+    </svg>
+  );
+}
+
 /**
- * Trailer na tela do gabinete: toca só com o gabinete visível e o Client em foco (ao abrir o
- * jogo a janela perde o foco e o vídeo pausa, sem som por cima do jogo). Com som; o alto-falante
- * silencia (e se o sistema bloquear o som automático, o vídeo segue mudo até um clique).
+ * Trailer na tela do gabinete: toca só com o gabinete visível, o Client em foco e a modal fechada
+ * (ao abrir o jogo a janela perde o foco e o vídeo pausa, sem som por cima do jogo). Com som; na
+ * barra (ao passar o mouse): silenciar, volume e expandir. Duplo clique também expande.
  */
-function CabinetVideo({ src, onFail }: { src: string; onFail: () => void }) {
+function CabinetVideo({ src, paused, onFail, onExpand }: { src: string; paused: boolean; onFail: () => void; onExpand: (time: number) => void }) {
   const { t } = useI18n();
   const ref = useRef<HTMLVideoElement>(null);
   const muted = useCabinetMuted();
+  const volume = useCabinetVolume();
   const [blocked, setBlocked] = useState(false);
   const silent = muted || blocked;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const updateRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     const video = ref.current;
-    if (video) video.muted = silent;
-  }, [silent]);
+    if (!video) return;
+    video.muted = silent;
+    video.volume = volume;
+  }, [silent, volume]);
 
   useEffect(() => {
     const video = ref.current;
@@ -60,14 +77,16 @@ function CabinetVideo({ src, onFail }: { src: string; onFail: () => void }) {
     let visible = false;
     let focused = document.hasFocus();
     const update = () => {
-      if (!visible || !focused) { video.pause(); return; }
+      if (!visible || !focused || pausedRef.current) { video.pause(); return; }
       video.play().catch(() => {
         // Som automático bloqueado: segue mudo (o alto-falante mostra e religa).
         if (!video.muted) { video.muted = true; setBlocked(true); void video.play().catch(() => undefined); }
       });
     };
+    updateRef.current = update;
     const observer = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; update(); });
-    observer.observe(video);
+    // Dentro do foreignObject o Chromium não informa a visibilidade do vídeo: observa o SVG do gabinete.
+    observer.observe(video.closest("svg") ?? video);
     const onFocus = () => { focused = true; update(); };
     const onBlur = () => { focused = false; update(); };
     window.addEventListener("focus", onFocus);
@@ -79,28 +98,65 @@ function CabinetVideo({ src, onFail }: { src: string; onFail: () => void }) {
       video.pause();
     };
   }, [src]);
+  useEffect(() => updateRef.current(), [paused]);
 
+  const expand = () => onExpand(ref.current?.currentTime ?? 0);
   return (
-    <div className="cabinet-video">
+    <div className="cabinet-video" onDoubleClick={expand} title={t("Duplo clique para ver o vídeo grande")}>
       <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail}
         onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= LOOP_SECONDS) event.currentTarget.currentTime = 0; }} />
-      <button type="button" className="cabinet-sound" aria-label={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")} title={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")}
-        onClick={(event) => { event.stopPropagation(); if (blocked) { setBlocked(false); setCabinetMuted(false); } else setCabinetMuted(!muted); }}>
-        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
-          {silent ? <path d="M17 9l5 6M22 9l-5 6" /> : <path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12" />}
-        </svg>
-      </button>
+      <div className="cabinet-controls" onDoubleClick={(event) => event.stopPropagation()}>
+        <button type="button" className="cabinet-control" aria-label={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")} title={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")}
+          onClick={() => { if (blocked) { setBlocked(false); setCabinetMuted(false); } else setCabinetMuted(!muted); }}>
+          <SpeakerIcon silent={silent} />
+        </button>
+        <input className="cabinet-volume" type="range" min={0} max={1} step={0.05} value={silent ? 0 : volume} aria-label={t("Volume do vídeo")} title={t("Volume do vídeo")}
+          onChange={(event) => { const next = Number(event.target.value); setCabinetVolume(next); if (next > 0 && silent) { setBlocked(false); setCabinetMuted(false); } }} />
+        <button type="button" className="cabinet-control cabinet-expand" aria-label={t("Ver o vídeo grande")} title={t("Ver o vídeo grande")} onClick={expand}>
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
 
-/** Gabinete arcade com a capa do jogo na tela (ou o trailer, quando o jogo tem um). */
-export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; className?: string }) {
+/**
+ * Vídeo do jogo grande, numa janela no centro: controles do player (volume, avanço), com o volume
+ * e o som do gabinete. Fecha no X, no Esc ou clicando fora.
+ */
+function VideoModal({ title, src, start, onClose }: { title: string; src: string; start: number; onClose: () => void }) {
+  const { t } = useI18n();
+  const ref = useDialogFocus(true, onClose);
+  const muted = useCabinetMuted();
+  const volume = useCabinetVolume();
+  return createPortal(
+    <div className="controller-dialog-backdrop video-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={t("Vídeo de {game}", { game: title })} tabIndex={-1} className="video-modal">
+        <header>
+          <strong>{title}</strong>
+          <button type="button" className="video-modal-close" aria-label={t("Fechar")} onClick={onClose}>✕</button>
+        </header>
+        <video src={src} controls autoPlay loop playsInline
+          ref={(video) => { if (video && !video.dataset.ready) { video.dataset.ready = "1"; video.currentTime = start; video.volume = volume; video.muted = muted; } }}
+          onVolumeChange={(event) => { setCabinetVolume(event.currentTarget.volume); setCabinetMuted(event.currentTarget.muted); }} />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Gabinete arcade com a capa do jogo na tela. Com `video` (Minhas coleções), a tela mostra o
+ * trailer do jogo quando houver; na sala, fica a imagem.
+ */
+export function ArcadeCabinet({ room, className = "", video: withVideo = false }: { room: GameRoom; className?: string; video?: boolean }) {
   const art = useGameArt(room);
-  const video = useGameVideo(room);
+  const video = useGameVideo(room, withVideo);
   const [videoFailed, setVideoFailed] = useState(false);
-  useEffect(() => setVideoFailed(false), [video]);
+  const [modalStart, setModalStart] = useState<number | null>(null);
+  useEffect(() => { setVideoFailed(false); setModalStart(null); }, [video]);
   const showVideo = Boolean(video) && !videoFailed;
   const artTate = useTate(art.src);
   // Trailers são largos (16:9): com vídeo, a tela fica deitada.
@@ -111,6 +167,8 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
   const uid = useId().replace(/:/g, "");
   const id = (name: string) => `${name}-${uid}`;
   return (
+    <>
+    {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={() => setModalStart(null)} />}
     <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${className}`} viewBox="22 0 276 336" role="img" aria-label={room.title}>
       {/* Inspirado no Sega Astro City: corpo claro de cantos redondos, marquise iluminada (sem texto),
           monitor fundo em moldura escura, painel preto largo e porta da ficha embaixo. */}
@@ -132,7 +190,9 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <rect {...bezel} fill="#050708" stroke="#2a3136" strokeWidth="2" />
       <rect {...screen} fill="#000" />
       {showVideo
-        ? <foreignObject {...screen} clipPath={`url(#${id("screen")})`}><CabinetVideo src={video!} onFail={() => setVideoFailed(true)} /></foreignObject>
+        // Sem clip-path no foreignObject: o Chromium deixa de entregar o mouse aos controles. O canto
+        // arredondado da tela vem do CSS (.cabinet-video).
+        ? <foreignObject {...screen}><CabinetVideo src={video!} paused={modalStart !== null} onFail={() => setVideoFailed(true)} onExpand={setModalStart} /></foreignObject>
         : <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />}
       <rect {...screen} fill={`url(#${id("glass")})`} pointerEvents="none" />
       {/* Painel, corpo de baixo e portas: abaixo do monitor */}
@@ -168,5 +228,6 @@ export function ArcadeCabinet({ room, className = "" }: { room: GameRoom; classN
       <line x1="39.75" y1="281" x2="280.25" y2="281" stroke="#8a939a" strokeWidth="1.5" />
       </g>
     </svg>
+    </>
   );
 }

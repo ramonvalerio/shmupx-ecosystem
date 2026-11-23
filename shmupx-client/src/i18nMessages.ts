@@ -164,6 +164,8 @@ const ROOM_LAYOUT_ENGLISH: Record<string, string> = {
   "PC (Steam)": "PC (Steam)", "Mega Drive": "Mega Drive", "Neo Geo": "Neo Geo", "Arcade": "Arcade", "Xbox 360": "Xbox 360",
   "PlayStation": "PlayStation", "Nintendo Switch": "Nintendo Switch",
   "Ligar o som do vídeo": "Turn video sound on", "Silenciar o vídeo": "Mute video",
+  "Volume do vídeo": "Video volume", "Ver o vídeo grande": "Watch the video large", "Duplo clique para ver o vídeo grande": "Double-click to watch the video large",
+  "Vídeo de {game}": "{game} video",
 };
 for (const [key, value] of Object.entries(ROOM_LAYOUT_ENGLISH)) ENGLISH[key] ??= value;
 
