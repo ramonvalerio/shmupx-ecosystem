@@ -38,6 +38,7 @@ export default function App() {
   else screen = (
     <RoomList
       rooms={rooms}
+      uid={profile.uid}
       profileName={profile.displayName}
       preset={preset}
       onPreset={setPreset}

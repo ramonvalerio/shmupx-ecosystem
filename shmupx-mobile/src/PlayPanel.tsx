@@ -38,7 +38,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
 
   if (platforms.length === 0) return null;
 
-  const mine = play.session?.room.id === room.id;
+  const mine = play.session?.room.id === room.id || play.external?.gameId === room.id;
   const error = play.error && (play.error.roomId === room.id || play.error.roomId === null) ? play.error.message : null;
   const sheetPlatform = sheet?.platform ?? null;
   const sheetAvailability = sheetPlatform && sheet ? play.availability(room, sheetPlatform, sheet.kind) : null;
@@ -46,7 +46,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
 
   return (
     <section className="lite-play" aria-label={t("Jogar")}>
-      {play.session ? <SessionBar /> : (
+      {play.session || play.external ? <SessionBar /> : (
         <div className="lite-play-buttons">
           <button type="button" className="lite-play-training" onClick={() => open("training")}>
             <strong>{t("Play Training")}</strong><small>{t("sem ficha")}</small>
@@ -56,7 +56,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
           </button>
         </div>
       )}
-      {play.session && !mine && <p className="lite-muted">{t("Pare o jogo aberto para jogar esta sala.")}</p>}
+      {(play.session || play.external) && !mine && <p className="lite-muted">{t("Pare o jogo aberto para jogar esta sala.")}</p>}
       {error && !sheet && <p className="lite-error" role="alert">{t(error)}</p>}
 
       {sheet && (

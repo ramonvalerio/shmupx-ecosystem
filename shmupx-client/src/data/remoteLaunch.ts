@@ -41,6 +41,8 @@ export interface RemoteState {
   desktop?: RemoteDesktop;
   command?: RemoteCommand;
   result?: RemoteResult;
+  /** Jogo aberto na conta (um por vez): ver `playing.ts`. */
+  playing?: import("./playing").PlayingNow;
 }
 
 /** O Client avisa a cada 45 s; mais de 2 min sem sinal = PC fechado. */

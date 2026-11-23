@@ -62,7 +62,7 @@ service cloud.firestore {
     // Jogar no PC pelo celular: o ShmupX Lite grava o pedido (command), o Client do PC avisa que
     // está aberto (desktop) e responde (result). Só o dono; mapas pequenos, sem outros campos.
     function validRemote(data) {
-      return data.keys().hasOnly(['desktop', 'command', 'result'])
+      return data.keys().hasOnly(['desktop', 'command', 'result', 'playing'])
         && (!data.keys().hasAny(['command']) || (data.command is map
           && data.command.keys().hasOnly(['id', 'action', 'gameId', 'platform', 'kind', 'mode', 'createdAt'])
           && data.command.id is string && data.command.id.size() <= 64
@@ -81,7 +81,16 @@ service cloud.firestore {
         && (!data.keys().hasAny(['desktop']) || (data.desktop is map
           && data.desktop.keys().hasOnly(['seenAt', 'owned'])
           && data.desktop.seenAt is int && data.desktop.owned is map
-          && data.desktop.owned.size() <= 500));
+          && data.desktop.owned.size() <= 500))
+        // Jogo aberto na conta (um por vez, no PC ou no MiSTer): o Client e o Lite consultam antes de abrir outro.
+        && (!data.keys().hasAny(['playing']) || (data.playing is map
+          && data.playing.keys().hasOnly(['gameId', 'title', 'platform', 'kind', 'device', 'startedAt', 'beatAt'])
+          && data.playing.gameId is string && data.playing.gameId.size() <= 128
+          && data.playing.title is string && data.playing.title.size() <= 160
+          && data.playing.platform in ['steam', 'emulator', 'mister']
+          && data.playing.kind in ['training', 'ranked', 'live']
+          && data.playing.device in ['pc', 'lite']
+          && data.playing.startedAt is int && data.playing.beatAt is int));
     }
 
     match /users/{uid} {

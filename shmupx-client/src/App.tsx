@@ -14,6 +14,9 @@ import { applyRunAnalysis, mergePendingRuns, type PendingRun, type RunAnalysisEv
 import { useDialogFocus } from "./components/useDialogFocus";
 import { takePendingRunMode } from "./data/gameModes";
 import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
+import { useRemoteLaunch } from "./data/remoteLaunch";
+import { setAccountPlaying, useClientMisterGame, usePlayingClaim } from "./data/playing";
+import { liveActive, useLive } from "./data/useLive";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -45,6 +48,8 @@ export default function App() {
   const [startErrors, setStartErrors] = useState<Record<string, string>>({});
   // Jogo aberto no MODO TREINO em cada sala (processo): o PARAR JOGO o fecha.
   const [practiceGames, setPracticeGames] = useState<Record<string, number>>({});
+  // Plataforma por onde cada jogo foi aberto neste PC (para declarar o jogo aberto na conta).
+  const [launchPlatforms, setLaunchPlatforms] = useState<Record<string, "steam" | "emulator">>({});
   const recordingRoomId = runs.find((run) => run.status === "recording")?.gameId ?? null;
   const expiredDialogRef = useDialogFocus(expiredRoomId !== null, () => setExpiredRoomId(null));
 
@@ -64,6 +69,22 @@ export default function App() {
   const remote = useRemoteLaunchHost(signedUid, { rooms, recordingRoomId, practiceGames });
   const remoteRef = useRef(remote);
   remoteRef.current = remote;
+
+  // Um jogo por vez na conta: o que está aberto (aqui ou no celular) fica no Firestore.
+  const accountRemote = useRemoteLaunch(signedUid);
+  useEffect(() => setAccountPlaying(accountRemote?.playing), [accountRemote?.playing]);
+  const live = useLive();
+  const clientMister = useClientMisterGame();
+  const liveGameId = liveActive(live.state) ? live.state.game_id ?? null : null;
+  const practiceRoomId = Object.keys(practiceGames)[0] ?? null;
+  const ownGame = liveGameId ? { gameId: liveGameId, kind: "live" as const, platform: launchPlatforms[liveGameId] ?? "emulator" }
+    : recordingRoomId ? { gameId: recordingRoomId, kind: "ranked" as const, platform: launchPlatforms[recordingRoomId] ?? "steam" }
+    : practiceRoomId ? { gameId: practiceRoomId, kind: "training" as const, platform: launchPlatforms[practiceRoomId] ?? "emulator" }
+    : clientMister ? { gameId: clientMister.gameId, kind: clientMister.kind, platform: "mister" as const }
+    : null;
+  usePlayingClaim(signedUid, ownGame
+    ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? clientMister?.title ?? ownGame.gameId, device: "pc" }
+    : null);
   useEffect(() => {
     if (!isTauri() || !signedUid) return;
     invoke<PendingRun[]>("runs_pendentes", { uid: signedUid })
@@ -100,11 +121,13 @@ export default function App() {
 
     const unlistenLaunched = listen<GameLaunchedPayload>("steam://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.steamAppId === event.payload.app_id);
+      if (room) setLaunchPlatforms((current) => ({ ...current, [room.id]: "steam" }));
       if (room && event.payload.treino) setPracticeGames((current) => ({ ...current, [room.id]: event.payload.pid }));
       else if (room) startRun(room.id, event.payload.pid, event.payload.app_id);
     });
     const unlistenEmulator = listen<EmulatorLaunchedPayload>("emulator://game-launched", (event) => {
       const room = roomsRef.current.find((candidate) => candidate.id === event.payload.game_id);
+      if (room) setLaunchPlatforms((current) => ({ ...current, [room.id]: "emulator" }));
       if (room && event.payload.treino) setPracticeGames((current) => ({ ...current, [room.id]: event.payload.pid }));
       else if (room) startRun(room.id, event.payload.pid, null);
     });

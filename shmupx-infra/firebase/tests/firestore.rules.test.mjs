@@ -172,4 +172,11 @@ test("remote launch: only the owner reads and writes small, known fields", async
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { command: { ...command, platform: "mister" } }));
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { command: { ...command, extra: true } }));
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { other: 1 }));
+  // Jogo aberto na conta (um por vez): o dono grava e apaga; campos e valores conferidos.
+  const playing = { gameId: "ketsui", title: "Ketsui", platform: "mister", kind: "training", device: "lite", startedAt: 1, beatAt: 2 };
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing }, { mergeFields: ["playing"] }));
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: deleteField() }, { mergeFields: ["playing"] }));
+  await assertFails(setDoc(doc(db("bob"), "remoteLaunch/alice"), { playing }, { mergeFields: ["playing"] }));
+  await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, device: "tv" } }, { mergeFields: ["playing"] }));
+  await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, extra: true } }, { mergeFields: ["playing"] }));
 });

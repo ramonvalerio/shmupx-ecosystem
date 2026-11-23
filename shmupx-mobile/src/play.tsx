@@ -6,6 +6,7 @@ import { romsFor } from "@client/data/emulatorLibrary";
 import { misterMatches, useMisterLibrary } from "@client/data/misterLibrary";
 import { misterAuth, readMisterPlayer, type MisterMenuGame } from "@client/data/misterPlayer";
 import { desktopOnline, sendRemoteCommand, useRemoteLaunch, type RemotePlatform } from "@client/data/remoteLaunch";
+import { clearPlaying, playingActive, playingWhere, usePlayingClaim, type PlayingNow } from "@client/data/playing";
 import type { GameMode, GameRoom } from "@client/types/room";
 import type { Kind, Platform, PlayPreset } from "./prefs";
 import { useBackLayer } from "./back";
@@ -49,6 +50,9 @@ type Choices = { room: GameRoom; kind: Kind; mode: GameMode; list: MisterMenuGam
 
 interface PlayApi {
   session: Session | null;
+  /** Jogo aberto na conta por outro caminho (o PC, ou o MiSTer de uma sessão anterior do app). */
+  external: PlayingNow | null;
+  stopExternal: () => Promise<void>;
   busy: boolean;
   /** Último erro ao jogar e a sala dele (`null` = erro geral). */
   error: { roomId: string | null; message: string } | null;
@@ -85,6 +89,14 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
   const [choices, setChoices] = useState<Choices | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<PlayApi["error"]>(null);
+
+  // Um jogo por vez na conta: o jogo aberto no MiSTer por aqui fica declarado na conta.
+  usePlayingClaim(uid, session?.where === "mister"
+    ? { gameId: session.room.id, title: session.room.title, platform: "mister", kind: session.kind, device: "lite" }
+    : null);
+  const accountPlaying = playingActive(remote?.playing) ? remote!.playing! : null;
+  // Jogo aberto que este app não está acompanhando (aberto pelo PC, ou num uso anterior do app).
+  const external = session ? null : accountPlaying;
 
   const ownedOnPc = useCallback((roomId: string) => remote?.desktop?.owned?.[roomId] ?? [], [remote?.desktop]);
 
@@ -153,6 +165,11 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
 
   const start = useCallback(async (room: GameRoom, kind: Kind, mode: GameMode, platform: Platform): Promise<boolean> => {
     if (session) { setError({ roomId: room.id, message: t("Já tem um jogo aberto: pare o {game} antes de abrir outro.", { game: session.room.title }) }); return false; }
+    if (accountPlaying) {
+      const where = playingWhere(accountPlaying);
+      setError({ roomId: room.id, message: t("Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.", { game: accountPlaying.title, platform: t(where.platform), device: t(where.device) }) });
+      return false;
+    }
     if (platform === "mister") return launchMister(room, kind, mode);
     if (!pcOnline) { setError({ roomId: room.id, message: t("Abra o ShmupX no PC para jogar por lá") }); return false; }
     setBusy(true);
@@ -167,7 +184,7 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
     } finally {
       setBusy(false);
     }
-  }, [session, launchMister, pcOnline, uid, t]);
+  }, [session, accountPlaying, launchMister, pcOnline, uid, t]);
 
   const quickPlay = useCallback(async (room: GameRoom, preset: PlayPreset, misterOk: boolean) => {
     if (!platformsFor(room, misterOk).includes(preset.platform)) {
@@ -198,7 +215,28 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
     }
   }, [session, uid]);
 
-  const api: PlayApi = { session, busy, error, clearError: () => setError(null), pcOnline, ownedOnPc, availability, start, quickPlay, stop };
+  /** PARAR JOGO de um jogo aberto por outro caminho: no MiSTer volta ao menu; no PC pede ao Client. */
+  const stopExternal = useCallback(async () => {
+    if (!external) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (external.platform === "mister") {
+        const player = readMisterPlayer();
+        // Mesmo que o MiSTer já esteja no menu (ou fora da rede), a conta é liberada em seguida.
+        if (player) await invoke("mister_parar", { host: player.host, ...misterAuth(player.password) }).catch(() => undefined);
+        await clearPlaying(uid);
+      } else {
+        await sendRemoteCommand(uid, { action: "stop", gameId: external.gameId });
+      }
+    } catch (failure) {
+      setError({ roomId: null, message: describe(failure) });
+    } finally {
+      setBusy(false);
+    }
+  }, [external, uid]);
+
+  const api: PlayApi = { session, external, stopExternal, busy, error, clearError: () => setError(null), pcOnline, ownedOnPc, availability, start, quickPlay, stop };
   return (
     <PlayContext.Provider value={api}>
       {children}
@@ -238,17 +276,31 @@ function MisterChoices({ choices, busy, onPick, onClose }: { choices: Choices; b
 }
 
 /** Jogo aberto agora (em qualquer sala) com o PARAR JOGO. */
+const PLAYING_TITLE = { training: "Jogando em modo treino", ranked: "Jogando em modo ranqueado", live: "Jogando ao vivo" } as const;
+
 export function SessionBar() {
   const { t } = useI18n();
-  const { session, busy, stop } = usePlay();
+  const { session, external, stopExternal, busy, stop } = usePlay();
+  if (!session && external) {
+    const where = playingWhere(external);
+    return (
+      <div className="lite-session">
+        <p className="lite-session-status" role="status">
+          <span className="presence-dot is-live" aria-hidden="true" />
+          <span><strong>{t(PLAYING_TITLE[external.kind])}</strong><small>{external.title} · {t(where.platform)} · {t(where.device)}</small></span>
+        </p>
+        <button type="button" className="lite-stop" disabled={busy} onClick={() => void stopExternal()}>{t(busy ? "Encerrando o jogo…" : "PARAR JOGO")}</button>
+      </div>
+    );
+  }
   if (!session) return null;
   const failed = session.where === "pc" && session.status === "failed";
-  const title = session.where === "mister"
-    ? t(session.kind === "training" ? "Treinando na TV" : "Jogando na TV")
-    : t(session.status === "waiting" ? "Enviado ao PC…" : session.status === "stopping" ? "Encerrando no PC…" : failed ? "Não abriu no PC" : "Jogando no PC");
+  const title = session.where === "mister" || session.status === "started"
+    ? t(PLAYING_TITLE[session.kind])
+    : t(session.status === "waiting" ? "Enviado ao PC…" : session.status === "stopping" ? "Encerrando no PC…" : "Não abriu no PC");
   const detail = session.where === "mister"
-    ? `${session.room.title} · ${session.label} · ${t(session.kind === "training" ? "sem ficha" : "valendo ranking")}`
-    : session.message ?? `${session.room.title} · ${t(PLATFORM_LABEL[session.platform])} · ${t(session.kind === "training" ? "sem ficha" : "valendo ranking")}`;
+    ? `${session.room.title} · MiSTer · ${session.label}`
+    : session.message ?? `${session.room.title} · ${t(PLATFORM_LABEL[session.platform])} · ${t("no PC")}`;
   return (
     <div className={`lite-session ${failed ? "is-failed" : ""}`}>
       <p className="lite-session-status" role="status">

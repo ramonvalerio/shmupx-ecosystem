@@ -24,6 +24,7 @@ import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
 import CreditsBadge from "./CreditsBadge";
+import OpenGameBanner from "./OpenGameBanner";
 import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
@@ -284,6 +285,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           {!(isLibrary && activeRoom && !rankingRoomIds.includes(activeRoom.id)) && <CreditsBadge uid={profile.uid} />}
         </div>
       </header>
+      <OpenGameBanner uid={profile.uid} />
       <div className="client-content">
       {bigPicture.error && <p className="mode-error" role="alert">{t(bigPicture.error)}</p>}
       {/* Telas do menu do perfil: voltar para a Coleção (a tela principal). */}

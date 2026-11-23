@@ -8,6 +8,7 @@ import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } f
 import { readMisterLibrary } from "../data/misterLibrary";
 import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
 import { useDialogFocus } from "./useDialogFocus";
+import { getAccountPlaying, playingWhere, setClientMisterGame } from "../data/playing";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
@@ -75,10 +76,20 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
     return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
+  /** Um jogo por vez na conta: com um aberto (aqui ou no celular), avisa e não abre outro. */
+  function blockedByOpenGame(): boolean {
+    const open = getAccountPlaying();
+    if (!open) return false;
+    const where = playingWhere(open);
+    setError(t("Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.", { game: open.title, platform: t(where.platform), device: t(where.device) }));
+    return true;
+  }
+
   /** Play Training / Play Ranked / Play Live Ranked: abre a janela de modo e plataforma. */
   function play(kind: PlayKind) {
     setError(null);
     setNotice(null);
+    if (blockedByOpenGame()) return;
     setPractice(kind === "training");
     // A live captura a janela do jogo neste PC: o MiSTer (na TV) fica de fora.
     const list = options().filter((id) => kind !== "live" || id !== "mister");
@@ -99,6 +110,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
   function playNow(kind: PlayKind, platform: PlayOn, chosen: GameMode) {
     setError(null);
     setNotice(null);
+    if (blockedByOpenGame()) return;
     setPractice(kind === "training");
     setMode(chosen);
     if (kind === "live") { onLive?.(platform, chosen); return; }
@@ -154,6 +166,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
       setMisterModes(null);
       await invoke("mister_iniciar", { host: player.host, ...misterAuth(player.password), caminho: target.caminho });
       setMisterGame({ host: player.host, password: player.password, practice: forPractice });
+      setClientMisterGame({ gameId: room.id, title: room.title, kind: forPractice ? "training" : "ranked" });
       setNotice(forPractice
         ? t("Modo treino: abrindo {game} no MiSTer ({mode}) como CONVIDADO, sem gastar ficha nem ir para o ranking online.", { game: room.title, mode: target.modo })
         : t("Abrindo {game} no MiSTer ({mode}) como {player}. Jogue na TV: a partida entra no seu perfil.", { game: room.title, mode: target.modo, player: player.username.toUpperCase() }));
@@ -192,6 +205,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         ? t("Treino encerrado: o MiSTer voltou ao menu.")
         : t("O MiSTer voltou ao menu: o agente registrou a partida com o placar."));
       setMisterGame(null);
+      setClientMisterGame(null);
     } catch (failure) {
       setError(describe(failure, "Não foi possível parar o jogo no MiSTer."));
     } finally {

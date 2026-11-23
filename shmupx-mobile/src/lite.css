@@ -20,6 +20,7 @@
   --success: #3fd98b;
   --live: #fd4851;
   --purple: #c58bff;
+  --red-text: #ff7a83;
   --grip: #ffffff33;
   --radio: #ffffff44;
   --backdrop: #000000b3;
@@ -57,6 +58,7 @@
   --success: #15703f;
   --live: #d92d36;
   --purple: #7c3aed;
+  --red-text: #b4232c;
   --grip: #10233f33;
   --radio: #10233f55;
   --backdrop: #10233f80;
@@ -245,11 +247,11 @@ img { max-width: 100%; }
 .lite-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 72px; padding: 10px; border: 1px solid var(--stroke); border-radius: 8px; background: var(--surface); text-align: left; }
 .lite-chip strong { font-size: 15px; }
 .lite-chip small { color: var(--muted); font-size: 11px; line-height: 1.35; }
-.lite-chip[aria-checked="true"] { border-color: var(--cyan); background: var(--tint); box-shadow: inset 0 0 0 1px var(--cyan); }
-.lite-chip[aria-checked="true"] strong { color: var(--cyan); }
+.lite-chip[aria-checked="true"] { border-color: var(--live); background: color-mix(in srgb, var(--live) 14%, transparent); box-shadow: inset 0 0 0 1px var(--live); }
+.lite-chip[aria-checked="true"] strong { color: var(--red-text); }
 .lite-option-list { display: flex; flex-direction: column; gap: 8px; }
 .lite-option { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 8px; background: var(--surface); text-align: left; }
-.lite-option[aria-checked="true"] { border-color: var(--cyan); background: var(--tint); }
+.lite-option[aria-checked="true"] { border-color: var(--live); background: color-mix(in srgb, var(--live) 12%, transparent); }
 .lite-option.is-unavailable { opacity: .55; }
 .lite-option.is-unavailable[aria-checked="true"] { opacity: .85; }
 .lite-option-mark { width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; border-radius: 6px; background: var(--tint-strong); color: var(--cyan); font-weight: 700; }
@@ -257,31 +259,32 @@ img { max-width: 100%; }
 .lite-option-text strong { font-size: 15px; }
 .lite-option-text small { color: var(--muted); font-size: 12px; line-height: 1.35; }
 .lite-option-radio { width: 20px; height: 20px; flex-shrink: 0; border: 2px solid var(--radio); border-radius: 50%; }
-.lite-option[aria-checked="true"] .lite-option-radio { border-color: var(--cyan); background: radial-gradient(circle, var(--cyan) 0 40%, transparent 45%); }
+.lite-option[aria-checked="true"] .lite-option-radio { border-color: var(--live); background: radial-gradient(circle, var(--live) 0 40%, transparent 45%); }
 .lite-sheet-footer { padding: 10px 16px 14px; border-top: 1px solid var(--stroke); }
 .lite-sheet-footer .lite-primary, .lite-sheet-footer .lite-secondary { width: 100%; margin: 0; min-height: 52px; font-size: 16px; }
 .lite-sheet .lite-error { margin: 0 0 6px; }
 
 /* Tela inicial: jogo aberto, configuração de jogo e ▶ em cada sala */
 .lite-home-session { border-bottom: 1px solid var(--stroke); }
-.lite-preset { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; padding: 10px; border: 1px solid var(--stroke); border-radius: 8px; background: var(--panel); }
+.lite-preset { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .lite-preset-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--stroke); border-radius: 6px; overflow: hidden; }
 .lite-preset-row button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 40px; padding: 6px 4px; border: 0; border-left: 1px solid var(--stroke); background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; }
 .lite-preset-row button:first-child { border-left: 0; }
 .lite-preset-row button small { font-size: 10px; font-weight: 400; opacity: .85; }
-.lite-preset-row button[aria-checked="true"] { background: var(--tint-strong); color: var(--cyan); box-shadow: inset 0 -2px 0 var(--cyan); }
+.lite-preset-row button[aria-checked="true"] { background: color-mix(in srgb, var(--live) 20%, transparent); color: var(--red-text); box-shadow: inset 0 -2px 0 var(--live); }
 .lite-preset-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .lite-preset-hint .text-action { font-size: 12px; }
 .lite-room-row { display: flex; flex-direction: column; gap: 4px; }
 .lite-room-card { padding: 0; overflow: hidden; }
 .lite-room-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 8px; border: 0; background: none; text-align: left; }
 .lite-room-row.is-running .lite-room-card { border-color: color-mix(in srgb, var(--live) 55%, transparent); }
-.lite-mister-badge.is-preset { background: var(--tint-strong); }
-.lite-quick-play { align-self: stretch; width: 58px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-left: 1px solid var(--stroke); background: var(--tint); color: var(--cyan); font-size: 22px; }
+.lite-mister-badge.is-preset { border-color: var(--live); background: color-mix(in srgb, var(--live) 22%, transparent); color: var(--red-text); }
+.lite-quick-play { align-self: stretch; width: 64px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-left: 1px solid var(--stroke); background: var(--tint); color: var(--cyan); font-size: 30px; line-height: 1; }
 .lite-quick-play:active { background: var(--tint-strong); }
 .lite-quick-play.is-off { color: var(--muted); background: none; }
 .lite-quick-play:disabled { opacity: .4; }
 .lite-room-row.is-running .lite-quick-play { color: var(--live); }
+.lite-room-row.is-running .lite-quick-play:disabled { opacity: 1; }
 .lite-row-error { margin: 0; padding: 0 4px; text-align: left; font-size: 12px; }
 
 /* Ranking na tela inicial */
@@ -302,3 +305,11 @@ img { max-width: 100%; }
 .lite-swatch.is-default { background: linear-gradient(135deg, #111 50%, #57fcff 50%); }
 .lite-swatch.is-black { background: linear-gradient(135deg, #000 50%, #57fcff 50%); }
 .lite-swatch.is-white { background: linear-gradient(135deg, #f3f4f1 50%, #0b7c8a 50%); }
+
+/* Jogando agora: bolinha vermelha pulsando (no card do jogo e na barra do jogo aberto). */
+.lite-playing-dot, .lite-session .presence-dot.is-live { display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: var(--live); animation: lite-playing 1.1s ease-in-out infinite; }
+.lite-session .presence-dot.is-live { width: 16px; height: 16px; flex-shrink: 0; }
+@keyframes lite-playing {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 70%, transparent); }
+  50% { transform: scale(.82); box-shadow: 0 0 0 8px color-mix(in srgb, var(--live) 0%, transparent); }
+}

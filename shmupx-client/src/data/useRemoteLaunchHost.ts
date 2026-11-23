@@ -9,6 +9,7 @@ import {
   COMMAND_TTL_MS, DESKTOP_HEARTBEAT_MS, publishDesktop, publishResult, remoteRef,
   type RemoteCommand, type RemotePlatform, type RemoteState,
 } from "./remoteLaunch";
+import { getAccountPlaying } from "./playing";
 
 const describe = (error: unknown) => (typeof error === "string" ? error : error instanceof Error ? error.message : String(error));
 
@@ -74,6 +75,9 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
       const room = rooms.find((candidate) => candidate.id === command.gameId);
       if (!room || !command.platform) { answer(command.id, "failed", "Este jogo não está no catálogo do Client."); return; }
       if (recordingRoomId || Object.keys(practiceGames).length > 0) { answer(command.id, "failed", "Já há um jogo aberto no PC. Pare o jogo antes de abrir outro."); return; }
+      // Um jogo por vez na conta (ex.: aberto no MiSTer): não abre outro no PC.
+      const open = getAccountPlaying();
+      if (open) { answer(command.id, "failed", `Já tem um jogo aberto na sua conta: ${open.title}. Pare esse jogo antes de abrir outro.`); return; }
       const training = command.kind !== "ranked";
       try {
         if (!(await stillInstalled(room, command.platform))) {

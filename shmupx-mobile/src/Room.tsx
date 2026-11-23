@@ -11,6 +11,8 @@ import { leaveRoomPresence, usePlayerPresence, usePresenceHeartbeat, useRoomPres
 import type { PlayerProfile } from "@client/auth/firebase";
 import type { GameRoom } from "@client/types/room";
 import PlayPanel from "./PlayPanel";
+import RankingTab from "./RankingTab";
+import { avatarOf, usePublicProfiles } from "@client/data/publicProfile";
 
 const STATUS_ORDER: Record<PresenceStatus, number> = { live: 0, online: 1, away: 2, offline: 3 };
 const STATUS_LABEL: Record<PresenceStatus, string> = { live: "Ao vivo", online: "Online", away: "Ausente", offline: "Offline" };
@@ -52,10 +54,10 @@ function LiveViewer({ roomId, uid, name, onClose }: { roomId: string; uid: strin
   );
 }
 
-/** Sala no celular: chat e jogadores (com as lives). Sair pela seta deixa a sala. */
+/** Sala no celular: chat, jogadores (com as lives) e o ranking do jogo. Sair pela seta deixa a sala. */
 export default function Room({ room, profile, preset, onBack, onSettings }: { room: GameRoom; profile: PlayerProfile; preset: PlayPreset; onBack: () => void; onSettings: () => void }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"chat" | "players">("chat");
+  const [tab, setTab] = useState<"chat" | "players" | "ranking">("chat");
   const [watching, setWatching] = useState<{ uid: string; name: string } | null>(null);
   useBackLayer(watching !== null, () => setWatching(null));
   const author = useMemo(() => ({ uid: profile.uid, displayName: profile.displayName }), [profile.uid, profile.displayName]);
@@ -65,6 +67,8 @@ export default function Room({ room, profile, preset, onBack, onSettings }: { ro
   const others = useRoomPresence(room.id, profile.uid);
   // Presença: online com o app em primeiro plano nesta sala; ausente com o app em segundo plano.
   usePresenceHeartbeat(author, [room.id], room.id, null, null);
+  // Fotos de perfil (as mesmas do Client): a minha e a de quem está na sala.
+  const avatars = usePublicProfiles([profile.uid, ...others.map((o) => o.uid)]);
 
   const players = [
     { uid: profile.uid, name: profile.displayName, status: "online" as PresenceStatus, live: undefined, you: true },
@@ -94,6 +98,7 @@ export default function Room({ room, profile, preset, onBack, onSettings }: { ro
           {t("Jogadores ({count})", { count: players.length })}
           {liveCount > 0 && <span className="presence-dot is-live" aria-label={t("Ao vivo")} />}
         </button>
+        <button type="button" role="tab" aria-selected={tab === "ranking"} onClick={() => setTab("ranking")}>{t("Ranking")}</button>
       </div>
 
       {tab === "chat" ? (
@@ -101,6 +106,8 @@ export default function Room({ room, profile, preset, onBack, onSettings }: { ro
           <ChatFeed messages={chat.messages} status={chat.status} error={chat.error} playerId={profile.uid} />
           <ChatInput onSendMessage={chat.send} disabled={chat.status === "error"} error={chat.error} />
         </section>
+      ) : tab === "ranking" ? (
+        <RankingTab room={room} preset={preset} />
       ) : (
         <section className="lite-players">
           <ul>
@@ -112,7 +119,7 @@ export default function Room({ room, profile, preset, onBack, onSettings }: { ro
                   disabled={!player.live}
                   onClick={() => player.live && setWatching({ uid: player.uid, name: player.name })}
                 >
-                  <img src="/img/avatar-default.png" alt="" />
+                  <img src={avatarOf(avatars, player.uid)} alt="" />
                   <span className="lite-player-name">{player.name}{player.you && ` ${t("(você)")}`}</span>
                   {player.live && <span className="lite-live-tag">{t("ASSISTIR")}</span>}
                   <span className={`presence-dot is-${player.status}`} role="img" aria-label={t(STATUS_LABEL[player.status])} />

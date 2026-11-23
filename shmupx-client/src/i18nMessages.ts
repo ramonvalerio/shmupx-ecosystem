@@ -137,6 +137,18 @@ const ROOM_ENGLISH: Record<string, string> = {
 };
 for (const [key, value] of Object.entries(ROOM_ENGLISH)) ENGLISH[key] ??= value;
 
+// Um jogo por vez na conta (Client e Lite sincronizados) e textos do jogo aberto.
+const PLAYING_ENGLISH: Record<string, string> = {
+  "Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.": "A game is already open on your account: {game} ({platform}, {device}). Stop it before opening another.",
+  "Jogo aberto pelo celular: {game}": "Game opened from the phone: {game}",
+  "Pare este jogo para abrir outro.": "Stop this game to open another.",
+  "Jogando em modo treino": "Playing in training mode", "Jogando em modo ranqueado": "Playing in ranked mode", "Jogando ao vivo": "Playing live",
+  "modo treino": "training mode", "modo ranqueado": "ranked mode", "ao vivo": "live",
+  "pelo celular": "from the phone", "no PC": "on the PC", "Jogando": "Playing",
+  "Toque no jogo para entrar na sala (chat, jogadores e ranking), ou no ▶ para jogar direto com a configuração acima.": "Tap a game to open its room (chat, players and ranking), or ▶ to play right away with the setup above.",
+};
+for (const [key, value] of Object.entries(PLAYING_ENGLISH)) ENGLISH[key] ??= value;
+
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {
   if (/ficha/i.test(key)) ENGLISH[key] = value.replace(/\b(C|c)redit(s?)\b/g, (_match, c: string, plural: string) => `${c === "C" ? "C" : "c"}oin${plural}`);
