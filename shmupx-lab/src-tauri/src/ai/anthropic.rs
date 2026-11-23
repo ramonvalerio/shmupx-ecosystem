@@ -17,6 +17,7 @@ pub const VARIAVEL_MODELO: &str = "SHMUPX_LAB_AI_MODEL";
 /// Suficiente para identificar jogos e bem mais barato que o Opus; troque por
 /// `SHMUPX_LAB_AI_MODEL` (ex.: `claude-opus-5-5`) para títulos difíceis.
 const MODELO_PADRAO: &str = "claude-sonnet-5-5";
+// Em espera: o padrão é a assinatura (`motor.rs`); este cliente só entra com SHMUPX_LAB_AI_PROVIDER=api.
 
 pub struct Config {
     api_key: String,

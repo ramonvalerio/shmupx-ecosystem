@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
-use super::anthropic::Config;
+use super::motor::Motor;
 use super::cache::Cache;
 use super::steam::{self, JogoSteam};
 use super::sugestao::{self, Sugestao};
@@ -9,7 +9,7 @@ use super::sugestao::{self, Sugestao};
 #[derive(Debug, Serialize)]
 pub struct RespostaSugestoes {
     pub sugestoes: Vec<Sugestao>,
-    /// `true` quando veio do cache local: nenhuma chamada à API foi feita nem cobrada.
+    /// `true` quando veio do cache local: nenhuma chamada à IA foi feita.
     pub do_cache: bool,
     /// Modelo usado (`None` quando veio do cache).
     pub modelo: Option<String>,
@@ -54,8 +54,8 @@ pub async fn sugerir_jogo(
         }
     }
 
-    // A chave é exigida antes de consultar a Steam: sem ela nada do fluxo adianta.
-    let config = Config::do_ambiente()?;
+    // O motor (assinatura, ou a API com chave em espera) é resolvido antes de consultar a Steam.
+    let motor = Motor::do_ambiente()?;
 
     // A Steam é opcional: se ela falhar, a IA segue sozinha e o admin é avisado.
     let mut avisos = Vec::new();
@@ -67,7 +67,7 @@ pub async fn sugerir_jogo(
         }
     }
 
-    let sugestoes = sugestao::sugerir(&config, &titulo, web, jogos_steam.as_deref()).await?;
+    let sugestoes = sugestao::sugerir(&motor, &titulo, web, jogos_steam.as_deref(), &pasta).await?;
     // Falha ao gravar o cache não invalida uma resposta que já foi paga. Se a Steam falhou, a
     // entrada fica marcada sem Steam, e uma consulta futura com ela tenta de novo.
     if let Err(erro) = cache.guardar(&titulo, web, jogos_steam.is_some(), &sugestoes) {
@@ -76,7 +76,7 @@ pub async fn sugerir_jogo(
     Ok(RespostaSugestoes {
         sugestoes,
         do_cache: false,
-        modelo: Some(config.modelo),
+        modelo: Some(motor.modelo().to_string()),
         steam_consultada: jogos_steam.is_some(),
         jogos_na_steam: jogos_steam.as_ref().map_or(0, Vec::len),
         avisos,
