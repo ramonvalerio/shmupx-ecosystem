@@ -86,6 +86,8 @@ export function useGameArt(room: GameRoom) {
     src,
     // A arte da Steam é uma capa de loja: ocupa o card como a capa do Lab.
     kind: src === DEFAULT_COVER ? "is-default" : src === room.coverUrl || steam.includes(src) ? "has-cover" : "is-curated",
+    /** Arte da loja da Steam: mais larga que o card, então o corte poupa o lado esquerdo (onde costuma ficar a logo). */
+    store: steam.includes(src),
     // O "NO LOGO" é um aviso, não a arte do jogo: fica sempre colorido (como no Client antigo).
     grayscale: src !== DEFAULT_COVER && !((room.steamAppId > 0 && owns(room.steamAppId)) || emulator.owns(room) || mister.owns(room)),
     onError: () => setIndex((current) => Math.min(current + 1, candidates.length - 1)),

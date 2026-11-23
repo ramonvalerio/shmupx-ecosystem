@@ -103,6 +103,8 @@
 
 /* Arte curada (Client antigo): o jogo inteiro aparece no card; fora da biblioteca, em preto e branco. */
 .game-art.is-curated img { object-fit: cover; object-position: center top; }
+/* Arte da loja da Steam (mais larga que o card): o corte tira mais da direita e poupa a logo, que costuma ficar à esquerda. */
+.game-art.is-store img { object-position: 25% center; }
 .game-art.is-not-owned img, .arcade-cabinet image.is-not-owned { filter: grayscale(1) brightness(.8); }
 .big-picture .collection-layout .game-art { height: 250px; }
 

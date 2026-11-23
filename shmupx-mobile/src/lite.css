@@ -107,6 +107,7 @@ img { max-width: 100%; }
 .lite-room-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--surface); text-align: left; }
 .lite-room-card:active { border-color: var(--cyan); }
 .lite-room-card img { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 3px; background: #000; flex-shrink: 0; }
+.lite-room-card img.is-store { object-position: 25% center; }
 .lite-room-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .lite-room-info strong { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lite-room-info small { color: var(--muted); font-size: 12px; }

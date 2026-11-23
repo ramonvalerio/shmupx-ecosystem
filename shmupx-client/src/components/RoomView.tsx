@@ -79,7 +79,7 @@ export function GameArt({ room, className = "", decorative = false, children }: 
   const { t } = useI18n();
   const art = useGameArt(room);
   return (
-    <div className={`game-art art-${room.id} ${art.kind} ${art.grayscale ? "is-not-owned" : ""} ${className}`}>
+    <div className={`game-art art-${room.id} ${art.kind} ${art.store ? "is-store" : ""} ${art.grayscale ? "is-not-owned" : ""} ${className}`}>
       <img src={art.src} alt={decorative ? "" : t("Capa de {game}", { game: room.title })} loading="lazy" onError={art.onError} />
       {children}
     </div>

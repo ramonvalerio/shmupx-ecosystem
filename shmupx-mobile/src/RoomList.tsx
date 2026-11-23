@@ -22,7 +22,7 @@ function RoomCard({ room, preset, onOpen }: { room: GameRoom; preset: PlayPreset
     <div className={`lite-room-row ${running ? "is-running" : ""}`}>
       <div className="lite-room-card">
         <button type="button" className="lite-room-open" onClick={onOpen} aria-label={t("Entrar na sala de {game}", { game: room.title })}>
-          <img src={art.src} alt="" loading="lazy" onError={art.onError} />
+          <img src={art.src} alt="" loading="lazy" onError={art.onError} className={art.store ? "is-store" : undefined} />
           <span className="lite-room-info">
             <strong>{room.title}</strong>
             {platforms.length > 0 && <span className="lite-tags">
