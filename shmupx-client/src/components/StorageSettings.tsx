@@ -26,7 +26,8 @@ function size(bytes: number | null, locale: string): string {
  * Configurações › Armazenamento: a pasta onde as runs são gravadas (escolher, abrir, voltar ao
  * padrão), com o espaço livre do disco e o quanto os vídeos do ShmupX já ocupam nela.
  */
-export default function StorageSettings({ onShowRuns }: { onShowRuns: () => void }) {
+/** `onShowRuns`: link para a tela de Submissões (fora de uso por enquanto: sem ele, o link some). */
+export default function StorageSettings({ onShowRuns }: { onShowRuns?: () => void }) {
   const { t, locale } = useI18n();
   const [destino, setDestino] = useState<Destino | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +82,6 @@ export default function StorageSettings({ onShowRuns }: { onShowRuns: () => void
     {lowSpace && <p className="mode-error-inline">{t("Pouco espaço livre: uma run longa pode não caber. Libere espaço ou escolha outra pasta.")}</p>}
     {error && <p className="mode-error-inline" role="alert">{t(error)}</p>}
     <p className="muted">{t("Vale para as próximas runs; os vídeos já gravados continuam onde estão.")}</p>
-    <button type="button" className="text-action" onClick={onShowRuns}>{t("Ver runs desta sessão →")}</button>
+    {onShowRuns && <button type="button" className="text-action" onClick={onShowRuns}>{t("Ver runs desta sessão →")}</button>}
   </div>;
 }
