@@ -337,7 +337,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {/* As abas de cima saíram por enquanto: os jogos abertos ficam no menu lateral. */}
         <div className="room-stage">
           {activeRoom === null ? (
-            <CollectionPane rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} onOpenRanking={(id) => openGame(id, true)} compact={false} bigPicture={bigPicture.active} />
+            <CollectionPane uid={profile.uid} rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} compact={false} bigPicture={bigPicture.active} />
           ) : rankingRoomIds.includes(activeRoom.id) ? (
             <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} />
           ) : (

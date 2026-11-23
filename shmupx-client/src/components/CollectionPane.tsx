@@ -7,6 +7,7 @@ import ImportGamesDialog from "./ImportGamesDialog";
 import { useGameLauncher } from "./useGameLauncher";
 import { useRoomPlay } from "../data/roomPlay";
 import PlaySetup from "./PlaySetup";
+import RankedPanel, { useRankedLive } from "./RankedPanel";
 import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
@@ -93,19 +94,19 @@ function ComingSoonBadge({ room }: { room: GameRoom }) {
 
 /** MODO TREINO no painel: abre o jogo sem gravar run nem gastar ficha (as mesmas regras da sala). */
 /** Jogar pelo painel: modo e plataforma (os mesmos da sala) e PLAY TRAINING, que abre direto. */
-function PlayPanel({ room, onOpenRanking }: { room: GameRoom; onOpenRanking?: () => void }) {
+/**
+ * Jogar pela Coleção: modo e plataforma (os mesmos da sala) e o Play Ranked da sala — a ficha
+ * (clique nela para jogar valendo ranking) com as opções de live e de tela cheia.
+ */
+function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   const { t } = useI18n();
-  const launcher = useGameLauncher(room);
+  const ranked = useRankedLive(room);
+  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled), recordingWindowed: !ranked.prefs.fullscreen });
   const play = useRoomPlay(room, launcher.platforms, launcher.owns);
-  const playTraining = () => (play.platform ? launcher.playNow("training", play.platform, play.mode) : launcher.play("training"));
   return <section className="collection-play" aria-label={t("Jogar")}>
-    <PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching} compact />
-    <div className="collection-actions">
-      <button type="button" className="collection-main-action practice-action" disabled={launcher.isLaunching} onClick={playTraining} title={t("Abre o jogo sem gravar run nem gastar ficha.")}>
-        ▷ {t(launcher.isLaunching ? "Abrindo o jogo…" : "PLAY TRAINING")}
-      </button>
-      {onOpenRanking && <button type="button" className="collection-secondary-action" onClick={onOpenRanking}>☆ {t("RANKING")}</button>}
-    </div>
+    <PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching || ranked.liveOn} compact />
+    <RankedPanel room={room} uid={uid} launcher={launcher} mode={play.mode} platform={play.platform} ranked={ranked} busy={false} compact />
+    {ranked.liveError && <p className="room-banner warning" role="alert">{t(ranked.liveError)}</p>}
     {launcher.banners}
     {launcher.dialogs}
   </section>;
@@ -119,13 +120,13 @@ const VERSION_LABEL: Record<string, string> = {
 const versionOf = (room: GameRoom) => room.platform ? VERSION_LABEL[room.platform] ?? room.platform : undefined;
 
 
-export default function CollectionPane({ rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, onOpenRoom, onOpenRanking, compact, bigPicture }: {
+export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recordingRoomId, onSelectRoom, onOpenRoom, compact, bigPicture }: {
+  /** Jogador conectado: o saldo de fichas do Play Ranked. */
+  uid: string | undefined;
   rooms: GameRoom[]; runs: SessionRun[]; selectedRoomId: string | null; recordingRoomId: string | null;
   onSelectRoom: (id: string) => void;
   /** Abre a sala do jogo numa aba (duplo clique ou Enter no card). */
   onOpenRoom: (id: string) => void;
-  /** Abre a sala já na aba do ranking do jogo. */
-  onOpenRanking?: (id: string) => void;
   compact: boolean; bigPicture: boolean;
 }) {
   const { t } = useI18n();
@@ -223,7 +224,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <button className={`favorite-action ${preferences.favorites.includes(selected.id) ? "is-favorite" : ""}`} aria-pressed={preferences.favorites.includes(selected.id)} aria-label={t(preferences.favorites.includes(selected.id) ? "Remover {game} dos favoritos" : "Adicionar {game} aos favoritos", { game: selected.title })} onClick={() => toggleFavorite(selected.id)}>{preferences.favorites.includes(selected.id) ? "★" : "☆"}</button>
         </header>
         <ArcadeCabinet room={selected} video />
-        <PlayPanel key={selected.id} room={selected} onOpenRanking={onOpenRanking ? () => onOpenRanking(selected.id) : undefined} />
+        <PlayPanel key={selected.id} room={selected} uid={uid} />
         <dl className="collection-facts two-columns">
           <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
           <div><dt>{t("Status")}</dt><dd className="collection-status">
