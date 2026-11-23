@@ -20,7 +20,6 @@
 .theme-light .credits-badge.is-low, .theme-light .credits-badge.is-low strong { color: #b4232c; }
 
 /* Coleção: os cards e a barra de baixo continuam escuros; o texto deles volta às cores claras. */
-.theme-light .collection-layout .game-card-runs { color: #d7e4e8; }
 .theme-light .collection-layout .collection-statusbar .text-action { color: #6fb1ff; }
 
 /* Janela de Play (clara): rótulos e descrições dos modos. */

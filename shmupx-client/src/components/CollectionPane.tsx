@@ -190,14 +190,13 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
       <div className={`game-grid ${view === "list" ? "collection-list" : ""}`}>
         {visible.map((room) => {
           const favorite = preferences.favorites.includes(room.id);
-          const count = runs.filter((run) => run.gameId === room.id).length;
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
             <button type="button" className="game-card" aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
               <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>
+                <span className="game-card-developer">{room.developer ?? " "}</span>
                 <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /><ComingSoonBadge room={room} /></span>
-                <span className="game-card-runs"><i aria-hidden="true">◇</i>{t("Runs nesta sessão: {count}", { count })}</span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
             </button>

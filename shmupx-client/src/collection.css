@@ -38,8 +38,6 @@
 .game-card-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #a8c1cc; }
 .game-card-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collection-layout .supported { color: #3fd98b; white-space: nowrap; }
-.game-card-runs { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #d7e4e8; }
-.game-card-runs i { font-style: normal; font-size: 14px; color: var(--cyan); }
 .collection-layout .collection-card .game-card-info { padding-right: 12px; }
 .collection-layout .collection-card > .favorite-action { top: auto; bottom: auto; right: 8px; transform: none; margin-top: 0; }
 .collection-layout .collection-card:not(.collection-list *) > .favorite-action { position: absolute; top: calc(100% - 92px); width: 28px; height: 28px; border: 0; background: transparent; font-size: 18px; color: #d7e4e8; }
@@ -180,3 +178,8 @@
 .video-modal-close { width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: #f0fcff; font-size: 16px; cursor: pointer; }
 .video-modal-close:hover, .video-modal-close:focus-visible { background: #ffffff14; color: var(--cyan); outline: none; }
 .video-modal video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+
+/* Card: a desenvolvedora logo abaixo do nome do jogo (Cave, Toaplan, Video System…). */
+.game-card-developer { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; font-size: 11.5px; letter-spacing: .04em; color: #8fa9b3; }
+.theme-light .game-card-developer { color: #475569; }
+.collection-layout .collection-list .game-card-developer { flex: 0 0 150px; margin-top: 0; }
