@@ -458,3 +458,5 @@
 .launch-problem-steps li::marker { color: #57fcff; font-weight: 700; }
 .theme-light .launch-problem-steps { color: #10233f; }
 .theme-light .launch-problem-steps li::marker { color: #1f6feb; }
+/* Tela atual no caminho do topo: fundo vermelho e letra branca (os outros botões seguem em ciano). */
+.topbar-breadcrumb .crumb[aria-current], .theme-light .topbar-breadcrumb .crumb[aria-current] { background: linear-gradient(180deg, #ff5a62, #d9363f); color: #fff; }
