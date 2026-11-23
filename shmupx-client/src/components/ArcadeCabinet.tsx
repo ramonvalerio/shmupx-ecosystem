@@ -237,8 +237,9 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
       <rect x="56" y="224" width="130" height="54" rx="4" fill="none" stroke="#a3abb1" strokeWidth="1.2" />
       <circle cx="176" cy="251" r="2.6" fill="#8a939a" />
       <rect x="175.4" y="250" width="1.2" height="3.4" rx=".5" fill="#4b5359" />
-      {/* Direita: porta da ficha cinza, com uma entrada de moeda e o retorno de moedas */}
-      <rect x="198" y="226" width="66" height="50" rx="3" fill="#c3c9ce" stroke="#8a939a" strokeWidth="1.2" />
+      {/* Direita: porta da ficha, branca como a tampa da esquerda (só o recorte), com a entrada de
+          moeda e o retorno de moedas */}
+      <rect x="198" y="226" width="66" height="50" rx="3" fill="none" stroke="#8a939a" strokeWidth="1.2" />
       <rect x="221" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
       <rect x="230" y="238" width="2" height="12" rx="1" fill="#2b3035" />
       <rect x="219" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />

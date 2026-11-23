@@ -224,6 +224,7 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
           <button className={`favorite-action ${preferences.favorites.includes(selected.id) ? "is-favorite" : ""}`} aria-pressed={preferences.favorites.includes(selected.id)} aria-label={t(preferences.favorites.includes(selected.id) ? "Remover {game} dos favoritos" : "Adicionar {game} aos favoritos", { game: selected.title })} onClick={() => toggleFavorite(selected.id)}>{preferences.favorites.includes(selected.id) ? "★" : "☆"}</button>
         </header>
         <ArcadeCabinet room={selected} video />
+        <PlayPanel key={selected.id} room={selected} onOpenRanking={onOpenRanking ? () => onOpenRanking(selected.id) : undefined} />
         <dl className="collection-facts two-columns">
           <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
           <div><dt>{t("Status")}</dt><dd className="collection-status">
@@ -232,7 +233,6 @@ export default function CollectionPane({ rooms, runs, selectedRoomId, recordingR
             {isSupported(selected) && inLibrary(selected) && <span>{t("Na biblioteca")}</span>}
           </dd></div>
         </dl>
-        <PlayPanel key={selected.id} room={selected} onOpenRanking={onOpenRanking ? () => onOpenRanking(selected.id) : undefined} />
         <dl className="collection-facts collection-info">
           <div><dt>{t("Versão")}</dt><dd>{versionOf(selected) ? t(versionOf(selected)!) : "—"}</dd></div>
           <div><dt>{t("Desenvolvedora")}</dt><dd>{selected.developer ?? "—"}</dd></div>

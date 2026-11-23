@@ -10,6 +10,7 @@ export type LaunchProblemKind =
   | "mister-stop-failed"
   | "steam-missing"
   | "steam-app-missing"
+  | "steam-timeout"
   | "rom-missing"
   | "fightcade-missing"
   | "launch-failed";
@@ -75,6 +76,16 @@ function content(kind: LaunchProblemKind, game: string, t: Translate): { title: 
         title: t("{game} não está instalado", { game }),
         text: t("O jogo não está instalado na Steam deste computador."),
         steps: [t("Abra a Steam e instale {game}.", { game }), t("Quando terminar, volte aqui e tente de novo.")],
+      };
+    case "steam-timeout":
+      return {
+        title: t("A Steam não abriu {game}", { game }),
+        text: t("Pedimos o jogo à Steam, mas ele não abriu a tempo."),
+        steps: [
+          t("Abra a janela da Steam: ela pode estar pedindo uma atualização, para aceitar termos ou terminando de sincronizar."),
+          t("Se o jogo abrir pela Steam, feche-o e tente de novo por aqui."),
+          t("Se continuar, reinicie a Steam."),
+        ],
       };
     case "steam-app-missing":
       return {

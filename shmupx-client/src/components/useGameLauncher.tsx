@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
@@ -245,6 +246,22 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     return false;
   }
 
+  /**
+   * A Steam às vezes não abre o jogo (atualização pendente, termos para aceitar, nuvem sincronizando
+   * ou uma janela dela escondida): sem o jogo aparecer no tempo limite, avisa com o que fazer.
+   */
+  async function watchSteamLaunch(appId: number, retry: () => void) {
+    const stops: (() => void)[] = [];
+    const stop = () => stops.splice(0).forEach((unlisten) => unlisten());
+    stops.push(await listen<{ app_id: number }>("steam://game-launched", (event) => { if (event.payload.app_id === appId) stop(); }));
+    stops.push(await listen<{ app_id: number }>("steam://game-launch-timeout", (event) => {
+      if (event.payload.app_id !== appId) return;
+      stop();
+      logFailure("steam", `${room.title} (app ${appId}): a Steam não abriu o jogo no tempo limite`);
+      setProblem({ kind: "steam-timeout", retry });
+    }));
+  }
+
   async function launchOn(platform: PlayOn, forPractice = practice, chosenMode: GameMode | null = mode) {
     setChoosing(null);
     setError(null);
@@ -259,6 +276,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       if (!(await ensureInstalled(platform, retry))) return;
       if (platform === "steam") {
         if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
+        await watchSteamLaunch(room.steamAppId, retry);
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
       } else {
         await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed });

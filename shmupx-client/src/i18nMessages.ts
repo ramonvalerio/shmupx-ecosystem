@@ -236,6 +236,10 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Na Steam, o jogo abre com a configuração de tela dele.": "On Steam, the game opens with its own display settings.",
   "No MiSTer, o jogo aparece na TV.": "On the MiSTer, the game shows on the TV.", "Desligada, o jogo abre em janela.": "When off, the game opens in a window.",
   "Tela cheia na gravação": "Fullscreen while recording",
+  "A Steam não abriu {game}": "Steam didn't start {game}", "Pedimos o jogo à Steam, mas ele não abriu a tempo.": "We asked Steam for the game, but it didn't start in time.",
+  "Abra a janela da Steam: ela pode estar pedindo uma atualização, para aceitar termos ou terminando de sincronizar.": "Open the Steam window: it may be asking for an update, for you to accept terms, or still syncing.",
+  "Se o jogo abrir pela Steam, feche-o e tente de novo por aqui.": "If the game opens through Steam, close it and try again from here.",
+  "Se continuar, reinicie a Steam.": "If it keeps happening, restart Steam.",
 };
 for (const [key, value] of Object.entries(LAUNCH_PROBLEM_ENGLISH)) ENGLISH[key] ??= value;
 
