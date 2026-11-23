@@ -113,7 +113,7 @@ function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   </section>;
 }
 
-/** Informações do jogo: plataformas, status, versão, desenvolvedora… (painel e janela About). */
+/** Informações do jogo: plataformas, status, versão, desenvolvedora… (janela About do card). */
 function GameFacts({ room, tags, owned }: { room: GameRoom; tags: PlatformTag[]; owned: boolean }) {
   const { t } = useI18n();
   return <>
@@ -271,7 +271,6 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
         </header>
         <ArcadeCabinet room={selected} video />
         <PlayPanel key={selected.id} room={selected} uid={uid} />
-        <GameFacts room={selected} tags={playable.tags(selected)} owned={inLibrary(selected)} />
       </> : <p className="collection-details-empty">{t("Selecione um jogo para ver os detalhes.")}</p>}
     </aside>}
   </div>;
