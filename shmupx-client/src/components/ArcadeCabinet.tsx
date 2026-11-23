@@ -187,7 +187,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
   return (
     <>
     {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
-    <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${className}`} viewBox="22 0 276 336" role="img" aria-label={room.title}>
+    <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}>
       {/* Inspirado no Sega Astro City: corpo claro de cantos redondos, marquise iluminada (sem texto),
           monitor fundo em moldura escura, painel preto largo e porta da ficha embaixo. */}
       <defs>
