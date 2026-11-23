@@ -120,14 +120,14 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
-interface LivePrefs { on: boolean; public: boolean }
+interface LivePrefs { on: boolean; public: boolean; fullscreen: boolean }
 const LIVE_PREFS_KEY = "shmupx.client.livePrefs.v1";
 function readLivePrefs(): LivePrefs {
   try {
     const value = JSON.parse(localStorage.getItem(LIVE_PREFS_KEY) ?? "{}") as Partial<LivePrefs>;
-    return { on: value.on === true, public: value.public === true };
+    return { on: value.on === true, public: value.public === true, fullscreen: value.fullscreen !== false };
   } catch {
-    return { on: false, public: false };
+    return { on: false, public: false, fullscreen: true };
   }
 }
 function saveLivePrefs(prefs: LivePrefs): LivePrefs {
@@ -139,7 +139,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const { t } = useI18n();
   const presenceMode = usePresenceMode();
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
-  const launcher = useGameLauncher(room, { onLive: (platform) => void startLive(platform) });
+  // Opções do Play Ranked: transmitir no YouTube, se a live é pública e tela cheia na gravação
+  // (lembradas entre as salas).
+  const [livePrefs, setLivePrefs] = useState(readLivePrefs);
+  const chooseLive = (next: Partial<LivePrefs>) => setLivePrefs((current) => saveLivePrefs({ ...current, ...next }));
+  const launcher = useGameLauncher(room, { onLive: (platform) => void startLive(platform), recordingWindowed: !livePrefs.fullscreen });
   const stats = useGameStats(playerId, room.id);
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
@@ -149,9 +153,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const knowledge = room.robotx ?? [];
   const live = useLive();
   const youtube = useYouTube();
-  // Opções do Play Ranked: transmitir no YouTube e se a live é pública (lembradas entre as salas).
-  const [livePrefs, setLivePrefs] = useState(readLivePrefs);
-  const chooseLive = (next: Partial<LivePrefs>) => setLivePrefs((current) => saveLivePrefs({ ...current, ...next }));
   // A cada Play Ranked, a moeda das fichas é lançada e gira.
   const [coinSpin, setCoinSpin] = useState(0);
   const [liveError, setLiveError] = useState<string | null>(null);
@@ -238,7 +239,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     if (!(await launcher.ensureInstalled(platform))) return;
     try {
       if (platform === "emulator") {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true, janela: !livePrefs.fullscreen });
         await live.start(room.id, `${room.title} · ShmupX`, livePrefs.public, 0);
       } else {
         await live.start(room.id, `${room.title} · ShmupX`, livePrefs.public, room.steamAppId);
@@ -253,6 +254,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
     : !youtubeConnected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
   const withLive = livePrefs.on && !liveUnavailable;
+  // Tela cheia: o Client controla só o emulador (FBNeo); na Steam vale a configuração do jogo.
+  const fullscreenNote = platform === "steam" ? t("Na Steam, o jogo abre com a configuração de tela dele.")
+    : platform === "mister" ? t("No MiSTer, o jogo aparece na TV.")
+    : t("Desligada, o jogo abre em janela.");
   const liveLabel = live.state.status === "waiting" ? t("Abrindo o jogo…")
     : live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
@@ -326,20 +331,17 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             </div>
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
-          {/* Destaque à direita: as fichas e o Play Ranked, com as opções de live logo abaixo. */}
+          {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
           <div className="room-header-side">
-            <CreditsBadge uid={playerId} className="room-credits" spin={coinSpin} />
+            <CreditsBadge uid={playerId} className="room-credits" spin={coinSpin} onPlay={playRankedNow} live={withLive}
+              playDisabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
+              playTitle={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : undefined} />
             <div className="room-coin-actions">
-              {liveHereOn
-                ? <button type="button" className="room-action live-action is-on" onClick={() => void stopLive()} disabled={live.state.status === "ending"}>
-                    <span className="action-icon is-square" aria-hidden="true" />{liveLabel}
-                  </button>
-                : <button type="button" className={`room-action primary play-ranked-action ${withLive ? "with-live" : ""}`} onClick={playRankedNow}
-                    disabled={launcher.isLaunching || comingSoon || gameOpen || liveOn || stopping}
-                    title={comingSoon ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : liveOn ? t("Há uma live em andamento em outra sala.") : undefined}>
-                    <span className="action-icon is-play" aria-hidden="true" />{t("Play Ranked")}
-                    {withLive && <span className="play-live-chip">{t("Live")}</span>}
-                  </button>}
+              {liveHereOn && (
+                <button type="button" className="room-action live-action is-on" onClick={() => void stopLive()} disabled={live.state.status === "ending"}>
+                  <span className="action-icon is-square" aria-hidden="true" />{liveLabel}
+                </button>
+              )}
               {/* Como a partida valendo ranking vai acontecer: com ou sem live, e quem pode assistir. */}
               <div className="ranked-options" role="group" aria-label={t("Opções do Play Ranked")}>
                 <div className="room-setup-group">
@@ -358,6 +360,15 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                       title={t("Só quem tem o link da live assiste.")}>{t("Só com link")}</button>
                     <button type="button" role="radio" aria-checked={liveHereOn ? live.state.public : livePrefs.public} disabled={optionsLocked || !withLive} onClick={() => chooseLive({ public: true })}
                       title={t("Qualquer pessoa encontra a live no YouTube.")}>{t("Pública")}</button>
+                  </div>
+                </div>
+                <div className={`room-setup-group ${platform === "emulator" ? "" : "is-muted"}`}>
+                  <span id="ranked-fullscreen-label">{t("Tela cheia na gravação")}</span>
+                  <div className="room-chips" role="radiogroup" aria-labelledby="ranked-fullscreen-label">
+                    <button type="button" role="radio" aria-checked={!livePrefs.fullscreen} disabled={optionsLocked || platform !== "emulator"} title={fullscreenNote} onClick={() => chooseLive({ fullscreen: false })}
+                      >{t("Off")}</button>
+                    <button type="button" role="radio" aria-checked={livePrefs.fullscreen} disabled={optionsLocked || platform !== "emulator"} title={fullscreenNote} onClick={() => chooseLive({ fullscreen: true })}
+                      >{t("On")}</button>
                   </div>
                 </div>
                 {/* "On" sem como transmitir (MiSTer ou sem canal): explica aqui, e o Play Ranked segue sem live. */}

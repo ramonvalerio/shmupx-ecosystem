@@ -208,7 +208,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       <nav className="navigation-rail" aria-label={t("Navegação principal")}>
         {/* Menu lateral: só os jogos abertos (os mesmos das abas da sala). A Coleção, o Dashboard e as
             Configurações ficam fora daqui (aba "← Coleção" e menu do perfil). */}
-        <div ref={railDrag.listRef} className="navigation-tabs">
+        <div ref={railDrag.listRef} className={`navigation-tabs ${openRoomIds.length >= MAX_OPEN_ROOMS ? "is-full" : ""}`}>
           {openRoomIds.map((id) => {
             const room = rooms.find((candidate) => candidate.id === id);
             if (!room) return null;

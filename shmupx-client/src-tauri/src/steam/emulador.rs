@@ -90,8 +90,9 @@ fn rom_valido(rom: &str) -> bool {
 }
 
 /// Abre o jogo no FBNeo do Fightcade (`fcadefbneo.exe <rom>`, a partir da pasta do emulador, como
-/// no Client antigo) com o primeiro ROM da lista que o jogador tem. Devolve o PID e o ROM aberto.
-pub fn abrir(informada: Option<&str>, roms: &[String]) -> Result<(u32, String), String> {
+/// no Client antigo) com o primeiro ROM da lista que o jogador tem. Aberto assim, o FBNeo vai para a
+/// tela cheia; com `janela`, abre em janela (`-w`). Devolve o PID e o ROM aberto.
+pub fn abrir(informada: Option<&str>, roms: &[String], janela: bool) -> Result<(u32, String), String> {
     let roms: Vec<String> = roms.iter().map(|r| r.trim().to_lowercase()).filter(|r| rom_valido(r)).collect();
     if roms.is_empty() {
         return Err("o Client ainda não sabe abrir este jogo no emulador".into());
@@ -106,6 +107,9 @@ pub fn abrir(informada: Option<&str>, roms: &[String]) -> Result<(u32, String), 
     let exe = executavel(&raiz);
     let mut comando = std::process::Command::new(&exe);
     comando.arg(rom);
+    if janela {
+        comando.arg("-w");
+    }
     if let Some(pasta) = exe.parent() {
         comando.current_dir(pasta);
     }
@@ -129,7 +133,7 @@ mod tests {
         assert!(!rom_valido(""));
         assert!(!rom_valido("../x"));
         assert!(!rom_valido("ket -w"));
-        assert!(abrir(None, &["../../x".into()]).is_err());
+        assert!(abrir(None, &["../../x".into()], false).is_err());
     }
 
     /// Lê o Fightcade deste PC: `cargo test -- --ignored fightcade_deste_pc --nocapture`.

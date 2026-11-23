@@ -29,7 +29,11 @@ const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toL
 /** Play Training (sem ficha nem gravação), Play Ranked (gasta 1 ficha e grava) ou Play Live Ranked. */
 export type PlayKind = "training" | "ranked" | "live";
 
-export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform: PlayOn, mode: GameMode) => void } = {}) {
+export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = false }: {
+  onLive?: (platform: PlayOn, mode: GameMode) => void;
+  /** Partidas valendo ranking (gravadas) no emulador abrem em janela, e não em tela cheia. */
+  recordingWindowed?: boolean;
+} = {}) {
   const { t } = useI18n();
   const playable = usePlatformOwnership();
   const [isLaunching, setIsLaunching] = useState(false);
@@ -257,7 +261,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
         if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
       } else {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed });
       }
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gravar run nem gastar ficha.", { game: room.title }));
     } catch (failure) {

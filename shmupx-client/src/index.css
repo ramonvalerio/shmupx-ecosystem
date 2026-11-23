@@ -8,6 +8,11 @@
 button, input, select, textarea, optgroup { font-family: inherit; }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+/* App desktop: nada de selecionar texto, imagens ou botões, nem arrastar imagens; só os campos de
+   digitação continuam selecionáveis (copiar e colar). */
+html, body { -webkit-user-select: none; user-select: none; }
+img, a { -webkit-user-drag: none; }
+input, textarea, [contenteditable="true"], [contenteditable=""] { -webkit-user-select: text; user-select: text; }
 body { overflow: hidden; }
 button, input { font: inherit; }
 button { cursor: pointer; }

@@ -505,3 +505,38 @@
 .ranked-options .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #fd4851; }
 .ranked-options .room-chips button[aria-checked=true] .live-dot { box-shadow: 0 0 8px #fd4851; }
 .ranked-options-note { margin: 0; font-size: 11.5px; line-height: 1.4; color: #f2c14e; }
+
+/* Limite de salas abertas atingido: as abas ocupam toda a altura do menu lateral; cada uma parte do
+   tamanho do nome e a sobra (ou a falta) se divide entre elas, para nome longo não ser cortado. */
+.navigation-tabs.is-full { display: flex; flex-direction: column; }
+.navigation-tabs.is-full .rail-room-item { flex: 1 1 auto; min-height: 96px; display: flex; flex-direction: column; }
+.navigation-tabs.is-full .rail-room-item .rail-room { flex: 1; min-height: 0; max-height: none; }
+.navigation-tabs.is-full .rail-room-title { max-height: calc(100% - 8px); }
+.navigation-tabs.is-full .rail-room-item .rail-room { flex: 1 1 auto; }
+
+/* A ficha é o Play Ranked: clicar nela (ou Enter com o foco nela) joga valendo ranking. */
+.credits-coin-button { display: inline-flex; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; transition: transform .15s ease, filter .15s ease; }
+.credits-coin-button:hover:not(:disabled) { transform: scale(1.04); filter: drop-shadow(0 0 14px #57fcff59); }
+.credits-coin-button:active:not(:disabled) { transform: scale(.97); }
+.credits-coin-button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.credits-coin-button:disabled { cursor: not-allowed; filter: grayscale(.7) brightness(.75); }
+.room-credits .credits-coin-button { grid-row: 1 / 3; }
+.room-credits .credits-cta { grid-column: 1; grid-row: 3; justify-self: center; display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; color: #57fcff; font-size: 13px; letter-spacing: .22em; text-transform: uppercase; animation: insert-coin-blink 1.2s step-end infinite; }
+@keyframes insert-coin-blink { 50% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) { .room-credits .credits-cta { animation: none; } }
+
+/* Sala sem margens: a caixa de mensagem colada nas mensagens (campo e Enviar encostados, sem o canto
+   cortado) e o painel de jogadores sem recuos, com os jogadores encostados uns nos outros. */
+.room-chat-panel { clip-path: none; }
+.chat-composer { padding: 0; gap: 0; border-top: 1px solid #ffffff1f; }
+.chat-composer input { align-self: stretch; padding: 12px 14px; border: 0; }
+.chat-composer input:focus { box-shadow: inset 0 0 0 1px #57fcff99; }
+.chat-composer button { align-self: stretch; }
+.chat-composer-error { padding: 6px 14px; }
+.game-room-players { padding: 0; }
+.game-room-players h2 { margin: 0; padding: 10px 12px 6px; }
+.game-room-players > .muted { margin: 0; padding: 0 12px 8px; }
+.game-room-players .room-sort { padding: 0 12px 10px; }
+.game-room-players ul { margin: 0; padding: 0; gap: 0; }
+.game-room-players .room-player { border-top: 1px solid #ffffff12; }
+.game-room-players .room-watch { margin: auto 0 0; border-width: 1px 0 0; }

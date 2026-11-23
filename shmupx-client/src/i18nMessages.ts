@@ -232,6 +232,10 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Live": "Live", "Opções do Play Ranked": "Play Ranked options", "Live no YouTube": "YouTube live", "Off": "Off", "On": "On",
   "Quem pode assistir": "Who can watch", "Só quem tem o link da live assiste.": "Only people with the live link can watch.", "Só com link": "Link only",
   "Qualquer pessoa encontra a live no YouTube.": "Anyone can find the live on YouTube.", "Pública": "Public",
+  "Clique na ficha para jogar valendo ranking.": "Click the coin to play ranked.", "Insert coin": "Insert coin", "Play Ranked com live": "Play Ranked with live",
+  "Na Steam, o jogo abre com a configuração de tela dele.": "On Steam, the game opens with its own display settings.",
+  "No MiSTer, o jogo aparece na TV.": "On the MiSTer, the game shows on the TV.", "Desligada, o jogo abre em janela.": "When off, the game opens in a window.",
+  "Tela cheia na gravação": "Fullscreen while recording",
 };
 for (const [key, value] of Object.entries(LAUNCH_PROBLEM_ENGLISH)) ENGLISH[key] ??= value;
 

@@ -123,8 +123,9 @@ struct EmuladorAbertoPayload {
 /// (a interface cruza com o catálogo); `pasta`: a do Fightcade, se o jogador escolheu uma. Avisa
 /// `emulator://game-launched` com o processo do emulador, que a gravação vigia como na Steam.
 #[tauri::command]
-pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>) -> Result<(), String> {
-    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms))
+pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>, janela: Option<bool>) -> Result<(), String> {
+    let janela = janela.unwrap_or(false);
+    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms, janela))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
