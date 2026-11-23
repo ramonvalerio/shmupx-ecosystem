@@ -101,7 +101,7 @@ function ComingSoonBadge({ room }: { room: GameRoom }) {
 function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   const { t } = useI18n();
   const ranked = useRankedLive(room);
-  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled), recordingWindowed: !ranked.prefs.fullscreen });
+  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const play = useRoomPlay(room, launcher.platforms, launcher.owns);
   return <section className="collection-play" aria-label={t("Jogar")}>
     <PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching || ranked.liveOn} compact />

@@ -124,7 +124,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
   // Play Ranked (com ou sem live) e as opções dele: RankedPanel, o mesmo do painel da Coleção.
   const ranked = useRankedLive(room);
-  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled), recordingWindowed: !ranked.prefs.fullscreen });
+  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const stats = useGameStats(playerId, room.id);
   const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");

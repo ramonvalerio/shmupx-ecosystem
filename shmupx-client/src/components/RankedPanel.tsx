@@ -8,8 +8,8 @@ import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
 import type { useGameLauncher } from "./useGameLauncher";
 
-/** Opções do Play Ranked: transmitir no YouTube, se a live é pública e tela cheia na gravação. */
-export interface LivePrefs { on: boolean; public: boolean; fullscreen: boolean }
+/** Opções do Play Ranked: transmitir no YouTube e se a live é pública. */
+export interface LivePrefs { on: boolean; public: boolean }
 
 // Lembradas entre as salas e a Coleção (as duas telas mostram e mudam as mesmas opções).
 const KEY = "shmupx.client.livePrefs.v1";
@@ -19,10 +19,10 @@ function readLivePrefs(): LivePrefs {
   let raw: string | null = null;
   try { raw = localStorage.getItem(KEY); } catch { /* sem armazenamento: padrões */ }
   if (cache && cache.raw === raw) return cache.value;
-  let value: LivePrefs = { on: false, public: false, fullscreen: true };
+  let value: LivePrefs = { on: false, public: false };
   try {
     const saved = JSON.parse(raw ?? "{}") as Partial<LivePrefs>;
-    value = { on: saved.on === true, public: saved.public === true, fullscreen: saved.fullscreen !== false };
+    value = { on: saved.on === true, public: saved.public === true };
   } catch { /* valor inválido: padrões */ }
   cache = { raw, value };
   return value;
@@ -49,7 +49,7 @@ export function useRankedLive(room: GameRoom) {
     if (!(await ensureInstalled(platform))) return;
     try {
       if (platform === "emulator") {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true, janela: !prefs.fullscreen });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });
         await live.start(room.id, `${room.title} · ShmupX`, prefs.public, 0);
       } else {
         await live.start(room.id, `${room.title} · ShmupX`, prefs.public, room.steamAppId);
@@ -73,7 +73,7 @@ export function useRankedLive(room: GameRoom) {
 
 /**
  * Play Ranked: a ficha (clique nela para jogar valendo ranking; ela gira) com o saldo e, ao lado
- * ou abaixo, as opções da partida — live no YouTube, quem pode assistir e tela cheia na gravação.
+ * ou abaixo, as opções da partida — live no YouTube e quem pode assistir.
  * Usado na sala (cabeçalho) e no painel da Coleção (`compact`).
  */
 export default function RankedPanel({ room, uid, launcher, mode, platform, ranked, busy, compact = false }: {
@@ -99,10 +99,6 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
     : !youtube.connection?.connected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
   const withLive = prefs.on && !liveUnavailable;
-  // Tela cheia: o Client controla só o emulador (FBNeo); na Steam vale a configuração do jogo.
-  const fullscreenNote = platform === "steam" ? t("Na Steam, o jogo abre com a configuração de tela dele.")
-    : platform === "mister" ? t("No MiSTer, o jogo aparece na TV.")
-    : t("Desligada, o jogo abre em janela.");
   const liveLabel = live.state.status === "waiting" ? t("Abrindo o jogo…")
     : live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
@@ -150,13 +146,6 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
                 title={t("Só quem tem o link da live assiste.")}>{t("Só com link")}</button>
               <button type="button" role="radio" aria-checked={liveHereOn ? live.state.public : prefs.public} disabled={optionsLocked || !withLive} onClick={() => setLivePrefs({ public: true })}
                 title={t("Qualquer pessoa encontra a live no YouTube.")}>{t("Pública")}</button>
-            </div>
-          </div>
-          <div className={`room-setup-group ${platform === "emulator" ? "" : "is-muted"}`}>
-            <span id={`${uidLabel}-fullscreen`}>{t("Tela cheia na gravação")}</span>
-            <div className="room-chips" role="radiogroup" aria-labelledby={`${uidLabel}-fullscreen`}>
-              <button type="button" role="radio" aria-checked={!prefs.fullscreen} disabled={optionsLocked || platform !== "emulator"} title={fullscreenNote} onClick={() => setLivePrefs({ fullscreen: false })}>{t("Off")}</button>
-              <button type="button" role="radio" aria-checked={prefs.fullscreen} disabled={optionsLocked || platform !== "emulator"} title={fullscreenNote} onClick={() => setLivePrefs({ fullscreen: true })}>{t("On")}</button>
             </div>
           </div>
           {/* "On" sem como transmitir (MiSTer ou sem canal): explica aqui, e o Play Ranked segue sem live. */}
