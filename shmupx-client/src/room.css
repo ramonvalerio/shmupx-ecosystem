@@ -424,17 +424,18 @@
 
 /* Menu lateral com o dobro da largura (40 → 80px); texto e ícones crescem na mesma proporção. */
 .client-shell:not(.big-picture) { grid-template-columns: 80px minmax(0, 1fr); }
-.navigation-rail button { width: 79px; font-size: 26px; gap: 16px; }
+.navigation-rail button { width: 79px; font-size: 17px; gap: 10px; }
 .navigation-rail button[aria-current] { border-right-width: 5px; }
-.navigation-tabs .rail-room { min-height: 180px; max-height: 340px; padding-top: 24px; padding-bottom: 80px; font-size: 24px; }
-.navigation-tabs .rail-room-title { max-height: 292px; }
-.rail-room-recording { width: 14px; height: 14px; box-shadow: 0 0 12px #fd4851; }
-.navigation-rail .rail-room-close { top: 12px; width: 40px; height: 40px; font-size: 28px; border-radius: 6px; }
-.navigation-rail .rail-tools { margin: 0 12px; padding-top: 20px; }
-.navigation-rail .notification-bell, .navigation-rail .rail-settings { width: 56px; height: 56px; border-radius: 12px; }
-.navigation-rail .rail-settings { margin: 16px auto 0; }
-.navigation-rail .notification-bell svg, .navigation-rail .rail-settings svg { width: 36px; height: 36px; }
-.navigation-rail .notification-count { top: -4px; right: -6px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px; font-size: 15px; line-height: 26px; }
-.navigation-rail .rail-avatar { width: 56px; height: 56px; margin: 16px 0 20px; }
-.navigation-rail .rail-status { right: -3px; bottom: -3px; width: 18px; height: 18px; border-width: 3px; }
+.navigation-tabs .rail-room { min-height: 120px; max-height: 240px; padding-top: 14px; padding-bottom: 50px; font-size: 17px; }
+/* Nome grande quebra em até duas linhas (lado a lado, no texto vertical) em vez de cortar. */
+.navigation-tabs .rail-room-title { max-height: 176px; max-width: 2.5em; white-space: normal; overflow-wrap: anywhere; line-height: 1.2; text-align: center; overflow: hidden; }
+.rail-room-recording { width: 10px; height: 10px; box-shadow: 0 0 9px #fd4851; }
+.navigation-rail .rail-room-close { top: 8px; width: 32px; height: 32px; font-size: 22px; border-radius: 5px; }
+.navigation-rail .rail-tools { margin: 0 12px; padding-top: 14px; }
+.navigation-rail .notification-bell, .navigation-rail .rail-settings { width: 44px; height: 44px; border-radius: 10px; }
+.navigation-rail .rail-settings { margin: 12px auto 0; }
+.navigation-rail .notification-bell svg, .navigation-rail .rail-settings svg { width: 28px; height: 28px; }
+.navigation-rail .notification-count { top: -4px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font-size: 13px; line-height: 22px; }
+.navigation-rail .rail-avatar { width: 46px; height: 46px; margin: 14px 0 16px; }
+.navigation-rail .rail-status { right: -2px; bottom: -2px; width: 14px; height: 14px; border-width: 2px; }
 .profile-menu, .navigation-rail .notification-panel { left: 88px; }
