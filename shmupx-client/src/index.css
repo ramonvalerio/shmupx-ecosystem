@@ -550,6 +550,11 @@ button:disabled { opacity: .5; cursor: default; }
 .navigation-rail .notification-bell:hover { color: var(--cyan); background: #57fcff12; }
 .navigation-rail .notification-count { top: -4px; right: -6px; }
 .navigation-rail .notification-panel { position: fixed; left: 48px; right: auto; top: auto; bottom: 60px; }
+/* O painel abre a partir do sino da barra lateral: os botões dele não herdam o texto vertical das abas. */
+.navigation-rail .notification-panel button { writing-mode: horizontal-tb; transform: none; flex-shrink: 1; width: auto; height: auto; justify-content: flex-start; align-items: flex-start; font-size: 12px; }
+.navigation-rail .notification-panel .notification-list button { width: 100%; font-size: inherit; }
+.navigation-rail .notification-panel button:hover { background: var(--surface-raised); }
+.navigation-rail .notification-panel-header button { align-items: center; padding: 0; }
 
 /* Moeda das fichas */
 .credits-badge .credits-coin { width: 28px; height: 28px; filter: drop-shadow(0 0 3px #0008); }

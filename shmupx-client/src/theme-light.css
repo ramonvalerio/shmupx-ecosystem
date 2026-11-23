@@ -43,3 +43,8 @@
 .theme-light .room-chat-credits { color: #f2c14e; }
 .theme-light .room-chat-credits strong { color: #ffd76a; }
 .theme-light .room-chat-credits.is-low, .theme-light .room-chat-credits.is-low strong { color: #ff8b92; }
+
+/* Avisos (sino): título e texto escuros sobre o painel claro. */
+.theme-light .notification-list button { color: #334155; }
+.theme-light .notification-list button.unread { color: #10233f; }
+.theme-light :is(.notification-text span, .notification-text time) { color: #52627a; }
