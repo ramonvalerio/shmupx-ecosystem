@@ -25,6 +25,7 @@ pub fn run() {
       validacao::commands::validacao_script_fonte,
       validacao::commands::validacao_gerar_script,
       validacao::commands::validacao_nova_versao,
+      validacao::commands::validacao_aprovar_versao,
       validacao::commands::validacao_listar,
       validacao::commands::validacao_adicionar_youtube,
       validacao::commands::validacao_baixar_de_novo,

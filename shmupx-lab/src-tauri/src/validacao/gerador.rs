@@ -248,6 +248,73 @@ pub fn nova_versao(raiz: &Path, jogo: &str, de_versao: &str) -> Result<ScriptGer
     Ok(ScriptGerado { versao, criados: vec![format!("{}/", relativo(&raiz, &pasta))], imagens_pendentes: vec![] })
 }
 
+/// Resultado de aprovar uma versão do script.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ScriptAprovado {
+    pub versao: String,
+    /// A lista do Client (`shmupx-client/src-tauri/scripts-aceitos.json`) foi atualizada; `false`
+    /// quando o Lab roda fora do repositório e a lista não está ao lado.
+    pub cliente_atualizado: bool,
+}
+
+/// Lista de scripts que o Client aceita (e o instalador leva), ao lado do Lab no repositório.
+fn lista_do_cliente(raiz: &Path) -> Option<PathBuf> {
+    let caminho = raiz.parent()?.parent()?.join("shmupx-client").join("src-tauri").join("scripts-aceitos.json");
+    caminho.is_file().then_some(caminho)
+}
+
+/// Põe (ou troca) a versão aceita do jogo na lista do Client, uma linha por jogo, em ordem.
+fn aceitar_no_cliente(lista: &Path, jogo: &str, versao: &str) -> Result<(), String> {
+    let texto = std::fs::read_to_string(lista).map_err(|e| format!("falha ao ler {}: {e}", lista.display()))?;
+    let atual: Vec<Value> = serde_json::from_str(&texto).map_err(|e| format!("scripts-aceitos.json inválido: {e}"))?;
+    let mut pares: Vec<(String, String)> = atual
+        .iter()
+        .filter_map(|item| Some((item.get("game")?.as_str()?.to_string(), item.get("version")?.as_str()?.to_string())))
+        .filter(|(game, _)| game != jogo)
+        .collect();
+    pares.push((jogo.to_string(), versao.to_string()));
+    pares.sort();
+    let linhas: Vec<String> = pares
+        .iter()
+        .map(|(game, version)| format!("  {{ \"game\": {}, \"version\": {} }}", json!(game), json!(version)))
+        .collect();
+    std::fs::write(lista, format!("[\n{}\n]\n", linhas.join(",\n"))).map_err(|e| format!("falha ao gravar {}: {e}", lista.display()))
+}
+
+/// Aprova uma versão do script: `status` vira `approved` no `script.json` (o resto do arquivo fica
+/// como está) e, no repositório, a versão passa a ser a aceita pelo Client para este jogo.
+pub fn aprovar_versao(raiz: &Path, jogo: &str, versao: &str) -> Result<ScriptAprovado, String> {
+    if !id_seguro(jogo) {
+        return Err("id de jogo inválido".into());
+    }
+    if !versao_valida(versao) {
+        return Err("versão inválida".into());
+    }
+    let raiz = raiz.canonicalize().map_err(|e| format!("pasta validators indisponível: {e}"))?;
+    let arquivo = raiz.join("games").join(jogo).join(versao).join("script.json");
+    let texto = std::fs::read_to_string(&arquivo).map_err(|_| format!("o jogo {jogo} não tem o script {versao}"))?;
+    let mut manifesto: Value = serde_json::from_str(&texto).map_err(|e| format!("script.json de {versao} inválido: {e}"))?;
+    let status = manifesto.get("status").and_then(Value::as_str).unwrap_or("");
+    if status != "approved" {
+        // Troca só o valor do status, para o arquivo continuar igual (ordem e comentários de campo).
+        let novo = if texto.matches("\"status\": \"draft\"").count() == 1 {
+            texto.replacen("\"status\": \"draft\"", "\"status\": \"approved\"", 1)
+        } else {
+            manifesto.as_object_mut().ok_or("script.json não é um objeto")?.insert("status".into(), json!("approved"));
+            json_bonito(&manifesto)?
+        };
+        std::fs::write(&arquivo, novo).map_err(|e| format!("falha ao gravar o script.json: {e}"))?;
+    }
+    let cliente_atualizado = match lista_do_cliente(&raiz) {
+        Some(lista) => {
+            aceitar_no_cliente(&lista, jogo, versao)?;
+            true
+        }
+        None => false,
+    };
+    Ok(ScriptAprovado { versao: versao.to_string(), cliente_atualizado })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,5 +417,33 @@ mod tests {
         let raiz = raiz_de_teste("invalidos");
         assert!(gerar(&raiz, "../x", "X").is_err());
         assert!(gerar(&raiz, "ok", "   ").is_err());
+    }
+
+    #[test]
+    fn aprovar_troca_so_o_status_e_atualiza_a_lista_do_client() {
+        let base = std::env::temp_dir().join(format!("shmupx-lab-aprovar-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let raiz = base.join("shmupx-lab/validators");
+        let pasta = raiz.join("games/aero-fighters-2/0.2.0");
+        std::fs::create_dir_all(&pasta).unwrap();
+        let original = "{\n  \"game\": \"aero-fighters-2\",\n  \"version\": \"0.2.0\",\n  \"status\": \"draft\",\n  \"notes\": \"x\"\n}\n";
+        std::fs::write(pasta.join("script.json"), original).unwrap();
+        let cliente = base.join("shmupx-client/src-tauri");
+        std::fs::create_dir_all(&cliente).unwrap();
+        std::fs::write(cliente.join("scripts-aceitos.json"), "[\n  { \"game\": \"earthion\", \"version\": \"1.0.0\" }\n]\n").unwrap();
+
+        let aprovado = aprovar_versao(&raiz, "aero-fighters-2", "0.2.0").unwrap();
+        assert_eq!(aprovado, ScriptAprovado { versao: "0.2.0".into(), cliente_atualizado: true });
+        assert_eq!(std::fs::read_to_string(pasta.join("script.json")).unwrap(), original.replace("\"draft\"", "\"approved\""));
+        assert_eq!(
+            std::fs::read_to_string(cliente.join("scripts-aceitos.json")).unwrap(),
+            "[\n  { \"game\": \"aero-fighters-2\", \"version\": \"0.2.0\" },\n  { \"game\": \"earthion\", \"version\": \"1.0.0\" }\n]\n"
+        );
+        // De novo: nada muda.
+        aprovar_versao(&raiz, "aero-fighters-2", "0.2.0").unwrap();
+        assert!(std::fs::read_to_string(pasta.join("script.json")).unwrap().contains("\"approved\""));
+        assert!(aprovar_versao(&raiz, "../x", "0.2.0").is_err());
+        assert!(aprovar_versao(&raiz, "aero-fighters-2", "9.9.9").is_err());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

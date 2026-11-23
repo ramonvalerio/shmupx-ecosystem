@@ -510,6 +510,13 @@ pub async fn validacao_nova_versao(game_id: String, de_versao: String) -> Result
     gerador::nova_versao(&script::raiz_validadores()?, &game_id, &de_versao)
 }
 
+/// Aprova uma versão do script (rascunho → aprovado) e a põe na lista do Client.
+#[tauri::command]
+pub async fn validacao_aprovar_versao(game_id: String, versao: String) -> Result<gerador::ScriptAprovado, String> {
+    conferir_jogo(&game_id)?;
+    gerador::aprovar_versao(&script::raiz_validadores()?, &game_id, &versao)
+}
+
 /// Escolhe o navegador de onde o yt-dlp lê os cookies do YouTube (`None` desliga).
 #[tauri::command]
 pub async fn validacao_definir_cookies(app: AppHandle, navegador: Option<String>) -> Result<(), String> {

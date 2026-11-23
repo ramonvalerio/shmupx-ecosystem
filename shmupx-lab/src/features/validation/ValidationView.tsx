@@ -27,6 +27,7 @@ import {
 import { useRemainingTimes, useValidationDataset } from "./useValidation";
 import { runnable } from "./VideoActions";
 import GenerateScriptDialog from "./GenerateScriptDialog";
+import ApproveVersionDialog from "./ApproveVersionDialog";
 import ScriptViewer from "./ScriptViewer";
 import VideoPanel from "./VideoPanel";
 import VideoTable from "./VideoTable";
@@ -142,6 +143,7 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
   const [showScript, setShowScript] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [showApprove, setShowApprove] = useState(false);
   // Versão escolhida; sem escolha (ou se ela sumir), vale a padrão: a mais nova aprovada.
   const [version, setVersion] = useState<string | null>(null);
   const script = scripts.find((item) => item.version === version) ?? defaultScript(scripts);
@@ -263,6 +265,13 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {script?.status === "draft" && (
+              <Button variant="success" disabled={incomplete.length > 0} onClick={() => setShowApprove(true)}
+                title={incomplete.length > 0 ? `Faltam imagens do HUD na ${script.version}: complete antes de aprovar` : `Aprova a ${script.version}: o Client passa a validar as runs de ${gameTitle} com ela`}>
+                <IconCheck />
+                Aprovar versão
+              </Button>
+            )}
             {script ? (
               <Button loading={creatingVersion} onClick={() => void createVersion()} title={`Cria a próxima versão (rascunho) copiando a ${script.version}`}>
                 Nova versão
@@ -435,6 +444,19 @@ export default function ValidationView({ gameId, gameTitle, scripts, environment
       )}
 
       {showScript && script && <ScriptViewer gameId={gameId} script={script} onClose={() => setShowScript(false)} />}
+      {showApprove && script && (
+        <ApproveVersionDialog
+          gameId={gameId}
+          gameTitle={gameTitle}
+          version={script.version}
+          summary={summary && summary.com_gabarito > 0 ? `${summary.acertos} de ${summary.com_gabarito} vídeos com gabarito acertados` : null}
+          onClose={() => setShowApprove(false)}
+          onApproved={() => {
+            setVersion(script.version);
+            onCheckEnvironment();
+          }}
+        />
+      )}
       {showGenerate && (
         <GenerateScriptDialog
           gameId={gameId}

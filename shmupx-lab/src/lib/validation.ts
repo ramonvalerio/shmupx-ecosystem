@@ -168,6 +168,15 @@ export const generateScript = (gameId: string, titulo: string) => invoke<Generat
 /** Cria a próxima versão (rascunho) copiando calibração e imagens de `deVersao`. */
 export const newScriptVersion = (gameId: string, deVersao: string) => invoke<GeneratedScript>("validacao_nova_versao", { gameId, deVersao });
 
+/** Versão aprovada; `cliente_atualizado`: a lista de scripts do Client (ao lado, no repositório) já a aceita. */
+export interface ApprovedScript {
+  versao: string;
+  cliente_atualizado: boolean;
+}
+
+/** Aprova uma versão do script (rascunho → aprovado) e a põe na lista do Client. */
+export const approveScriptVersion = (gameId: string, versao: string) => invoke<ApprovedScript>("validacao_aprovar_versao", { gameId, versao });
+
 export const listVideos = (gameId: string) => invoke<ValidationDataset>("validacao_listar", { gameId });
 
 export const addYoutubeVideo = (gameId: string, url: string) =>
