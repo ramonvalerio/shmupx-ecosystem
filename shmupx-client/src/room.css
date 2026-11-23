@@ -305,15 +305,25 @@
 .close-room-dialog { width: min(460px, 100%); }
 
 /* Menu de navegação no topo (no lugar do logo): Minhas coleções › jogo › Ranking. */
-.topbar-breadcrumb { min-width: 0; }
-.topbar-breadcrumb ol { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 14px; font-weight: 600; letter-spacing: .02em; }
-.topbar-breadcrumb li { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.topbar-breadcrumb li + li::before { content: "›"; color: #6b757c; font-weight: 400; font-size: 16px; }
-.topbar-breadcrumb button, .topbar-breadcrumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
-.topbar-breadcrumb button { padding: 4px 2px; border: 0; background: none; color: var(--cyan); font: inherit; cursor: pointer; }
-.topbar-breadcrumb button:hover { text-decoration: underline; }
-.topbar-breadcrumb [aria-current] { color: #f0fcff; }
-.theme-light .topbar-breadcrumb [aria-current] { color: #10233f; }
+/* Caminho no topo (Minhas coleções › jogo › Ranking): segmentos geométricos em chevron, da altura
+ * toda da barra, encostados na lateral e colados na linha de baixo. Os níveis anteriores são botões;
+ * o atual vem preenchido. */
+.topbar-breadcrumb { align-self: stretch; display: flex; min-width: 0; margin: -12px 0 -12px -20px; }
+.topbar-breadcrumb ol { display: flex; align-items: stretch; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.topbar-breadcrumb li { display: flex; min-width: 0; }
+.topbar-breadcrumb li + li { margin-left: -9px; }
+.topbar-breadcrumb .crumb { --notch: 16px; display: flex; align-items: center; min-width: 0; max-width: 320px; padding: 0 calc(var(--notch) + 16px) 0 calc(var(--notch) + 18px); border: 0; font: inherit; font-size: 12.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%, var(--notch) 50%); }
+.topbar-breadcrumb li:first-child .crumb { padding-left: 22px; clip-path: polygon(0 0, calc(100% - var(--notch)) 0, 100% 50%, calc(100% - var(--notch)) 100%, 0 100%); }
+.topbar-breadcrumb .crumb-label { overflow: hidden; text-overflow: ellipsis; }
+.topbar-breadcrumb button.crumb { background: linear-gradient(180deg, #1f4a50, #163a3f); color: #57fcff; cursor: pointer; transition: background .15s; }
+.topbar-breadcrumb button.crumb:hover, .topbar-breadcrumb button.crumb:focus-visible { background: linear-gradient(180deg, #2a646b, #1f4f55); outline: none; }
+.topbar-breadcrumb .crumb[aria-current] { background: linear-gradient(180deg, #6ffcff, #3fd6e4); color: #06181b; }
+.big-picture .topbar-breadcrumb { margin: -16px 0 -16px -32px; }
+@media (max-width: 700px) { .topbar-breadcrumb { margin: -12px 0 -12px -12px; } .topbar-breadcrumb .crumb { max-width: 160px; } }
+.theme-light .topbar-breadcrumb button.crumb { background: linear-gradient(180deg, #d6e4fb, #c4d6f5); color: #0b4fb8; }
+.theme-light .topbar-breadcrumb button.crumb:hover, .theme-light .topbar-breadcrumb button.crumb:focus-visible { background: linear-gradient(180deg, #c4d6f5, #b0c8f0); }
+.theme-light .topbar-breadcrumb .crumb[aria-current] { background: linear-gradient(180deg, #2f7cf0, #1f6feb); color: #fff; }
 .client-footer .footer-version { letter-spacing: .08em; font-weight: 600; }
 
 /* Ao vivo: bolinha vermelha pulsando; duplo clique no jogador abre a live. */

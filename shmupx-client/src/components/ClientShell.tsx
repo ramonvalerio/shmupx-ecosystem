@@ -234,8 +234,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               return (
                 <li key={index}>
                   {last || !crumb.onClick
-                    ? <span aria-current={last ? "page" : undefined} title={crumb.label}>{crumb.label}</span>
-                    : <button type="button" onClick={crumb.onClick} title={crumb.label}>{crumb.label}</button>}
+                    ? <span className="crumb" aria-current={last ? "page" : undefined} title={crumb.label}><span className="crumb-label">{crumb.label}</span></span>
+                    : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label}><span className="crumb-label">{crumb.label}</span></button>}
                 </li>
               );
             })}
