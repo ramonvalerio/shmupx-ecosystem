@@ -15,10 +15,9 @@
 .theme-light .env-badge { color: #865315; background: #b7791f1a; border-color: #b7791f80; }
 .theme-light .env-badge.is-production { color: #b4232c; background: #b4232c14; border-color: #b4232c80; }
 .theme-light .client-status-caption { color: #475569; }
-.theme-light .credits-badge { color: #865315; background: #b7791f14; border-color: #b7791f66; }
+.theme-light .credits-badge { color: #865315; }
 .theme-light .credits-badge strong { color: #865315; }
 .theme-light .credits-badge.is-low, .theme-light .credits-badge.is-low strong { color: #b4232c; }
-.theme-light .credits-badge.is-low { background: #b4232c12; border-color: #b4232c66; }
 
 /* Coleção: os cards e a barra de baixo continuam escuros; o texto deles volta às cores claras. */
 .theme-light .collection-layout .game-card-runs { color: #d7e4e8; }
@@ -39,3 +38,8 @@
 .theme-light .collection-layout .coming-soon { color: #f2c14e; }
 .theme-light .integration-icon { color: #b4232c; }
 .theme-light .capture-source-preview span:last-child { color: #475569; }
+
+/* Fichas no cabeçalho do chat: o chat continua escuro, então a moeda mantém as cores claras. */
+.theme-light .room-chat-credits { color: #f2c14e; }
+.theme-light .room-chat-credits strong { color: #ffd76a; }
+.theme-light .room-chat-credits.is-low, .theme-light .room-chat-credits.is-low strong { color: #ff8b92; }

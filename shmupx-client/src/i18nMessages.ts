@@ -127,6 +127,21 @@ const COLLECTION_ENGLISH: Record<string, string> = {
 };
 for (const [key, value] of Object.entries(COLLECTION_ENGLISH)) ENGLISH[key] ??= value;
 
+// Cabeçalho da sala: modo e plataforma antes do Play, Coming soon e fichas no chat.
+const ROOM_ENGLISH: Record<string, string> = {
+  "ficha": "coin",
+  "Coming soon: a live ranked fica disponível quando o jogo tiver o script de validação.": "Coming soon: live ranked becomes available once the game has its validation script.",
+  "Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.": "Coming soon: Play Ranked becomes available once the game has its validation script.",
+  "A live captura a janela do jogo neste PC: escolha Steam ou Emulador para transmitir.": "The live captures the game window on this PC: pick Steam or Emulator to stream.",
+  "Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.": "This game doesn't have a validation script yet: you can train, and Play Ranked and live ranked arrive once it's approved.",
+};
+for (const [key, value] of Object.entries(ROOM_ENGLISH)) ENGLISH[key] ??= value;
+
+// Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
+for (const [key, value] of Object.entries(ENGLISH)) {
+  if (/ficha/i.test(key)) ENGLISH[key] = value.replace(/\b(C|c)redit(s?)\b/g, (_match, c: string, plural: string) => `${c === "C" ? "C" : "c"}oin${plural}`);
+}
+
 export function translate(language: Language, text: string, values: Record<string, string | number> = {}): string {
   const trimmed = text.trim();
   const translated = language === "pt-BR" ? undefined : ENGLISH[trimmed];

@@ -9,15 +9,9 @@ import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
 import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
-// Scripts de validação que o instalador leva (só os aprovados no Lab): o mesmo arquivo do build.
-import scriptsAceitos from "../../src-tauri/scripts-aceitos.json";
+import { isSupported } from "../data/validation";
 
-/**
- * O Client tem o script de validação do jogo (a run é validada e entra no ranking). Sem ele, o jogo
- * aparece como Coming soon.
- */
-const SUPPORTED = new Set(scriptsAceitos.map((script) => script.game));
-export const isSupported = (room: GameRoom) => SUPPORTED.has(room.id);
+export { isSupported };
 
 const KEY = "shmupx.client.collection.v1";
 function readPreferences() { try { return validateCollection(JSON.parse(localStorage.getItem(KEY) ?? "null")); } catch { return defaultCollection(); } }

@@ -16,7 +16,11 @@ import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
 import { formatPlayTime, useGameStats } from "../data/useGameStats";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import type { PlayOn } from "../types/room";
+import type { GameMode, PlayOn } from "../types/room";
+import { GAME_MODES, modesFor } from "../data/gameModes";
+import { PLAY_ON } from "../data/platforms";
+import { isSupported } from "../data/validation";
+import CreditsBadge from "./CreditsBadge";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 
 
@@ -116,6 +120,19 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 );
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
+/** Modo e plataforma escolhidos no cabeçalho de cada sala (lembrados entre as aberturas). */
+const ROOM_PLAY_KEY = "shmupx.client.roomPlay.v1";
+type RoomPlay = { mode?: GameMode; platform?: PlayOn };
+function readRoomPlay(roomId: string): RoomPlay {
+  try { return (JSON.parse(localStorage.getItem(ROOM_PLAY_KEY) ?? "{}") as Record<string, RoomPlay>)[roomId] ?? {}; } catch { return {}; }
+}
+function saveRoomPlay(roomId: string, play: RoomPlay) {
+  try {
+    const all = JSON.parse(localStorage.getItem(ROOM_PLAY_KEY) ?? "{}") as Record<string, RoomPlay>;
+    localStorage.setItem(ROOM_PLAY_KEY, JSON.stringify({ ...all, [roomId]: play }));
+  } catch { /* fica só nesta sessão */ }
+}
+
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   const presenceMode = usePresenceMode();
@@ -192,9 +209,32 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     }
   }
 
+  // Modo de jogo e plataforma: escolhidos no cabeçalho, antes dos botões de Play.
+  const modes = GAME_MODES.filter((m) => modesFor(room).includes(m.id));
+  const platformOptions = PLAY_ON.filter((p) => launcher.platforms.includes(p.id));
+  const [roomPlay, setRoomPlay] = useState<RoomPlay>(() => readRoomPlay(room.id));
+  useEffect(() => setRoomPlay(readRoomPlay(room.id)), [room.id]);
+  const mode: GameMode = roomPlay.mode && modes.some((m) => m.id === roomPlay.mode) ? roomPlay.mode : modes[0]?.id ?? "highscore";
+  const platform: PlayOn | null = roomPlay.platform && launcher.platforms.includes(roomPlay.platform)
+    ? roomPlay.platform
+    : launcher.platforms.find(launcher.owns) ?? launcher.platforms[0] ?? null;
+  function choose(next: RoomPlay) {
+    const merged = { mode, platform: platform ?? undefined, ...next };
+    setRoomPlay(merged);
+    saveRoomPlay(room.id, merged);
+  }
+  // Coming soon (sem script de validação): só treino; ranked e live ranked esperam o script.
+  const comingSoon = !isSupported(room);
+  const playTraining = () => (platform ? launcher.playNow("training", platform, mode) : launcher.play("training"));
+  const playRanked = () => (platform ? launcher.playNow("ranked", platform, mode) : launcher.start(false));
+
   async function toggleLive() {
     setLiveError(null);
-    if (!liveOn) { launcher.play("live"); return; }
+    if (!liveOn) {
+      if (platform && platform !== "mister") launcher.playNow("live", platform, mode);
+      else launcher.play("live");
+      return;
+    }
     try {
       await live.stop();
     } catch (error) {
@@ -217,8 +257,12 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     }
   }
   const youtubeConnected = Boolean(youtube.connection?.connected);
-  const liveBlocked = !liveOn && (!youtubeConnected || isRecording || (live.state.status !== "idle" && live.state.status !== "failed"));
-  const liveTitle = !youtubeConnected
+  const liveOnMister = platform === "mister";
+  const liveBlocked = !liveOn && (comingSoon || liveOnMister || !youtubeConnected || isRecording || (live.state.status !== "idle" && live.state.status !== "failed"));
+  const liveTitle = !liveOn && comingSoon
+    ? t("Coming soon: a live ranked fica disponível quando o jogo tiver o script de validação.")
+    : !liveOn && liveOnMister ? t("A live captura a janela do jogo neste PC: escolha Steam ou Emulador para transmitir.")
+    : !youtubeConnected
     ? t("Conecte seu canal em Configurações › Integrações para transmitir.")
     : isRecording ? t("Termine a gravação da run antes de começar uma live.")
     : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : undefined;
@@ -235,8 +279,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // treino no PC (fecha o jogo).
   const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
   let mainLabel = "Play Ranked";
-  let mainAction = () => launcher.start(false);
-  let mainDisabled = launcher.isLaunching;
+  let mainAction = playRanked;
+  let mainDisabled = launcher.isLaunching || comingSoon;
   let mainVariant = "primary";
   if (isStopping || launcher.isStopping) {
     mainLabel = "Encerrando o jogo…";
@@ -283,28 +327,62 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           <ArcadeCabinet room={room} className="game-room-cabinet" />
           <div className="game-room-main">
             <div className="game-room-title">
-              <h1 title={room.title}>{room.title}</h1>
-              <dl className="game-room-stats">
-                <div><dt>{t("Fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
-                <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
-              </dl>
+              <div>
+                <h1 title={room.title}>{room.title}</h1>
+                <dl className="game-room-stats">
+                  <div><dt>{t("Fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
+                  <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
+                </dl>
+              </div>
+              <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
+            </div>
+            <div className="room-play-setup">
+              {modes.length > 0 && (
+                <div className="room-setup-group">
+                  <span id="room-mode-label">{t("Modo de jogo")}</span>
+                  <div className="room-chips" role="radiogroup" aria-labelledby="room-mode-label">
+                    {modes.map((m) => (
+                      <button key={m.id} type="button" role="radio" aria-checked={mode === m.id} disabled={gameOpen || liveOn} title={t(m.detail)} onClick={() => choose({ mode: m.id })}>{m.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {platformOptions.length > 0 && (
+                <div className="room-setup-group">
+                  <span id="room-platform-label">{t("Plataforma")}</span>
+                  <div className="room-chips" role="radiogroup" aria-labelledby="room-platform-label">
+                    {platformOptions.map((p) => {
+                      const owned = launcher.owns(p.id);
+                      return (
+                        <button key={p.id} type="button" role="radio" aria-checked={platform === p.id} disabled={gameOpen || liveOn} onClick={() => choose({ platform: p.id })}
+                          title={t(owned ? "Na sua biblioteca" : "Não importado")}>
+                          <span className={`room-chip-dot ${owned ? "is-owned" : ""}`} aria-hidden="true" />{t(p.label)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="game-room-actions">
-              <button type="button" className="room-action" onClick={onOpenRanking}>{t("Ranking")}</button>
               {!gameOpen && !isStopping && (
-                <button type="button" className="room-action practice-action" onClick={() => launcher.play("training")} disabled={launcher.isLaunching || liveOn}
-                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>{t("Play Training")}</button>
+                <button type="button" className="room-action practice-action" onClick={playTraining} disabled={launcher.isLaunching || liveOn}
+                  title={t("Abre o jogo sem gravar run nem gastar ficha.")}>▷ {t("Play Training")}</button>
               )}
-              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}>{t(mainLabel)}</button>
+              <button type="button" className={`room-action ${mainVariant}`} onClick={mainAction} disabled={mainDisabled || liveOn}
+                title={comingSoon && !gameOpen ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.") : undefined}>
+                {!gameOpen && "▶ "}{t(mainLabel)}
+              </button>
               <button type="button" className={`room-action live-action ${liveOn ? "is-on" : ""}`} onClick={() => void toggleLive()} disabled={liveBlocked || live.state.status === "ending" || (liveOn && !liveHere)} title={liveTitle}>
-                <span aria-hidden="true">{liveOn ? "■" : "▶"}</span> {liveLabel}
+                <span aria-hidden="true">{liveOn ? "■" : "●"}</span> {liveLabel}
               </button>
               <label className="live-public" title={t("Desmarcada, a live é não listada: só quem tem o link assiste.")}>
-                <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn} onChange={(event) => setPublicLive(event.target.checked)} />
+                <input type="checkbox" checked={liveOn ? live.state.public : publicLive} disabled={liveOn || comingSoon} onChange={(event) => setPublicLive(event.target.checked)} />
                 {t("Live pública")}
               </label>
               <span className="game-room-tip" tabIndex={0} data-tip={tip} aria-label={tip}>ⓘ {t("Dica de captura")}</span>
             </div>
+            {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
         </header>
 
@@ -333,6 +411,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <button type="button" role="tab" aria-selected={filter === "robotx"} onClick={() => setFilter("robotx")} title={robotxReady ? t("Pergunte ao RobotX sobre este jogo") : t("O RobotX ainda não chegou a esta sala.")}>
               <IconRobot /> {t("Só RobotX")}{!robotxReady && <small className="robotx-soon">{t("em breve")}</small>}
             </button>
+            <CreditsBadge uid={playerId} className="room-chat-credits" />
           </div>
           <ChatFeed
             messages={visible}

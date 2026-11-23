@@ -92,6 +92,20 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
     setChoosing({ kind, platforms: list, mode: modesFor(room)[0], platform: owned ?? list[0] });
   }
 
+  /**
+   * Abre direto, com o modo e a plataforma já escolhidos no cabeçalho da sala (sem a janela).
+   * Live: a sala põe a live no ar (o MiSTer fica de fora, porque a live captura a janela no PC).
+   */
+  function playNow(kind: PlayKind, platform: PlayOn, chosen: GameMode) {
+    setError(null);
+    setNotice(null);
+    setPractice(kind === "training");
+    setMode(chosen);
+    if (kind === "live") { onLive?.(platform, chosen); return; }
+    if (kind === "ranked" && platform !== "mister") setPendingRunMode(room.id, chosen);
+    void launchOn(platform, kind === "training", chosen);
+  }
+
   /** Compatível com as telas antigas: `start(true)` é o Play Training, `start(false)` o Play Ranked. */
   function start(forPractice: boolean) { play(forPractice ? "training" : "ranked"); }
 
@@ -322,5 +336,10 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
     {notice && <p className="room-banner" role="status">{notice}</p>}
   </>;
 
-  return { start, play, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister };
+  return {
+    start, play, playNow, isLaunching, isStopping, practice, setError, dialogs, banners, misterGame, stopMister,
+    /** Plataformas em que dá para abrir o jogo por aqui, e se o jogador já tem o jogo nela. */
+    platforms: options(),
+    owns: (platform: PlayOn) => playable.owns(room, platform),
+  };
 }

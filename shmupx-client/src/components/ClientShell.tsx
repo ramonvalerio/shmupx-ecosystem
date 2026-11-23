@@ -23,7 +23,7 @@ import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
-import { useWallet } from "../data/useWallet";
+import CreditsBadge from "./CreditsBadge";
 import { visibleDialog } from "./navigationInput";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
@@ -62,7 +62,6 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const settingsDialogRef = useDialogFocus(settingsOpen, () => setSettingsOpen(false));
   const presenceMode = usePresenceMode();
   const myPublic = useMyPublicProfile(profile.displayName);
-  const credits = useWallet(profile.uid);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   // O menu do perfil fecha com um clique fora dele (o botão do avatar alterna sozinho).
@@ -281,12 +280,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
         <div className="client-topbar-actions">
-          {/* Fichas: cada INICIAR JOGO gasta 1 (PC e MiSTer); o treino não gasta. */}
-          <div className={`credits-badge ${credits !== null && credits <= 5 ? "is-low" : ""}`} title={t("Fichas: cada partida valendo ranking gasta 1. O modo treino não gasta.")}>
-            <img className="credits-coin" src="/img/coin.png" alt="" aria-hidden="true" />
-            <strong>{credits ?? "—"}</strong>
-            <span>{t("fichas")}</span>
-          </div>
+          {/* Fichas: dentro da sala ficam no cabeçalho do chat; nas outras telas, aqui. */}
+          {!(isLibrary && activeRoom && !rankingRoomIds.includes(activeRoom.id)) && <CreditsBadge uid={profile.uid} />}
         </div>
       </header>
       <div className="client-content">
