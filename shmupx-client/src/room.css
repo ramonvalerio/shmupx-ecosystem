@@ -363,7 +363,13 @@
  * (que abrem o jogo direto); Coming soon quando o jogo ainda não tem script de validação. */
 .game-room-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .game-room-title > div { min-width: 0; }
-.room-action.room-ranking-action { flex-shrink: 0; margin-right: 34px; padding: 7px 14px; font-size: 12px; }
+.room-header-side { display: flex; align-items: center; gap: 18px; flex-shrink: 0; margin-right: 34px; }
+.room-action.room-ranking-action { flex-shrink: 0; padding: 7px 14px; font-size: 12px; }
+/* Fichas no cabeçalho da sala: a moeda grande o bastante para ler o desenho. */
+.room-credits { gap: 10px; }
+.room-credits .credits-coin { width: 80px; height: 80px; }
+.room-credits strong { font-size: 30px; }
+.room-credits span { font-size: 14px; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
@@ -379,5 +385,3 @@
 .room-chip-dot.is-owned { border-color: #3fd98b; background: #3fd98b; }
 .room-soon-note { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12px; color: #a8c1cc; }
 .coming-soon-tag { padding: 2px 7px; border: 1px solid #f2c14e66; border-radius: 3px; color: #f2c14e; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.room-chat-filters { align-items: center; }
-.room-chat-credits { margin: 0 12px 0 auto; }

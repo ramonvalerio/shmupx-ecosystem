@@ -334,7 +334,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                   <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
                 </dl>
               </div>
-              <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
+              <div className="room-header-side">
+                <CreditsBadge uid={playerId} className="room-credits" />
+                <button type="button" className="room-action room-ranking-action" onClick={onOpenRanking}>☆ {t("Ranking")}</button>
+              </div>
             </div>
             <div className="room-play-setup">
               {modes.length > 0 && (
@@ -411,7 +414,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             <button type="button" role="tab" aria-selected={filter === "robotx"} onClick={() => setFilter("robotx")} title={robotxReady ? t("Pergunte ao RobotX sobre este jogo") : t("O RobotX ainda não chegou a esta sala.")}>
               <IconRobot /> {t("Só RobotX")}{!robotxReady && <small className="robotx-soon">{t("em breve")}</small>}
             </button>
-            <CreditsBadge uid={playerId} className="room-chat-credits" />
           </div>
           <ChatFeed
             messages={visible}

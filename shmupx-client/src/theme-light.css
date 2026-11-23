@@ -39,10 +39,10 @@
 .theme-light .integration-icon { color: #b4232c; }
 .theme-light .capture-source-preview span:last-child { color: #475569; }
 
-/* Fichas no cabeçalho do chat: o chat continua escuro, então a moeda mantém as cores claras. */
-.theme-light .room-chat-credits { color: #f2c14e; }
-.theme-light .room-chat-credits strong { color: #ffd76a; }
-.theme-light .room-chat-credits.is-low, .theme-light .room-chat-credits.is-low strong { color: #ff8b92; }
+/* Fichas no cabeçalho da sala: o cabeçalho continua escuro, então a moeda mantém as cores claras. */
+.theme-light .room-credits { color: #f2c14e; }
+.theme-light .room-credits strong { color: #ffd76a; }
+.theme-light .room-credits.is-low, .theme-light .room-credits.is-low strong { color: #ff8b92; }
 
 /* Avisos (sino): título e texto escuros sobre o painel claro. */
 .theme-light .notification-list button { color: #334155; }
