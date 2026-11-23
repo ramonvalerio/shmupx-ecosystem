@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@client/i18n";
 import MisterConnect from "@client/components/MisterConnect";
-import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, useMisterLibrary } from "@client/data/misterLibrary";
+import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu, useMisterLibrary } from "@client/data/misterLibrary";
 import { misterAuth, readMisterAccess, readMisterPlayer, saveMisterAccess } from "@client/data/misterPlayer";
 import type { GameRoom } from "@client/types/room";
 import type { Language } from "@client/i18nMessages";
@@ -42,6 +42,10 @@ export default function MisterSettings({ rooms, theme, onTheme, onBack }: { room
       const result = await scanMister(target.trim());
       saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, importedAt: Date.now() });
       setNotice(null);
+      // Os jogos do Lab marcados com MiSTer que ele tem entram no menu ShmupX do MiSTer.
+      syncMisterMenu(result.host, password || undefined, rooms, result)
+        .then((added) => { if (added.length > 0) setNotice(t("Menu ShmupX do MiSTer atualizado: {games}.", { games: added.join(", ") })); })
+        .catch((failure) => setError(t("Não foi possível atualizar o menu ShmupX do MiSTer: {reason}", { reason: describe(failure) })));
     } catch (failure) {
       setError(describe(failure));
     } finally {

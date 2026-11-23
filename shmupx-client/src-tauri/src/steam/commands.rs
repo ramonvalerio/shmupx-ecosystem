@@ -228,3 +228,10 @@ pub async fn mister_biblioteca(host: String, usuario: Option<String>, senha: Opt
         .await
         .map_err(|e| e.to_string())?
 }
+
+/// Jogos do Lab marcados com MiSTer que o MiSTer tem: entram no menu ShmupX dele (só acrescenta).
+#[tauri::command]
+pub async fn mister_sincronizar_menu(host: String, usuario: Option<String>, senha: Option<String>, jogos: Vec<shmupx_mister_link::menu::JogoParaMenu>) -> Result<Vec<String>, String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    shmupx_mister_link::menu::sincronizar(host.trim(), &usuario, &senha, &jogos).await
+}

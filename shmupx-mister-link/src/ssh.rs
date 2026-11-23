@@ -43,12 +43,12 @@ impl client::Handler for Cliente {
     }
 }
 
-struct Ssh {
+pub(crate) struct Ssh {
     sessao: client::Handle<Cliente>,
 }
 
 impl Ssh {
-    async fn conectar(host: &str, usuario: &str, senha: &str) -> Result<Self, String> {
+    pub(crate) async fn conectar(host: &str, usuario: &str, senha: &str) -> Result<Self, String> {
         let config = Arc::new(client::Config { inactivity_timeout: Some(Duration::from_secs(180)), ..Default::default() });
         let mut sessao = tokio::time::timeout(Duration::from_secs(12), client::connect(config, (host, 22), Cliente))
             .await
@@ -62,7 +62,7 @@ impl Ssh {
     }
 
     /// Roda um comando no MiSTer (com `entrada` no stdin) e devolve o código de saída e a saída.
-    async fn executar(&self, comando: &str, entrada: Option<&[u8]>) -> Result<(u32, String), String> {
+    pub(crate) async fn executar(&self, comando: &str, entrada: Option<&[u8]>) -> Result<(u32, String), String> {
         let mut canal = self.sessao.channel_open_session().await.map_err(|e| format!("falha no SSH: {e}"))?;
         canal.exec(true, comando).await.map_err(|e| format!("falha no SSH: {e}"))?;
         if let Some(dados) = entrada {
@@ -83,7 +83,7 @@ impl Ssh {
     }
 
     /// Como `executar`, mas código diferente de zero vira erro com o fim da saída.
-    async fn exigir(&self, comando: &str, entrada: Option<&[u8]>, passo: &str) -> Result<String, String> {
+    pub(crate) async fn exigir(&self, comando: &str, entrada: Option<&[u8]>, passo: &str) -> Result<String, String> {
         let (codigo, saida) = self.executar(comando, entrada).await?;
         if codigo != 0 {
             let fim: Vec<&str> = saida.lines().rev().take(6).collect::<Vec<_>>().into_iter().rev().collect();

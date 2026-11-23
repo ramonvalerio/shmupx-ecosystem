@@ -57,6 +57,29 @@ export function saveMisterLibrary(value: MisterLibrary | null) {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: value }));
 }
 
+/** O `.mra` do MiSTer que corresponde ao jogo do catálogo (pelo título), se houver. */
+export function misterMraFor(room: GameRoom, library: Pick<MisterLibrary, "mras">): string | undefined {
+  const names = new Set([slug(room.id), slug(room.title)]);
+  return library.mras.find((mra) => mraTitles(mra).some((title) => names.has(title)));
+}
+
+/**
+ * Menu ShmupX do MiSTer: os jogos do Lab marcados com MiSTer que o aparelho tem (o `.mra` em
+ * `_Arcade`) entram na lista dele, com os modos do catálogo, e o menu é refeito. Só acrescenta.
+ * Devolve os títulos adicionados.
+ */
+export async function syncMisterMenu(host: string, password: string | undefined, rooms: GameRoom[], library: Pick<MisterLibrary, "mras">): Promise<string[]> {
+  if (!isTauri()) return [];
+  const jogos = rooms
+    .filter((room) => room.platforms.includes("mister"))
+    .flatMap((room) => {
+      const mra = misterMraFor(room, library);
+      return mra ? [{ titulo: room.title, mra, modos: room.modes ?? [] }] : [];
+    });
+  if (jogos.length === 0) return [];
+  return invoke<string[]>("mister_sincronizar_menu", { host, ...misterAuth(password), jogos });
+}
+
 /** Lê o MiSTer na rede (só no app desktop). */
 export async function scanMister(host: string, password?: string): Promise<{ host: string; mras: string[]; roms: string[] }> {
   if (!isTauri()) throw new Error("A leitura do MiSTer só funciona no aplicativo desktop.");

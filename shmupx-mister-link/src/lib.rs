@@ -6,6 +6,7 @@
 //!   abrir um jogo e voltar ao menu.
 
 pub mod descoberta;
+pub mod menu;
 pub mod rede;
 pub mod ssh;
 

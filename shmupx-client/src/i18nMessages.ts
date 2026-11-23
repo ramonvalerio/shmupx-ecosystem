@@ -149,6 +149,14 @@ const PLAYING_ENGLISH: Record<string, string> = {
 };
 for (const [key, value] of Object.entries(PLAYING_ENGLISH)) ENGLISH[key] ??= value;
 
+// Menu ShmupX do MiSTer: jogos do Lab marcados com MiSTer entram ao sincronizar a biblioteca.
+const MISTER_MENU_ENGLISH: Record<string, string> = {
+  "Menu ShmupX do MiSTer atualizado: {games}.": "MiSTer ShmupX menu updated: {games}.",
+  "O menu ShmupX do MiSTer já tem todos os jogos do ShmupX que ele tem.": "The MiSTer ShmupX menu already has every ShmupX game this MiSTer has.",
+  "Não foi possível atualizar o menu ShmupX do MiSTer: {reason}": "Couldn't update the MiSTer ShmupX menu: {reason}",
+};
+for (const [key, value] of Object.entries(MISTER_MENU_ENGLISH)) ENGLISH[key] ??= value;
+
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {
   if (/ficha/i.test(key)) ENGLISH[key] = value.replace(/\b(C|c)redit(s?)\b/g, (_match, c: string, plural: string) => `${c === "C" ? "C" : "c"}oin${plural}`);

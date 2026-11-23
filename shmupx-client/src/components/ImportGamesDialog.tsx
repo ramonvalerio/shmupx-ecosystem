@@ -5,7 +5,7 @@ import MisterConnect from "./MisterConnect";
 import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/emulatorLibrary";
-import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister } from "../data/misterLibrary";
+import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "../data/misterLibrary";
 import { usePlatformOwnership } from "../data/platforms";
 import type { PlayOn } from "../types/room";
 
@@ -50,12 +50,12 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
       setEmu({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
   }
-  const [mister, setMister] = useState<{ status: "idle" | "scanning" | "done" | "error"; host: string; password: string; mras?: string[]; roms?: string[]; error?: string }>(() => ({ status: "idle", host: readMisterLibrary()?.host ?? "", password: "" }));
+  const [mister, setMister] = useState<{ status: "idle" | "scanning" | "done" | "error"; host: string; password: string; mras?: string[]; roms?: string[]; error?: string; menuAdded?: string[]; menuError?: string }>(() => ({ status: "idle", host: readMisterLibrary()?.host ?? "", password: "" }));
   async function readMister() {
     setMister((current) => ({ ...current, status: "scanning", error: undefined }));
     try {
       const result = await scanMister(mister.host, mister.password);
-      setMister((current) => ({ ...current, status: "done", host: result.host, mras: result.mras, roms: result.roms }));
+      setMister((current) => ({ ...current, status: "done", host: result.host, mras: result.mras, roms: result.roms, menuAdded: undefined, menuError: undefined }));
     } catch (error) {
       setMister((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : String(error) }));
     }
@@ -139,8 +139,19 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{misterRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum jogo do MiSTer tem sala no ShmupX ainda.")}</p>}
             {imported === null
-              ? <button className="primary-action" onClick={() => { saveMisterLibrary({ host: mister.host, mras: mister.mras ?? [], roms: mister.roms ?? [], importedAt: Date.now() }); setImported(misterRooms.length); }}>{t("Importar biblioteca")}</button>
+              ? <button className="primary-action" onClick={() => {
+                  saveMisterLibrary({ host: mister.host, mras: mister.mras ?? [], roms: mister.roms ?? [], importedAt: Date.now() });
+                  setImported(misterRooms.length);
+                  // Os jogos do Lab marcados com MiSTer que ele tem entram no menu ShmupX do MiSTer.
+                  syncMisterMenu(mister.host, mister.password, rooms, { mras: mister.mras ?? [] })
+                    .then((added) => setMister((current) => ({ ...current, menuAdded: added })))
+                    .catch((error) => setMister((current) => ({ ...current, menuError: error instanceof Error ? error.message : String(error) })));
+                }}>{t("Importar biblioteca")}</button>
               : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
+            {mister.menuAdded && <p className="muted" role="status">{mister.menuAdded.length > 0
+              ? t("Menu ShmupX do MiSTer atualizado: {games}.", { games: mister.menuAdded.join(", ") })
+              : t("O menu ShmupX do MiSTer já tem todos os jogos do ShmupX que ele tem.")}</p>}
+            {mister.menuError && <p className="mode-error" role="alert">{t("Não foi possível atualizar o menu ShmupX do MiSTer: {reason}", { reason: mister.menuError })}</p>}
           </>}
           <div className="import-platform-heading"><h3>{t("Partidas do MiSTer no ranking")}</h3></div>
           <p className="muted">{t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.")}</p>

@@ -59,6 +59,7 @@ pub fn run() {
             mister::mister_jogos_do_jogador,
             mister::mister_iniciar,
             mister::mister_parar,
+            mister::mister_sincronizar_menu,
             mister::mister_procurar,
         ])
         .run(tauri::generate_context!())

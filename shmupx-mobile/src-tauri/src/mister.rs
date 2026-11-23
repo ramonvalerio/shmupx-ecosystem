@@ -117,3 +117,10 @@ pub async fn mister_parar(host: String, usuario: Option<String>, senha: Option<S
     let (usuario, senha) = acesso(&usuario, &senha);
     ssh::voltar_ao_menu(host.trim(), &usuario, &senha).await
 }
+
+/// Jogos do Lab marcados com MiSTer que o MiSTer tem: entram no menu ShmupX dele (só acrescenta).
+#[tauri::command]
+pub async fn mister_sincronizar_menu(host: String, usuario: Option<String>, senha: Option<String>, jogos: Vec<shmupx_mister_link::menu::JogoParaMenu>) -> Result<Vec<String>, String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    shmupx_mister_link::menu::sincronizar(host.trim(), &usuario, &senha, &jogos).await
+}
