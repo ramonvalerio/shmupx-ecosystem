@@ -11,6 +11,7 @@ import { useGameArt } from "../data/gameArt";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { liveActive, useCountdown, useLive, useYouTube } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
+import { usePresenceMode } from "../data/presenceMode";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
 import { formatPlayTime, useGameStats } from "../data/useGameStats";
@@ -117,6 +118,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
+  const presenceMode = usePresenceMode();
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
   const launcher = useGameLauncher(room, { onLive: (platform) => void startLive(platform) });
   const stats = useGameStats(playerId, room.id);
@@ -264,7 +266,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
   // Os outros: online, depois ausentes, depois offline; por nome quando essa é a ordem escolhida.
   const meLive = liveHere && live.state.status === "live";
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: (meLive ? "live" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], you: true };
+  // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: (meLive ? "live" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], you: true };
   const rest = others
     .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, you: false }))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
