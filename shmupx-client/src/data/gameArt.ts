@@ -52,14 +52,23 @@ const ARTS: Record<string, string> = {
 
 const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+/**
+ * Arte da loja da Steam pelo app_id (CDN pública da Steam): a cápsula 616x353, quase 16:9 como o
+ * card, e o cabeçalho 460x215 se a cápsula faltar.
+ */
+const STEAM_CDN = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
+export function steamArt(room: GameRoom): string[] {
+  return room.steamAppId > 0 ? [`${STEAM_CDN}/${room.steamAppId}/capsule_616x353.jpg`, `${STEAM_CDN}/${room.steamAppId}/header.jpg`] : [];
+}
+
 /** Arte do Client antigo para o jogo, pelo id ou pelo título. */
 export function legacyArt(room: GameRoom): string | undefined {
   return ARTS[room.id] ?? ARTS[slug(room.title)];
 }
 
 /**
- * Arte do jogo, em ordem: a capa enviada pelo Lab, a arte do Client antigo e a arte padrão do
- * ShmupX. Se uma falha ao carregar, passa para a próxima.
+ * Arte do jogo, em ordem: a capa enviada pelo Lab, a arte do Client antigo, a arte da loja da
+ * Steam (jogo com app_id) e a arte padrão do ShmupX. Se uma falha ao carregar, passa para a próxima.
  *
  * `grayscale`: o jogo não foi importado pelo jogador (não está na biblioteca da Steam nem tem o ROM
  * na biblioteca do emulador), como no Client antigo.
@@ -68,13 +77,15 @@ export function useGameArt(room: GameRoom) {
   const { owns } = useSteamLibrary();
   const emulator = useEmulatorLibrary();
   const mister = useMisterLibrary();
-  const candidates = [room.coverUrl, legacyArt(room), DEFAULT_COVER].filter((src): src is string => Boolean(src));
+  const steam = steamArt(room);
+  const candidates = [room.coverUrl, legacyArt(room), ...steam, DEFAULT_COVER].filter((src): src is string => Boolean(src));
   const [index, setIndex] = useState(0);
-  useEffect(() => setIndex(0), [room.id, room.coverUrl]);
+  useEffect(() => setIndex(0), [room.id, room.coverUrl, room.steamAppId]);
   const src = candidates[Math.min(index, candidates.length - 1)];
   return {
     src,
-    kind: src === DEFAULT_COVER ? "is-default" : src === room.coverUrl ? "has-cover" : "is-curated",
+    // A arte da Steam é uma capa de loja: ocupa o card como a capa do Lab.
+    kind: src === DEFAULT_COVER ? "is-default" : src === room.coverUrl || steam.includes(src) ? "has-cover" : "is-curated",
     // O "NO LOGO" é um aviso, não a arte do jogo: fica sempre colorido (como no Client antigo).
     grayscale: src !== DEFAULT_COVER && !((room.steamAppId > 0 && owns(room.steamAppId)) || emulator.owns(room) || mister.owns(room)),
     onError: () => setIndex((current) => Math.min(current + 1, candidates.length - 1)),
