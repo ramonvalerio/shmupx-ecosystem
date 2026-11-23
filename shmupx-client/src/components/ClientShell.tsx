@@ -178,12 +178,16 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // perfil…) Minhas coleções é um botão de volta.
   function showCollection() { setSection("collection"); setActiveRoomId(null); }
   function showRoom(id: string) { setSection("collection"); setRanking(id, false); activateRoom(id); }
-  const crumbRoom = isLibrary ? activeRoom : null;
-  const crumbs: { label: string; onClick: () => void; current: boolean }[] = [{ label: t("Minhas coleções"), onClick: showCollection, current: isLibrary && !crumbRoom }];
+  // Em Minhas coleções, o jogo selecionado já aparece no menu (sala e Ranking como atalhos); a
+  // marcação vermelha fica só na tela atual.
+  const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? null;
+  const crumbRoom = isLibrary ? activeRoom ?? selectedRoom : null;
+  const crumbs: { label: string; onClick: () => void; current: boolean }[] = [{ label: t("Minhas coleções"), onClick: showCollection, current: isLibrary && !activeRoom }];
   if (crumbRoom) {
-    const inRanking = rankingRoomIds.includes(crumbRoom.id);
-    crumbs.push({ label: crumbRoom.title, onClick: () => showRoom(crumbRoom.id), current: !inRanking });
-    crumbs.push({ label: t("Ranking"), onClick: () => setRanking(crumbRoom.id, true), current: inRanking });
+    const inRoom = activeRoom !== null;
+    const inRanking = inRoom && rankingRoomIds.includes(crumbRoom.id);
+    crumbs.push({ label: crumbRoom.title, onClick: () => (inRoom ? showRoom(crumbRoom.id) : openGame(crumbRoom.id)), current: inRoom && !inRanking });
+    crumbs.push({ label: t("Ranking"), onClick: () => (inRoom ? setRanking(crumbRoom.id, true) : openGame(crumbRoom.id, true)), current: inRanking });
   }
 
   // Esc volta um nível no menu de navegação: Ranking → sala → Minhas coleções; telas internas
