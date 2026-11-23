@@ -1,5 +1,6 @@
 import { useI18n } from "../i18n";
 import { useEffect, useState } from "react";
+import { useDialogFocus } from "./useDialogFocus";
 import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { defaultCollection, selectCollection, validateCollection, type CollectionPreferences } from "./collectionState";
@@ -112,6 +113,46 @@ function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   </section>;
 }
 
+/** Informações do jogo: plataformas, status, versão, desenvolvedora… (painel e janela About). */
+function GameFacts({ room, tags, owned }: { room: GameRoom; tags: PlatformTag[]; owned: boolean }) {
+  const { t } = useI18n();
+  return <>
+    <dl className="collection-facts two-columns">
+      <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={tags} /></dd></div>
+      <div><dt>{t("Status")}</dt><dd className="collection-status">
+        <ComingSoonBadge room={room} />
+        {!owned && <span className="not-owned">{t("Não tenho ainda")}</span>}
+        {isSupported(room) && owned && <span>{t("Na biblioteca")}</span>}
+      </dd></div>
+    </dl>
+    <dl className="collection-facts collection-info">
+      <div><dt>{t("Versão")}</dt><dd>{versionOf(room) ? t(versionOf(room)!) : "—"}</dd></div>
+      <div><dt>{t("Desenvolvedora")}</dt><dd>{room.developer ?? "—"}</dd></div>
+      <div><dt>{t("Publicadora")}</dt><dd>{room.publisher ?? "—"}</dd></div>
+      <div><dt>{t("Gênero")}</dt><dd>{room.genre ?? "—"}</dd></div>
+      <div><dt>{t("Ano")}</dt><dd>{room.year ?? "—"}</dd></div>
+    </dl>
+  </>;
+}
+
+/** About do card: as informações do jogo numa janela no centro. Fecha no ✕, no Esc ou clicando fora. */
+function GameAboutDialog({ room, tags, owned, onClose }: { room: GameRoom; tags: PlatformTag[]; owned: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const ref = useDialogFocus(true, onClose);
+  // Dentro do Client (não no body): as cores do tema vêm do shell.
+  return (
+    <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="game-about-title" tabIndex={-1} className="controller-dialog game-about-dialog">
+        <header>
+          <h2 id="game-about-title">{room.title}</h2>
+          <button type="button" className="game-about-close" aria-label={t("Fechar")} onClick={onClose}>✕</button>
+        </header>
+        <div className="game-about-body"><GameFacts room={room} tags={tags} owned={owned} /></div>
+      </div>
+    </div>
+  );
+}
+
 /** Versão do jogo: a plataforma original do catálogo (Lab), para mostrar no painel. */
 const VERSION_LABEL: Record<string, string> = {
   steam: "PC (Steam)", megadrive: "Mega Drive", neogeo: "Neo Geo", arcade: "Arcade", xbox360: "Xbox 360",
@@ -141,6 +182,9 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
   const [refreshing, setRefreshing] = useState(false);
   /** O jogador tem o jogo em alguma plataforma (Steam, emulador ou MiSTer)? */
   const inLibrary = (room: GameRoom) => playable.tags(room).some((tag) => tag.owned);
+  // Janela About aberta pelo card.
+  const [aboutId, setAboutId] = useState<string | null>(null);
+  const aboutRoom = rooms.find((room) => room.id === aboutId) ?? null;
   async function refreshLibrary() {
     setRefreshing(true);
     try { await steam.refresh(); } finally { setRefreshing(false); }
@@ -193,14 +237,15 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           const favorite = preferences.favorites.includes(room.id);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
             <button type="button" className="game-card" aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
-              <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}</GameArt>
+              <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}{!isSupported(room) && <span className="coming-soon-sticker" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Coming soon")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>
                 <span className="game-card-developer">{room.developer ?? " "}</span>
-                <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /><ComingSoonBadge room={room} /></span>
+                <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /></span>
                 {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
               </div>
             </button>
+            <button type="button" className="game-card-about" onClick={() => setAboutId(room.id)} aria-label={t("Sobre {game}", { game: room.title })}>{t("About")}</button>
             <button className={`favorite-action ${favorite ? "is-favorite" : ""}`} aria-label={t(favorite ? "Remover {game} dos favoritos" : "Adicionar {game} aos favoritos", { game: room.title })} aria-pressed={favorite} onClick={() => toggleFavorite(room.id)}>{favorite ? "★" : "☆"}</button>
           </article>;
         })}
@@ -217,6 +262,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
       </footer>
     </section>
 
+    {aboutRoom && <GameAboutDialog room={aboutRoom} tags={playable.tags(aboutRoom)} owned={inLibrary(aboutRoom)} onClose={() => setAboutId(null)} />}
     {!compact && <aside className="collection-details" aria-label={t("Detalhes do jogo")}>
       {selected ? <>
         <header>
@@ -225,21 +271,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
         </header>
         <ArcadeCabinet room={selected} video />
         <PlayPanel key={selected.id} room={selected} uid={uid} />
-        <dl className="collection-facts two-columns">
-          <div><dt>{t("Plataformas")}</dt><dd><PlatformTags tags={playable.tags(selected)} /></dd></div>
-          <div><dt>{t("Status")}</dt><dd className="collection-status">
-            <ComingSoonBadge room={selected} />
-            {!inLibrary(selected) && <span className="not-owned">{t("Não tenho ainda")}</span>}
-            {isSupported(selected) && inLibrary(selected) && <span>{t("Na biblioteca")}</span>}
-          </dd></div>
-        </dl>
-        <dl className="collection-facts collection-info">
-          <div><dt>{t("Versão")}</dt><dd>{versionOf(selected) ? t(versionOf(selected)!) : "—"}</dd></div>
-          <div><dt>{t("Desenvolvedora")}</dt><dd>{selected.developer ?? "—"}</dd></div>
-          <div><dt>{t("Publicadora")}</dt><dd>{selected.publisher ?? "—"}</dd></div>
-          <div><dt>{t("Gênero")}</dt><dd>{selected.genre ?? "—"}</dd></div>
-          <div><dt>{t("Ano")}</dt><dd>{selected.year ?? "—"}</dd></div>
-        </dl>
+        <GameFacts room={selected} tags={playable.tags(selected)} owned={inLibrary(selected)} />
       </> : <p className="collection-details-empty">{t("Selecione um jogo para ver os detalhes.")}</p>}
     </aside>}
   </div>;
