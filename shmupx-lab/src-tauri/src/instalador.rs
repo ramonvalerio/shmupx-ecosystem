@@ -259,6 +259,20 @@ async fn rodar_build(client: &Path, ambiente: &[(String, String)], mut linha: im
         c.args(["run", "bundle"]);
         c
     };
+    // O Lab roda dentro do próprio `npm run tauri dev`: não passa ao build do Client as variáveis
+    // dessa sessão (npm, Tauri, Vite e Node do Lab), nem a pasta de programas do Lab no PATH.
+    for (nome, _) in std::env::vars_os() {
+        let texto = nome.to_string_lossy().to_uppercase();
+        if ["TAURI_", "NPM_", "VITE_", "NODE_", "INIT_CWD"].iter().any(|prefixo| texto.starts_with(prefixo)) {
+            comando.env_remove(&nome);
+        }
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        let limpo: Vec<PathBuf> = std::env::split_paths(&path).filter(|p| !p.to_string_lossy().to_lowercase().contains("shmupx-lab")).collect();
+        if let Ok(path) = std::env::join_paths(limpo) {
+            comando.env("PATH", path);
+        }
+    }
     comando
         .current_dir(client)
         .envs(ambiente.iter().map(|(k, v)| (k.as_str(), v.as_str())))
@@ -287,11 +301,22 @@ async fn rodar_build(client: &Path, ambiente: &[(String, String)], mut linha: im
         });
     }
     drop(tx);
+    // Saída inteira num log (para conferir depois) e, se falhar, as linhas que falam de erro.
+    let caminho_log = std::env::temp_dir().join("shmupx-lab-instalador.log");
+    let mut log = std::fs::File::create(&caminho_log).ok();
     let mut ultimas: Vec<String> = Vec::new();
+    let mut erros: Vec<String> = Vec::new();
     while let Some(l) = rx.recv().await {
         let l = l.trim_end().to_string();
+        if let Some(arquivo) = log.as_mut() {
+            use std::io::Write;
+            let _ = writeln!(arquivo, "{l}");
+        }
         if l.is_empty() {
             continue;
+        }
+        if linha_de_erro(&l) && erros.len() < 40 {
+            erros.push(l.clone());
         }
         ultimas.push(l.clone());
         if ultimas.len() > 12 {
@@ -300,7 +325,18 @@ async fn rodar_build(client: &Path, ambiente: &[(String, String)], mut linha: im
         linha(l);
     }
     let status = filho.wait().await.map_err(|e| format!("falha ao esperar o build: {e}"))?;
-    if status.success() { Ok(()) } else { Err(format!("o build falhou:\n{}", ultimas.join("\n"))) }
+    if status.success() {
+        return Ok(());
+    }
+    let motivo = if erros.is_empty() { ultimas } else { erros.into_iter().take(12).collect() };
+    Err(format!("o build falhou:\n{}\n\nLog completo: {}", motivo.join("\n"), caminho_log.display()))
+}
+
+/// Linha da saída do build que explica a falha (TypeScript, npm, Rust, NSIS…), sem o eco do Tauri.
+fn linha_de_erro(linha: &str) -> bool {
+    let minusculas = linha.to_lowercase();
+    let eco = minusculas.contains("beforebuildcommand") || minusculas.contains("looking up installed tauri packages");
+    !eco && ["error", "failed", "err!", "panicked", "não encontrad", "exception"].iter().any(|termo| minusculas.contains(termo))
 }
 
 #[cfg(test)]
