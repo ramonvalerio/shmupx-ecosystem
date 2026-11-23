@@ -130,7 +130,10 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
   const { live, prefs, liveHere, liveOn } = ranked;
   const comingSoon = !isSupported(room);
   // Live indisponível: no MiSTer (a live transmite a janela do jogo neste PC) ou sem canal conectado.
-  const liveUnavailable = platform === "mister"
+  // Plataforma da partida: a marcada no painel; sem nenhuma marcada (jogo ainda não importado),
+  // a primeira em que ele roda — abre direto, e o aviso de jogo não encontrado explica se faltar.
+  const target = platform ?? launcher.platforms[0] ?? null;
+  const liveUnavailable = target === "mister"
     ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
     : !youtube.connection?.connected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
   const withLive = prefs.on && !liveUnavailable;
@@ -159,13 +162,13 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     setChoosing(false);
     ranked.setLiveError(null);
     const kind = withLive ? "live" : "ranked";
-    if (platform && (kind === "ranked" || platform !== "mister")) launcher.playNow(kind, platform, mode);
+    if (target && (kind === "ranked" || target !== "mister")) launcher.playNow(kind, target, mode);
     else launcher.play(kind);
   }
   /** Training Mode: sem ficha, sem ranking, sem gravação e sem live. */
   function playTraining() {
     setChoosing(false);
-    if (platform) launcher.playNow("training", platform, mode);
+    if (target) launcher.playNow("training", target, mode);
     else launcher.play("training");
   }
   // Ranked Mode indisponível: jogo sem script de validação ou sem fichas (o treino continua).

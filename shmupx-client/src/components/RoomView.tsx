@@ -196,7 +196,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const { mode, platform } = play;
   // Coming soon (sem script de validação): só treino; ranked e live ranked esperam o script.
   const comingSoon = !isSupported(room);
-  const playTraining = () => (platform ? launcher.playNow("training", platform, mode) : launcher.play("training"));
+  // Abre direto: na plataforma marcada ou, sem nenhuma (jogo ainda não importado), na primeira dele.
+  const target = platform ?? launcher.platforms[0] ?? null;
+  const playTraining = () => (target ? launcher.playNow("training", target, mode) : launcher.play("training"));
 
   // INICIAR JOGO vira PARAR JOGO (vermelho) com o jogo aberto: run no PC (encerra a gravação e
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
