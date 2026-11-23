@@ -53,7 +53,7 @@ function SpeakerIcon({ silent }: { silent: boolean }) {
  * (ao abrir o jogo a janela perde o foco e o vídeo pausa, sem som por cima do jogo). Com som; na
  * barra (ao passar o mouse): silenciar, volume e expandir. Duplo clique também expande.
  */
-function CabinetVideo({ src, paused, onFail, onExpand }: { src: string; paused: boolean; onFail: () => void; onExpand: (time: number) => void }) {
+function CabinetVideo({ src, paused, resume, onFail, onExpand }: { src: string; paused: boolean; resume: { time: number } | null; onFail: () => void; onExpand: (time: number) => void }) {
   const { t } = useI18n();
   const ref = useRef<HTMLVideoElement>(null);
   const muted = useCabinetMuted();
@@ -63,6 +63,8 @@ function CabinetVideo({ src, paused, onFail, onExpand }: { src: string; paused: 
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const updateRef = useRef<() => void>(() => undefined);
+  // Fim do trecho em loop: 30 s; ao voltar da modal depois disso, segue mais 30 s dali antes de recomeçar.
+  const loopEndRef = useRef(LOOP_SECONDS);
 
   useEffect(() => {
     const video = ref.current;
@@ -98,13 +100,25 @@ function CabinetVideo({ src, paused, onFail, onExpand }: { src: string; paused: 
       video.pause();
     };
   }, [src]);
+  // Ao fechar a modal, continua de onde o vídeo grande parou.
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !resume) return;
+    video.currentTime = resume.time;
+    loopEndRef.current = Math.max(LOOP_SECONDS, resume.time + LOOP_SECONDS);
+  }, [resume]);
   useEffect(() => updateRef.current(), [paused]);
 
   const expand = () => onExpand(ref.current?.currentTime ?? 0);
   return (
     <div className="cabinet-video" onDoubleClick={expand} title={t("Duplo clique para ver o vídeo grande")}>
       <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail}
-        onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= LOOP_SECONDS) event.currentTarget.currentTime = 0; }} />
+        onTimeUpdate={(event) => {
+          if (event.currentTarget.currentTime < loopEndRef.current) return;
+          event.currentTarget.currentTime = 0;
+          loopEndRef.current = LOOP_SECONDS;
+        }}
+        onEnded={() => { loopEndRef.current = LOOP_SECONDS; }} />
       <div className="cabinet-controls" onDoubleClick={(event) => event.stopPropagation()}>
         <button type="button" className="cabinet-control" aria-label={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")} title={t(silent ? "Ligar o som do vídeo" : "Silenciar o vídeo")}
           onClick={() => { if (blocked) { setBlocked(false); setCabinetMuted(false); } else setCabinetMuted(!muted); }}>
@@ -126,20 +140,23 @@ function CabinetVideo({ src, paused, onFail, onExpand }: { src: string; paused: 
  * Vídeo do jogo grande, numa janela no centro: controles do player (volume, avanço), com o volume
  * e o som do gabinete. Fecha no X, no Esc ou clicando fora.
  */
-function VideoModal({ title, src, start, onClose }: { title: string; src: string; start: number; onClose: () => void }) {
+function VideoModal({ title, src, start, onClose }: { title: string; src: string; start: number; onClose: (time: number) => void }) {
   const { t } = useI18n();
-  const ref = useDialogFocus(true, onClose);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Fecha informando onde o vídeo parou, para o gabinete continuar dali.
+  const close = () => onClose(videoRef.current?.currentTime ?? start);
+  const ref = useDialogFocus(true, close);
   const muted = useCabinetMuted();
   const volume = useCabinetVolume();
   return createPortal(
-    <div className="controller-dialog-backdrop video-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="controller-dialog-backdrop video-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={t("Vídeo de {game}", { game: title })} tabIndex={-1} className="video-modal">
         <header>
           <strong>{title}</strong>
-          <button type="button" className="video-modal-close" aria-label={t("Fechar")} onClick={onClose}>✕</button>
+          <button type="button" className="video-modal-close" aria-label={t("Fechar")} onClick={close}>✕</button>
         </header>
         <video src={src} controls autoPlay loop playsInline
-          ref={(video) => { if (video && !video.dataset.ready) { video.dataset.ready = "1"; video.currentTime = start; video.volume = volume; video.muted = muted; } }}
+          ref={(video) => { videoRef.current = video; if (video && !video.dataset.ready) { video.dataset.ready = "1"; video.currentTime = start; video.volume = volume; video.muted = muted; } }}
           onVolumeChange={(event) => { setCabinetVolume(event.currentTarget.volume); setCabinetMuted(event.currentTarget.muted); }} />
       </div>
     </div>,
@@ -156,7 +173,8 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
   const video = useGameVideo(room, withVideo);
   const [videoFailed, setVideoFailed] = useState(false);
   const [modalStart, setModalStart] = useState<number | null>(null);
-  useEffect(() => { setVideoFailed(false); setModalStart(null); }, [video]);
+  const [resume, setResume] = useState<{ time: number } | null>(null);
+  useEffect(() => { setVideoFailed(false); setModalStart(null); setResume(null); }, [video]);
   const showVideo = Boolean(video) && !videoFailed;
   const artTate = useTate(art.src);
   // Trailers são largos (16:9): com vídeo, a tela fica deitada.
@@ -168,7 +186,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
   const id = (name: string) => `${name}-${uid}`;
   return (
     <>
-    {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={() => setModalStart(null)} />}
+    {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
     <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${className}`} viewBox="22 0 276 336" role="img" aria-label={room.title}>
       {/* Inspirado no Sega Astro City: corpo claro de cantos redondos, marquise iluminada (sem texto),
           monitor fundo em moldura escura, painel preto largo e porta da ficha embaixo. */}
@@ -192,7 +210,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
       {showVideo
         // Sem clip-path no foreignObject: o Chromium deixa de entregar o mouse aos controles. O canto
         // arredondado da tela vem do CSS (.cabinet-video).
-        ? <foreignObject {...screen}><CabinetVideo src={video!} paused={modalStart !== null} onFail={() => setVideoFailed(true)} onExpand={setModalStart} /></foreignObject>
+        ? <foreignObject {...screen}><CabinetVideo src={video!} paused={modalStart !== null} resume={resume} onFail={() => setVideoFailed(true)} onExpand={setModalStart} /></foreignObject>
         : <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />}
       <rect {...screen} fill={`url(#${id("glass")})`} pointerEvents="none" />
       {/* Painel, corpo de baixo e portas: abaixo do monitor */}
