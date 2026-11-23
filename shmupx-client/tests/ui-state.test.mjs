@@ -10,6 +10,7 @@ async function sourceModule(path) {
 }
 const { GamepadNavigationInput } = await sourceModule("../src/components/navigationInput.ts");
 const { defaultDashboard, validateDashboard, reorderPanel } = await sourceModule("../src/components/dashboardState.ts");
+const { romsFor, tableRomsFor } = await sourceModule("../src/data/emulatorRoms.ts");
 function pad(buttons = [], axes = [0, 0]) { return { buttons: Array.from({ length: 16 }, (_, index) => ({ pressed: buttons.includes(index) })), axes }; }
 
 test("held confirmation cannot activate a control on entry or after focus recovery", () => {
@@ -222,4 +223,11 @@ test("chat profanity filter masks pt/en/ja bad words without false positives", (
     "pass the class", "Scunthorpe", "楽しいしね、約束だよ", "やくそく", "カスタム"]) {
     assert.deepEqual(censor(text), { text, changed: false }, text);
   }
+});
+test("ROM do emulador: tabela primeiro e, sem entrada, o título sem separadores (R-Type → rtype)", () => {
+  assert.deepEqual(romsFor({ id: "r-type", title: "R-Type" }), ["rtype"]);
+  assert.deepEqual(romsFor({ id: "xyz123", title: "R-Type" }).slice(0, 1), ["rtype"]);
+  assert.deepEqual(romsFor({ id: "aero-fighters-2", title: "Aero Fighters 2" }), ["sonicwi2", "aerofighters2"]);
+  assert.deepEqual(tableRomsFor({ id: "earthion", title: "Earthion" }), []);
+  assert.deepEqual(romsFor({ id: "earthion", title: "Earthion" }), ["earthion"]);
 });

@@ -4,6 +4,7 @@ import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import { tableRomsFor } from "../data/emulatorRoms";
 import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
 import { PLAY_ON, stillInstalled, usePlatformOwnership } from "../data/platforms";
@@ -72,7 +73,7 @@ export function useGameLauncher(room: GameRoom, { onLive }: { onLive?: (platform
   function options(): PlayOn[] {
     const ids = new Set<PlayOn>(playable.tags(room).map((tag) => tag.id));
     if (room.steamAppId > 0) ids.add("steam");
-    if (romsFor(room).length > 0) ids.add("emulator");
+    if (tableRomsFor(room).length > 0) ids.add("emulator");
     return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
