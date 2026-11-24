@@ -19,6 +19,7 @@ import { useAutoUpdate } from "../data/useAutoUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 import { leaveRoomPresence, usePresenceHeartbeat, videoIdFromUrl } from "../data/useRoomPresence";
+import { useAccountPlaying } from "../data/playing";
 import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
@@ -108,8 +109,11 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   }, [profile.uid, openRoomIds]);
   // Presença em todas as salas abertas: online na que está na tela, away nas outras.
   const liveVideoId = live.state.status === "live" ? videoIdFromUrl(live.state.watch_url) : null;
+  // Jogo aberto na conta (aqui, no MiSTer ou pelo celular): aparece na lista de jogadores das salas.
+  const accountPlaying = useAccountPlaying();
   usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId,
-    liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null, presenceMode === "away");
+    liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null, presenceMode === "away",
+    accountPlaying ? { gameId: accountPlaying.gameId, title: accountPlaying.title } : null);
   // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
   const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
   const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;

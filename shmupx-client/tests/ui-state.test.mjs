@@ -231,3 +231,31 @@ test("ROM do emulador: tabela primeiro e, sem entrada, o título sem separadores
   assert.deepEqual(tableRomsFor({ id: "earthion", title: "Earthion" }), []);
   assert.deepEqual(romsFor({ id: "earthion", title: "Earthion" }), ["earthion"]);
 });
+
+const { emojify, emojifyTyping, emojiSuggestions, applySuggestion } = await sourceModule("../src/data/emoji.ts");
+const { linkParts } = await sourceModule("../src/data/chatLinks.ts");
+
+test("chat emoji shortcuts: :nome:, emoticons and suggestions", () => {
+  assert.equal(emojify("gg :fogo: :desconhecido:"), "gg 🔥 :desconhecido:");
+  assert.equal(emojify(":) boa <3 xD"), "🙂 boa ❤️ 😆");
+  // Emoticon só como palavra inteira: links e horários ficam como estão.
+  assert.equal(emojify("https://a.com/:) 10:30 aaa:)"), "https://a.com/:) 10:30 aaa:)");
+  assert.equal(emojifyTyping("oi :) "), "oi 🙂 ");
+  assert.equal(emojifyTyping("oi :)"), "oi :)");
+  assert.equal(emojifyTyping("vai :gg:"), "vai 🏆");
+  const s = emojiSuggestions("que :fo");
+  assert.equal(s.query, "fo");
+  assert.equal(s.items[0].emoji, "🔥");
+  assert.equal(applySuggestion("que :fo", s.query, s.items[0].emoji), "que 🔥 ");
+  assert.equal(emojiSuggestions("10:30"), null);
+});
+
+test("chat links become clickable parts", () => {
+  assert.deepEqual(linkParts("entra aqui https://meet.google.com/chh-hdoi-uct."), [
+    { text: "entra aqui " },
+    { text: "https://meet.google.com/chh-hdoi-uct", url: "https://meet.google.com/chh-hdoi-uct" },
+    { text: "." },
+  ]);
+  assert.deepEqual(linkParts("(veja www.shmupx.com)"), [{ text: "(veja " }, { text: "www.shmupx.com", url: "https://www.shmupx.com" }, { text: ")" }]);
+  assert.deepEqual(linkParts("sem link"), [{ text: "sem link" }]);
+});

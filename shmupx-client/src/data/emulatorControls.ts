@@ -85,6 +85,8 @@ export function describeInput(item: MappedControl, t: (text: string, values?: Re
     : part === "XAXIS_RIGHT_SWITCH" ? t("Alavanca {dir}", { dir: "→" })
     : part === "YAXIS_UP_SWITCH" ? t("Alavanca {dir}", { dir: "↑" })
     : part === "YAXIS_DOWN_SWITCH" ? t("Alavanca {dir}", { dir: "↓" })
+    : /^(\w+AXIS|SLIDER\d)_(POS|NEG)_SWITCH$/.test(part)
+      ? t("Eixo {axis} {dir}", { axis: part.replace(/AXIS_.*|_(POS|NEG)_SWITCH$/g, ""), dir: part.includes("_POS_") ? "+" : "−" })
     : part === "START" ? "Start" : part === "SELECT" ? "Select" : item.label;
   return item.deviceName ? `${item.deviceName} · ${what}` : what;
 }

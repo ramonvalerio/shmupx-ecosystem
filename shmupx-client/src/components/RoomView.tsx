@@ -12,6 +12,7 @@ import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useCountdown } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { usePresenceMode } from "../data/presenceMode";
+import { useAccountPlaying } from "../data/playing";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
 import { formatPlayTime, useGameStats } from "../data/useGameStats";
@@ -121,6 +122,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
   const { t } = useI18n();
   const presenceMode = usePresenceMode();
+  const accountPlaying = useAccountPlaying();
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
   // Play Ranked (com ou sem live) e as opções dele: RankedPanel, o mesmo do painel da Coleção.
   const ranked = useRankedLive(room);
@@ -215,9 +217,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // Os outros: online, depois ausentes, depois offline; por nome quando essa é a ordem escolhida.
   const meLive = liveHere && live.state.status === "live";
   // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording, status: (meLive ? "live" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], you: true };
+  // O jogo aberto na conta (aqui, no MiSTer ou pelo celular) aparece na linha do jogador.
+  const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title } : undefined;
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
   const rest = others
-    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, you: false }))
+    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false }))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
   const sorted = [me, ...rest];
   const avatars = usePublicProfiles([playerId ?? "", ...others.map((o) => o.uid)]);
@@ -313,11 +317,17 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src={avatarOf(avatars, player.you ? playerId : player.id)} alt="" /></span>
               <span className="room-player-info">
                 <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
-                <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>
+                {player.game
+                  ? <small className="room-player-game" title={t("Jogando {game}", { game: player.game.title })}>▶ {player.game.title}</small>
+                  : <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>}
               </span>
               <span className="room-player-state">
-                {player.playing && t("JOGANDO")}
-                <span className={`presence-dot is-${player.status}`} role="img" aria-label={t(STATUS_LABEL[player.status])} title={t(STATUS_LABEL[player.status])} />
+                {player.status === "live"
+                  ? <span className="live-badge" role="img" aria-label={t("Ao vivo")} title={t("Ao vivo")}>LIVE</span>
+                  : <>
+                    {player.playing && t("JOGANDO")}
+                    <span className={`presence-dot is-${player.status}`} role="img" aria-label={t(STATUS_LABEL[player.status])} title={t(STATUS_LABEL[player.status])} />
+                  </>}
               </span>
             </li>
           ))}

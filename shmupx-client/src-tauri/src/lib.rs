@@ -8,6 +8,7 @@
 pub mod analysis;
 pub mod auth;
 pub mod capture;
+pub mod chat;
 pub mod input;
 pub mod live;
 pub mod net;
@@ -85,6 +86,7 @@ pub fn run() {
             live::commands::live_iniciar,
             live::commands::live_encerrar,
             live::commands::live_abrir,
+            chat::chat_abrir_link,
         ])
         .setup(|app| {
             // Log do sistema (arquivo na pasta de logs do app): os detalhes técnicos das falhas ficam

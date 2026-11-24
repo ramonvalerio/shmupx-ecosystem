@@ -22,6 +22,14 @@ export interface RoomPresence {
   playing: boolean;
   /** Live no ar: vídeo do YouTube e quantos assistem (atualizado a cada 30 s por quem transmite). */
   live?: { videoId: string; viewers: number };
+  /** Jogo aberto na conta do jogador (em qualquer sala, modo ou plataforma). */
+  game?: { id: string; title: string };
+}
+
+/** Jogo aberto na conta, publicado na presença de todas as salas abertas. */
+export interface PresenceGame {
+  gameId: string;
+  title: string;
 }
 
 /** Live do jogador nesta sala (o vídeo do YouTube é o id da transmissão). */
@@ -48,7 +56,9 @@ function presenceFrom(uid: string, data: Record<string, unknown>, now: number): 
   const videoId = typeof data.liveVideoId === "string" ? data.liveVideoId : null;
   const live = !offline && state === "live" && videoId ? { videoId, viewers: typeof data.liveViewers === "number" ? data.liveViewers : 0 } : undefined;
   const status: PresenceStatus = offline ? "offline" : live ? "live" : state === "away" ? "away" : "online";
-  return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && state === "playing", live };
+  const game = !offline && typeof data.playingGameId === "string" && typeof data.playingTitle === "string"
+    ? { id: data.playingGameId, title: data.playingTitle } : undefined;
+  return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && (state === "playing" || Boolean(game)), live, game };
 }
 
 function presenceRef(roomId: string, uid: string) {
@@ -81,13 +91,16 @@ function useForeground() {
  * Presença do jogador em todas as salas abertas nas abas: `rooms/{gameId}/presence/{uid}` no
  * Firestore (Security Rules: só o próprio jogador grava o seu, com o nome do perfil e o horário do
  * servidor). Confirma a cada 30 s e quando o estado muda: jogando, na sala em primeiro plano
- * (online) ou com o Client aberto em outro lugar (away).
+ * (online) ou com o Client aberto em outro lugar (away). Com um jogo aberto na conta (`playing`),
+ * todas as salas mostram qual é.
  */
-export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null, away = false) {
+export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null, away = false, playing: PresenceGame | null = null) {
   const foreground = useForeground();
   const rooms = openRoomIds.join("\n");
   const liveRoom = live?.roomId ?? null;
   const liveVideo = live?.videoId ?? null;
+  const playingId = playing?.gameId ?? null;
+  const playingTitle = playing ? playing.title.trim().slice(0, 80) : null;
   useEffect(() => {
     if (!me.uid || !rooms) return;
     const ids = rooms.split("\n");
@@ -99,14 +112,22 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
         const base = { name: me.displayName, lastSeen: serverTimestamp() };
         const data = liveVideo && liveRoom === roomId
           ? { ...base, state: "live", liveVideoId: liveVideo, liveViewers: viewers }
-          : { ...base, state: recordingRoomId === roomId ? "playing" : !away && foreground && visibleRoomId === roomId ? "online" : "away" };
-        setDoc(presenceRef(roomId, me.uid), data).catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
+          : { ...base, state: recordingRoomId === roomId || playingId === roomId ? "playing" : !away && foreground && visibleRoomId === roomId ? "online" : "away" };
+        const ref = presenceRef(roomId, me.uid);
+        if (playingId && playingTitle) {
+          // Regras antigas (sem os campos do jogo) recusam a gravação: tenta de novo sem o jogo.
+          setDoc(ref, { ...data, playingGameId: playingId, playingTitle })
+            .catch(() => setDoc(ref, data))
+            .catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
+        } else {
+          setDoc(ref, data).catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
+        }
       }
     };
     void beat();
     const timer = window.setInterval(() => void beat(), HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away, playingId, playingTitle]);
 }
 
 /** Presença de um jogador (a janela da live acompanha quem transmite). */

@@ -1,5 +1,7 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
+import { linkParts } from "../data/chatLinks";
 import type { ChatMessage } from "../types/room";
 import type { ChatStatus } from "../data/useRoomChat";
 import { censor } from "../data/profanity";
@@ -25,6 +27,19 @@ function horario(timestamp: string, locale: string, agora = new Date()): string 
   const hora = data.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   if (data.toDateString() === agora.toDateString()) return hora;
   return `${hora} ${data.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" })}`;
+}
+
+/** Abre o link no navegador do sistema (nunca dentro do app). */
+function openLink(url: string) {
+  if (isTauri()) void invoke("chat_abrir_link", { url }).catch((error) => console.warn("falha ao abrir o link:", error));
+  else window.open(url, "_blank", "noopener");
+}
+
+/** Texto da mensagem com os links clicáveis. */
+function ChatText({ text }: { text: string }) {
+  return <>{linkParts(text).map((part, index) => "url" in part
+    ? <a key={index} className="chat-link" href={part.url} title={part.url} onClick={(event) => { event.preventDefault(); openLink(part.url); }}>{part.text}</a>
+    : <Fragment key={index}>{part.text}</Fragment>)}</>;
 }
 
 export default function ChatFeed({ messages, status = "ready", error, playerId, emptyText }: ChatFeedProps) {
@@ -58,7 +73,7 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
               </header>
               {message.inReplyTo && <blockquote className="chat-reply-to">{message.inReplyTo}</blockquote>}
               {/* Mascara de novo na exibição: mensagens antigas ou de quem burlou o envio. */}
-              <p>{bot ? message.text : censor(message.text).text}</p>
+              <p><ChatText text={bot ? message.text : censor(message.text).text} /></p>
             </div>
           </article>
         );
