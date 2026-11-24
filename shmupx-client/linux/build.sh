@@ -62,6 +62,9 @@ fi
 # essas pastas a ele.
 LD_LIBRARY_PATH="$(find "$saida/validator" -name '*.so*' -printf '%h\n' | sort -u | paste -sd:)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LD_LIBRARY_PATH
+# A interface é montada aqui (o tauri.bundle.conf.json não roda o beforeBuildCommand), como no
+# `npm run bundle` do Windows.
+npm run build
 npx tauri build --verbose --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
 
 mkdir -p /out
