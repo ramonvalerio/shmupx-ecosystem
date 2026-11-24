@@ -120,15 +120,13 @@ struct EmuladorAbertoPayload {
 }
 
 /// Inicializa um jogo de emulador no ShmupX Engine (ou, sem ele, no FBNeo do Fightcade). `roms`: os ROMs que correspondem ao jogo
-/// (a interface cruza com o catálogo); `pasta`: a do Fightcade que a interface conhece (a escolhida
-/// pelo jogador em "Selecionar pasta do Fightcade", guardada no app, vem antes). Avisa
+/// (a interface cruza com o catálogo); `pasta`: a do Fightcade, se o jogador escolheu uma. Avisa
 /// `emulator://game-launched` com o processo do emulador, que a gravação vigia como na Steam.
 #[tauri::command]
 pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>, janela: Option<bool>) -> Result<(), String> {
     let janela = janela.unwrap_or(false);
-    let escolhida = super::emulador::pasta_escolhida(&app);
     let motor = super::emulador::motor(&app);
-    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), &roms, janela, motor.as_ref()))
+    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(pasta.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
@@ -148,35 +146,12 @@ pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {
         .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] })
 }
 
-/// ROMs do emulador (Fightcade/FBNeo) deste PC. Usa a pasta escolhida pelo jogador (guardada), depois
-/// `pasta` (onde a interface leu da última vez) e, por fim, a busca automática.
+/// ROMs do emulador (Fightcade/FBNeo) deste PC. `pasta`: a do Fightcade, se o jogador escolheu uma.
 #[tauri::command]
-pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super::emulador::BibliotecaEmulador {
-    let escolhida = super::emulador::pasta_escolhida(&app);
-    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), pasta.as_deref()))
+pub async fn emulador_biblioteca(pasta: Option<String>) -> super::emulador::BibliotecaEmulador {
+    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(pasta.as_deref()))
         .await
-        .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada())
-}
-
-/// Guarda a pasta do Fightcade escolhida pelo jogador (a raiz, `emulator`, `fbneo` ou a de ROMs) e
-/// já lê os ROMs dela. Com `pasta` vazia, esquece a escolha e volta à busca automática. Se a pasta
-/// não parece do Fightcade, devolve o motivo e não guarda nada.
-#[tauri::command]
-pub async fn emulador_definir_pasta(app: AppHandle, pasta: Option<String>) -> Result<super::emulador::BibliotecaEmulador, String> {
-    let pasta = pasta.filter(|p| !p.trim().is_empty());
-    let guardar = match pasta {
-        Some(pasta) => Some(
-            tauri::async_runtime::spawn_blocking(move || super::emulador::validar_escolhida(&pasta))
-                .await
-                .map_err(|e| e.to_string())??,
-        ),
-        None => None,
-    };
-    super::emulador::guardar_escolhida(&app, guardar.as_deref())?;
-    log::info!("emulador: pasta do Fightcade {}", guardar.as_deref().unwrap_or("(busca automática)"));
-    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(guardar.as_deref(), None))
-        .await
-        .map_err(|e| e.to_string())
+        .unwrap_or(super::emulador::BibliotecaEmulador { found: false, root: None, roms: vec![] })
 }
 
 /// Acesso ao MiSTer: usuário e senha informados, ou os de fábrica (`root` / `1`).
