@@ -28,7 +28,7 @@
 
 .EXAMPLE
   npm run prod
-  npm run prod -- -Preparar
+  npm run prod:motor    # o mesmo, baixando antes o último ShmupX Engine (-Preparar)
 #>
 param([switch]$Preparar, [string]$Emulador)
 $ErrorActionPreference = "Stop"
