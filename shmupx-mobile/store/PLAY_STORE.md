@@ -19,34 +19,38 @@ Play Console › **Criar app**:
 **Nome:** ShmupX Lite
 
 **Descrição curta** (até 80 caracteres):
-> Salas, chat e lives da comunidade ShmupX de shmup, direto no seu celular.
+> Salas, chat, ranking e lives do ShmupX. Comece partidas no PC ou no MiSTer.
 
 **Descrição completa:**
-> O ShmupX Lite é o app de celular da ShmupX, a arena global de shoot 'em up (shmup). Acompanhe a comunidade de onde estiver:
+> O ShmupX Lite é o app de celular da ShmupX, a arena global de shoot 'em up (shmup). Acompanhe a comunidade e comande suas partidas de onde estiver:
 >
 > • Entre nas salas de cada jogo do catálogo ShmupX
 > • Converse com os jogadores no chat da sala, em tempo real
 > • Veja quem está na sala: online, ausente, jogando ou ao vivo
 > • Assista às lives dos jogadores direto no app, com o número de espectadores
+> • Confira o ranking de cada jogo
+> • Comece uma partida de treino ou ranqueada pelo celular: ela abre no seu PC (com o ShmupX Client aberto) ou no seu MiSTer FPGA, na TV
 >
-> O ShmupX Lite é a versão leve para acompanhar a plataforma. Para jogar, gravar runs e entrar no ranking, use o ShmupX Client no computador (Windows ou Linux), em shmupx.com.
+> O jogo roda no PC ou no MiSTer, não no celular. Para jogar pelo computador, instale o ShmupX Client (Windows ou Linux) em shmupx.com. Para o MiSTer, basta ele estar na mesma rede Wi-Fi do celular.
 >
 > Entre com sua conta Google: é a mesma conta do ShmupX Client.
 
 ### English (en-US), para adicionar como tradução
 
 **Short description:**
-> Rooms, chat and live streams from the ShmupX shmup community, on your phone.
+> ShmupX rooms, chat, rankings and live streams. Start games on your PC or MiSTer.
 
 **Full description:**
-> ShmupX Lite is the mobile app of ShmupX, the global arena of shoot 'em ups (shmups). Follow the community from anywhere:
+> ShmupX Lite is the mobile app of ShmupX, the global arena of shoot 'em ups (shmups). Follow the community and control your games from anywhere:
 >
 > • Join the room of every game in the ShmupX catalog
 > • Chat with players in the room in real time
 > • See who is in the room: online, away, playing or live
 > • Watch players' live streams right in the app, with the viewer count
+> • Check each game's rankings
+> • Start a training or ranked game from your phone: it opens on your PC (with the ShmupX Client running) or on your MiSTer FPGA, on the TV
 >
-> ShmupX Lite is the light version for following the platform. To play, record runs and climb the rankings, use the ShmupX Client on your computer (Windows or Linux) at shmupx.com.
+> The game runs on your PC or MiSTer, not on the phone. To play on a computer, install the ShmupX Client (Windows or Linux) from shmupx.com. For the MiSTer, it just needs to be on the same Wi-Fi network as your phone.
 >
 > Sign in with your Google account, the same one you use in the ShmupX Client.
 
