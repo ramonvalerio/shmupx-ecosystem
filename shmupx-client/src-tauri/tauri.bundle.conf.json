@@ -1,4 +1,7 @@
 {
+  "build": {
+    "beforeBuildCommand": null
+  },
   "bundle": {
     "resources": {
       "bundle/validator/": "validator/",
