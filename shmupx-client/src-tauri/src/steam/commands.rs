@@ -145,6 +145,19 @@ pub async fn inicializar_jogo_emulador(
             controles: motor_controles.unwrap_or_default(),
             ..m
         });
+    // Ranked de jogo validado só pela memória (sem script de vídeo): só no ShmupX Engine e só com o
+    // ROM mapeado (outra versão do jogo não tem mapa e a run não teria como ser validada).
+    let roms = if treino || crate::analysis::offline::versao_aceita(&jogo_id).is_some() {
+        roms
+    } else {
+        match super::telemetria::roms_pela_memoria(&jogo_id) {
+            mapeados if mapeados.is_empty() => roms,
+            _ if motor.is_none() => {
+                return Err("o Ranked deste jogo roda no ShmupX Emulator, que não foi encontrado nesta instalação: reinstale o ShmupX Client ou jogue no Training Mode".into());
+            }
+            mapeados => mapeados,
+        }
+    };
     let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?

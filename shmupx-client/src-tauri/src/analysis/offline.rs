@@ -84,7 +84,7 @@ struct ScriptAceito {
 /// Scripts de validação que este Client aceita: jogo → versão aprovada no Lab. Enquanto a
 /// publicação de scripts (ADR 006/007) não existe, a lista acompanha a versão do Client; o
 /// `scripts/prepare-bundle.ps1` lê o mesmo arquivo para empacotar só esses scripts.
-fn versao_aceita(game: &str) -> Option<String> {
+pub(crate) fn versao_aceita(game: &str) -> Option<String> {
     let aceitos: Vec<ScriptAceito> =
         serde_json::from_str(include_str!("../../scripts-aceitos.json"))
             .expect("scripts-aceitos.json inválido");

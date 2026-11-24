@@ -1,7 +1,7 @@
 //! Telemetria do ShmupX Engine: o plugin `shmupx` do motor lê a memória do jogo e escreve, na
 //! saída padrão, uma linha `SHMUPX {json}` por evento (início, run, campo mudou, game over). O
 //! Client guarda o que chegou de cada processo do motor e, no fim da run, usa o placar da memória
-//! em vez de analisar o vídeo, nos jogos de [`JOGOS_PELA_MEMORIA`].
+//! em vez de analisar o vídeo, nos jogos de `jogos-pela-memoria.json` ([`rom_pela_memoria`]).
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
@@ -10,9 +10,30 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
-/// ROMs cuja run ranked é validada pela memória (placar exato, sem script de vídeo). Os outros
-/// jogos continuam pelo vídeo.
-pub const JOGOS_PELA_MEMORIA: [&str; 1] = ["sonicwi2"];
+/// Jogo do catálogo cuja run ranked é validada pela memória, e o ROM do mapa dele no ShmupX Engine
+/// (`plugins/shmupx/maps/<rom>.lua`).
+#[derive(Debug, Deserialize)]
+struct JogoPelaMemoria {
+    game: String,
+    rom: String,
+}
+
+/// Jogos validados pela memória (placar exato, sem script de vídeo): `jogos-pela-memoria.json`, o
+/// mesmo arquivo que a interface lê para liberar o Ranked. Os outros jogos continuam pelo vídeo.
+fn jogos_pela_memoria() -> &'static [JogoPelaMemoria] {
+    static LISTA: OnceLock<Vec<JogoPelaMemoria>> = OnceLock::new();
+    LISTA.get_or_init(|| serde_json::from_str(include_str!("../../jogos-pela-memoria.json")).expect("jogos-pela-memoria.json inválido"))
+}
+
+/// A run deste ROM é validada pela memória.
+pub fn rom_pela_memoria(rom: &str) -> bool {
+    jogos_pela_memoria().iter().any(|j| j.rom == rom)
+}
+
+/// ROMs mapeados no ShmupX Engine para este jogo do catálogo (vazio: o jogo não vale pela memória).
+pub fn roms_pela_memoria(jogo_id: &str) -> Vec<String> {
+    jogos_pela_memoria().iter().filter(|j| j.game == jogo_id).map(|j| j.rom.clone()).collect()
+}
 
 /// Velocidade média aceita na run ranked (100 = a da placa original).
 const VELOCIDADE_MIN: f64 = 98.5;
@@ -112,7 +133,7 @@ pub struct ResultadoMemoria {
 /// partida não vale (fora do modo ranking, sem o estado inicial, velocidade alterada).
 pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
     let Some(rom) = t.rom.as_deref() else { return Ok(None) };
-    if !JOGOS_PELA_MEMORIA.contains(&rom) || !t.mapa {
+    if !rom_pela_memoria(rom) || !t.mapa {
         return Ok(None);
     }
     if !t.ranked {
@@ -239,6 +260,29 @@ mod tests {
         assert!(resultado(&rapida).unwrap_err().contains("velocidade"));
         let sem_fim = run(&[INICIO, r#"SHMUPX {"ev":"run_start","frame":10}"#]);
         assert!(resultado(&sem_fim).is_err());
+    }
+
+    #[test]
+    fn lista_dos_jogos_pela_memoria() {
+        for rom in ["sonicwi2", "dariusg", "zedblade", "ket", "grindstm", "bgaregga"] {
+            assert!(rom_pela_memoria(rom), "{rom}");
+        }
+        assert!(!rom_pela_memoria("ddonpach"));
+        assert_eq!(roms_pela_memoria("darius-gaiden"), ["dariusg"]);
+        assert!(roms_pela_memoria("dodonpachi").is_empty());
+    }
+
+    #[test]
+    fn outro_jogo_mapeado_vale_pela_memoria() {
+        let t = run(&[
+            r#"SHMUPX {"ev":"start","rom":"bgaregga","map":"ok","ranked":true,"start_state":true,"frame":0}"#,
+            r#"SHMUPX {"ev":"run_start","frame":129}"#,
+            r#"SHMUPX {"ev":"field","name":"lives","value":2,"frame":138}"#,
+            r#"SHMUPX {"ev":"field","name":"score","value":7740,"frame":2423}"#,
+            r#"SHMUPX {"ev":"field","name":"lives","value":0,"frame":2500}"#,
+            r#"SHMUPX {"ev":"gameover","frame":2618,"speed":100.0}"#,
+        ]);
+        assert_eq!(resultado(&t).unwrap().map(|r| (r.placar, r.game_over)), Some((7740, true)));
     }
 
     #[test]
