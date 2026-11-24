@@ -187,3 +187,37 @@ test("remote launch: only the owner reads and writes small, known fields", async
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, device: "tv" } }, { mergeFields: ["playing"] }));
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, extra: true } }, { mergeFields: ["playing"] }));
 });
+
+test("chat safety: each player keeps their own block list", async () => {
+  const blocks = (uids) => ({ uids, updatedAt: serverTimestamp() });
+  await assertSucceeds(setDoc(doc(db("alice"), "chatBlocks/alice"), blocks(["bob"])));
+  await assertSucceeds(getDoc(doc(db("alice"), "chatBlocks/alice")));
+  await assertFails(getDoc(doc(db("bob"), "chatBlocks/alice")));
+  await assertFails(setDoc(doc(db("bob"), "chatBlocks/alice"), blocks([])));
+  await assertFails(setDoc(doc(db("alice"), "chatBlocks/alice"), blocks(["alice"])));
+  await assertFails(setDoc(doc(db("alice"), "chatBlocks/alice"), blocks(Array.from({ length: 501 }, (_, i) => `u${i}`))));
+  await assertFails(setDoc(doc(db("alice"), "chatBlocks/alice"), { uids: [], updatedAt: now }));
+  await assertFails(setDoc(doc(db("alice"), "chatBlocks/alice"), { ...blocks([]), note: "x" }));
+});
+
+test("chat safety: reports point to a real message, one per player, read only by the reporter", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "rooms/earthion/messages/m1"), { authorId: "bob", authorName: "Bob", text: "spam spam", createdAt: now });
+  });
+  const report = (extra = {}) => ({ reporterId: "alice", authorId: "bob", authorName: "Bob", roomId: "earthion",
+    messageId: "m1", text: "spam spam", reason: "spam", createdAt: serverTimestamp(), ...extra });
+  const alice = db("alice");
+  await assertSucceeds(getDoc(doc(alice, "chatReports/m1__alice")));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__alice"), report({ text: "outra coisa" })));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__alice"), report({ authorId: "carol" })));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__alice"), report({ reason: "chato" })));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__alice"), report({ reporterId: "bob" })));
+  await assertFails(setDoc(doc(alice, "chatReports/m2__alice"), report({ messageId: "m2" })));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__carol"), report()));
+  await assertSucceeds(setDoc(doc(alice, "chatReports/m1__alice"), report()));
+  await assertSucceeds(getDoc(doc(alice, "chatReports/m1__alice")));
+  await assertFails(setDoc(doc(alice, "chatReports/m1__alice"), report({ reason: "abuse" })));
+  await assertFails(getDoc(doc(db("bob"), "chatReports/m1__alice")));
+  await assertFails(getDocs(collection(alice, "chatReports")));
+  await assertFails(setDoc(doc(db("bob"), "chatReports/m1__bob"), report({ reporterId: "bob" })));
+});

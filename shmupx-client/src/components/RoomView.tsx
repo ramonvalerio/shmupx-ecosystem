@@ -289,6 +289,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             status={filter === "robotx" ? "ready" : chatStatus}
             error={chatStatus === "error" && filter === "everyone" ? chatError : null}
             playerId={playerId}
+            roomId={room.id}
             emptyText={filter === "robotx" ? (robotxReady ? t("Pergunte ao RobotX sobre {game}: controles, naves, chefes, dicas…", { game: room.title }) : t("O RobotX ainda não chegou a esta sala.")) : undefined}
           />
         </div>

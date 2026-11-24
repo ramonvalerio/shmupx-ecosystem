@@ -103,7 +103,7 @@ export default function Room({ room, profile, preset, onBack, onSettings }: { ro
 
       {tab === "chat" ? (
         <section className="lite-chat">
-          <ChatFeed messages={chat.messages} status={chat.status} error={chat.error} playerId={profile.uid} />
+          <ChatFeed messages={chat.messages} status={chat.status} error={chat.error} playerId={profile.uid} roomId={room.id} />
           <ChatInput onSendMessage={chat.send} disabled={chat.status === "error"} error={chat.error} />
         </section>
       ) : tab === "ranking" ? (

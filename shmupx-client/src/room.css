@@ -611,3 +611,18 @@
 .theme-light .play-mode-choice small { color: #b6c6cf; }
 @media (prefers-reduced-motion: reduce) { .play-mode-choice, .play-mode-art, .play-mode-coin { transition: none; } .play-mode-choice:hover:not(:disabled) { transform: none; } }
 @media (max-width: 620px) { .play-mode-choices { grid-template-columns: 1fr; } .play-mode-choice { min-height: 240px; } .play-mode-art { padding-bottom: 80px; } .play-mode-coin { width: 40%; } }
+
+/* Denunciar e bloquear no chat (exigência da Google Play para conversa entre jogadores). */
+.chat-more { margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: #6f8a94; font-size: 16px; line-height: 1; cursor: pointer; }
+.chat-more:hover, .chat-more[aria-expanded=true] { color: var(--cyan); }
+.chat-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.chat-actions button { padding: 5px 10px; border: 1px solid #ffffff26; background: #101010; color: #d7e4e8; font-size: 12px; cursor: pointer; }
+.chat-actions button:hover { border-color: #57fcff99; color: var(--cyan); }
+.chat-actions button.is-quiet { border-color: transparent; background: transparent; color: #8299a3; }
+.chat-actions-label { width: 100%; font-size: 12px; color: #a8c1cc; }
+.chat-actions-label.is-error { color: #ff8b92; }
+.chat-message.is-blocked { padding-left: 44px; }
+.chat-blocked { margin: 0; font-size: 12px; color: #6f8a94; }
+.chat-link-button { padding: 0; border: 0; background: transparent; color: var(--cyan); font-size: 12px; text-decoration: underline; cursor: pointer; }
+.theme-light .chat-actions button { border-color: #10233f25; background: #ecedea; color: #10233f; }
+.theme-light .chat-actions-label { color: #3a5068; }

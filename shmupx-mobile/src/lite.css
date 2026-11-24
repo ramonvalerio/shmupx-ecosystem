@@ -313,3 +313,15 @@ img { max-width: 100%; }
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 70%, transparent); }
   50% { transform: scale(.82); box-shadow: 0 0 0 8px color-mix(in srgb, var(--live) 0%, transparent); }
 }
+
+/* Denunciar e bloquear no chat (exigência da Google Play para conversa entre jogadores). */
+.chat-more { margin-left: auto; min-width: 36px; min-height: 28px; padding: 0 8px; border: 0; background: none; color: var(--note); font-size: 18px; line-height: 1; }
+.chat-more[aria-expanded=true] { color: var(--cyan); }
+.chat-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.chat-actions button { min-height: 36px; padding: 6px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 14px; }
+.chat-actions button.is-quiet { border-color: transparent; background: none; color: var(--note); }
+.chat-actions-label { width: 100%; font-size: 13px; line-height: 1.4; color: var(--text-soft); }
+.chat-actions-label.is-error { color: var(--error); }
+.chat-message.is-blocked { padding-left: 40px; }
+.chat-blocked { margin: 0; font-size: 13px; color: var(--note); }
+.chat-link-button { padding: 4px 0; border: 0; background: none; color: var(--cyan); font-size: 13px; text-decoration: underline; }
