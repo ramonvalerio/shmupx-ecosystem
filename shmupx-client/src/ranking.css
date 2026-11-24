@@ -44,9 +44,11 @@
 .rk-leader-who h2 { margin: 0; font-size: 40px; font-weight: 400; line-height: 1.05; color: var(--rk-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-handle { font-size: 14px; color: var(--rk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.rk-tag { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border: 1px solid #ffffff24; background: var(--rk-well); color: var(--rk-text-2); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
-.rk-tag.is-mode, .rk-tag.is-you { border-color: var(--rk-cyan); background: var(--rk-cyan-deep); color: var(--rk-cyan); }
-.rk-tag.is-review { border-color: #c8605a99; background: #c8605a1a; color: var(--rk-red-soft); }
+.rk-tag { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border: 1px solid #ffffff1a; background: var(--rk-well); color: var(--rk-text-2); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+/* Mesmo padrão dos filtros da Coleção: destaque em cor cheia com texto escuro. */
+.rk-tag.is-mode, .rk-tag.is-you { border-color: var(--rk-cyan); background: var(--rk-cyan); color: #06181b; }
+.rk-tag.is-review { border-color: var(--rk-red-soft); background: var(--rk-red-soft); color: #06181b; }
+.theme-light .rk .rk-tag:is(.is-mode, .is-you) { color: #fff; }
 .rk-tag.is-you { height: 20px; padding: 0 7px; font-size: 10.5px; flex-shrink: 0; }
 .rk-leader-score { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; padding: 0 30px; border-left: 1px solid var(--rk-rule); }
 .rk-leader-num { margin-top: 6px; font-size: 78px; line-height: 1; color: var(--rk-text); font-variant-numeric: tabular-nums; letter-spacing: .01em; white-space: nowrap; }
