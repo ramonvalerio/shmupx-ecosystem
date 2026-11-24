@@ -314,6 +314,15 @@ fn rom_valido(rom: &str) -> bool {
     !rom.is_empty() && rom.len() <= 32 && rom.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
+fn comando_exe(exe: &Path) -> std::process::Command {
+    if cfg!(windows) {
+        return std::process::Command::new(exe);
+    }
+    let mut comando = std::process::Command::new("wine");
+    comando.arg(exe);
+    comando
+}
+
 /// O ShmupX Emulator não veio nesta instalação (para o jogador).
 pub const SEM_EMULADOR: &str = "o ShmupX Emulator não foi encontrado nesta instalação: reinstale o ShmupX Client";
 
@@ -341,7 +350,7 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     for sub in ["cfg", "nvram", "snap", "ini"] {
         std::fs::create_dir_all(motor.dados.join(sub)).map_err(|e| format!("não foi possível preparar a pasta do ShmupX Engine: {e}"))?;
     }
-    let mut comando = std::process::Command::new(&motor.exe);
+    let mut comando = comando_exe(&motor.exe);
     comando
         .arg(rom)
         .arg("-rompath").arg(&rompath)
