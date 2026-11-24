@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useGameRanking } from "../data/useRanking";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
@@ -19,8 +19,8 @@ const MODES: { id: GameMode; label: string }[] = [
 ];
 const MODE_LABEL: Record<GameMode, string> = { highscore: "Hi-Score", "1cc": "1CC", caravan: "Caravan" };
 const PLATFORM_LABEL: Record<PlayOn, string> = { steam: "Steam", emulator: "Emulador", mister: "MiSTer" };
-/** Dígitos do placar no estilo arcade: zeros à esquerda apagados até 8 casas. */
-const SCORE_DIGITS = 8;
+/** Placar fixo de fliperama: o Top 10 sempre aparece, com as vagas em "_ _ _". */
+const SLOTS = 10;
 
 /** 236_000 -> "3m 56s". */
 function formatDuration(ms: number): string {
@@ -90,13 +90,16 @@ interface RankRecord {
   run?: SessionRun;
 }
 
-function ArcadeScore({ value, locale }: { value?: number; locale: string }) {
-  if (value === undefined) return <span className="rk-digits is-empty">—</span>;
-  const digits = String(Math.max(0, Math.trunc(value)));
-  const pad = "0".repeat(Math.max(0, SCORE_DIGITS - digits.length));
-  return <span className="rk-digits">{pad && <span className="rk-pad" aria-hidden="true">{pad}</span>}{value.toLocaleString(locale)}</span>;
+/** Posição no estilo placar de fliperama: 1ST, 2ND, 3RD, 4TH… */
+function Ordinal({ n }: { n: number }) {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "TH" : ({ 1: "ST", 2: "ND", 3: "RD" } as Record<number, string>)[n % 10] ?? "TH";
+  return <>{n}<sup>{suffix}</sup></>;
 }
 
+function score(value: number | undefined, locale: string) {
+  return value === undefined ? "—" : Math.trunc(value).toLocaleString(locale);
+}
 interface RoomRankingViewProps {
   room: GameRoom;
   runs: SessionRun[];
@@ -107,10 +110,12 @@ interface RoomRankingViewProps {
 
 /**
  * Ranking do jogo, aberto na aba da sala. Online: `GET /api/ranking/jogos/{id}` do backend (melhor
- * placar de cada jogador no modo escolhido), com pódio do Top 3 e a classificação completa. Local:
+ * placar de cada jogador no modo escolhido), com a faixa do recorde e o placar do Top 10. Local:
  * runs deste jogo observadas nesta sessão. Avatar e nick vêm de `publicProfiles/{uid}`; o LIVE, da
  * presença na sala (quem está transmitindo agora). Campos que o backend ainda não envia (plataforma,
- * início da gameplay, duração e vídeo da run) ficam de fora em vez de inventados.
+ * início da gameplay, duração e vídeo da run) aparecem como "—" em vez de inventados.
+ * Visual (proposta v2 aprovada): faixa do recorde com a placa 1ST, placar de fliperama com o Top 10
+ * fixo e painel de detalhes em tabela; tudo chapado, linhas de 1px e sem brilho.
  */
 export default function RoomRankingView({ room, runs, uid, playerName }: RoomRankingViewProps) {
   const { t, locale } = useI18n();
@@ -186,7 +191,8 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   const visible = scope === "online" && term
     ? records.filter((record) => record.name.toLowerCase().includes(term) || (handleOf(record.uid) ?? "").toLowerCase().includes(term))
     : records;
-  const podium = scope === "online" ? onlineRecords.filter((record) => record.position <= 3) : [];
+  const leader = scope === "online" ? onlineRecords.find((record) => record.position === 1) : undefined;
+  const runnerUp = scope === "online" ? onlineRecords.find((record) => record.position === 2) : undefined;
   const total = scope === "online" ? ranking.data?.total ?? online.length : localRecords.length;
 
   // Sem escolha: o 1º lugar (ou a run mais recente) já aparece nos detalhes.
@@ -220,34 +226,45 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
     return { nick: handle || record.name, real: handle && handle !== record.name ? record.name : undefined };
   }
 
-  function whenOf(record: RankRecord) {
-    const time = record.startedAt ?? record.submittedAt;
-    return time !== undefined ? formatWhen(time, locale) : undefined;
-  }
-
   function statusOf(record: RankRecord): { label: string; tone: string } {
     if (record.runStatus) return { label: t(RUN_LABELS[record.runStatus]), tone: record.runStatus };
     return record.verified ? { label: t("Verificado"), tone: "verified" } : { label: t("Em revisão"), tone: "review" };
   }
 
-  function videoButton(record: RankRecord, compact: boolean) {
+  const online_ = scope === "online";
+  /** Coluna de data: início da gameplay quando o backend mandar; senão, quando o placar foi enviado. */
+  const anyStarted = !online_ || records.some((record) => record.startedAt !== undefined);
+  const dateLabel = anyStarted ? t("Início da run") : t("Enviado em");
+  function dateOf(record: RankRecord) {
+    const time = anyStarted ? record.startedAt : record.submittedAt;
+    return time !== undefined ? formatWhen(time, locale) : undefined;
+  }
+  const showSlots = online_ && !term && ranking.status === "ready" && online.length > 0;
+  const emptySlots = showSlots ? Math.max(0, SLOTS - visible.length) : 0;
+  const lastPosition = visible.length > 0 ? visible[visible.length - 1].position : 0;
+  const dash = <span className="rk-none">—</span>;
+
+  function platformText(record: RankRecord) {
+    return record.platform ? t(PLATFORM_LABEL[record.platform]) : undefined;
+  }
+
+  function continuesCell(record: RankRecord) {
+    if (record.continues === undefined) return dash;
+    return record.continues === 0 ? <>0<em>· 1CC</em></> : <>{record.continues}</>;
+  }
+
+  /** Ícone do vídeo na tabela: LIVE (vermelho), VOD (botão) ou apagado quando a run não tem vídeo. */
+  function videoCell(record: RankRecord) {
     const video = record.video;
-    if (!video) {
-      return compact
-        ? <span className="rk-yt is-off" title={t("Sem vídeo no YouTube")} aria-hidden="true"><PlayIcon /></span>
-        : null;
-    }
+    if (!video) return <span className="rk-yt is-off" title={t("Sem vídeo no YouTube")}><YouTubeIcon /></span>;
     const label = video.live ? t("Assistir à live de {player} no YouTube", { player: identity(record).nick }) : t("Assistir ao vídeo de {player} no YouTube", { player: identity(record).nick });
     return (
-      <button type="button" className={`rk-yt ${video.live ? "is-live" : "is-vod"}${compact ? "" : " is-wide"}`} title={label} aria-label={label}
+      <button type="button" className={`rk-yt ${video.live ? "is-live" : "is-vod"}`} title={label} aria-label={label}
         onClick={(event) => { event.stopPropagation(); openYouTube(video.id); }}>
-        {video.live ? <><span className="rk-live-dot" aria-hidden="true" />LIVE</> : <><PlayIcon />{!compact && "VOD"}</>}
+        {video.live ? <><span className="rk-live-dot" aria-hidden="true" />LIVE</> : <><YouTubeIcon />VOD</>}
       </button>
     );
   }
-
-  const PLACES = [1, 2, 3] as const;
-  const PLACE_CLASS: Record<number, string> = { 1: "is-first", 2: "is-second", 3: "is-third" };
 
   return (
     <section className="room-ranking rk" aria-label={t("Ranking de {game}", { game: room.title })}>
@@ -284,58 +301,56 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
       </div>
 
       <div className="rk-board">
-        {podium.length > 0 && (
-          <div className="rk-podium-wrap">
-            <h2 className="rk-title">{t("Top 3 · {mode}", { mode: modeLabel })}</h2>
-            <ol className="rk-podium" aria-label={t("Top 3 · {mode}", { mode: modeLabel })}>
-              {PLACES.map((place) => {
-                const record = podium.find((item) => item.position === place);
-                if (!record) {
-                  return (
-                    <li key={place} className={`rk-card ${PLACE_CLASS[place]} is-vacant`}>
-                      <span className="rk-medal" aria-hidden="true">{String(place).padStart(2, "0")}</span>
-                      <span className="rk-vacant-avatar" aria-hidden="true">?</span>
-                      <p className="rk-vacant-text">{t("Lugar vago")}</p>
-                      <small>{t("Jogue Ranked Mode para entrar no pódio.")}</small>
-                    </li>
-                  );
-                }
-                const { nick, real } = identity(record);
-                const when = whenOf(record);
-                return (
-                  <li key={record.key} className={`rk-card ${PLACE_CLASS[place]}${record.you ? " is-you" : ""}${current?.key === record.key ? " is-selected" : ""}`}>
-                    <button type="button" className="rk-hit" aria-pressed={current?.key === record.key}
-                      aria-label={t("{position}º lugar: {player}, {score} pontos", { position: place, player: nick, score: record.score?.toLocaleString(locale) ?? "—" })}
-                      onClick={() => setSelected(record.key)} />
-                    <span className="rk-medal" aria-hidden="true">{String(place).padStart(2, "0")}</span>
-                    {record.you && <span className="rk-you">{t("VOCÊ")}</span>}
-                    <img className="rk-avatar" src={avatarOf(profiles, record.uid)} alt="" />
-                    <h3 className="rk-nick">{nick}</h3>
-                    {real && <p className="rk-real">{real}</p>}
-                    <div className="rk-score"><ArcadeScore value={record.score} locale={locale} /></div>
-                    <div className="rk-chips">
-                      {record.mode && <span className="rk-chip is-mode">{t(MODE_LABEL[record.mode])}</span>}
-                      {record.platform && <span className="rk-chip">{t(PLATFORM_LABEL[record.platform])}</span>}
-                      {record.mode !== "1cc" && record.continues === 0 && <span className="rk-chip is-cc">1CC</span>}
-                    </div>
-                    <div className="rk-card-foot">
-                      {when && <span className="rk-when">{when}</span>}
-                      {videoButton(record, false)}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        )}
+        {leader && (() => {
+          const { nick, real } = identity(leader);
+          const handle = handleOf(leader.uid);
+          const when = dateOf(leader);
+          const gap = leader.score !== undefined && runnerUp?.score !== undefined ? leader.score - runnerUp.score : undefined;
+          const isSelected = current?.key === leader.key;
+          return (
+            <section className={`rk-leader${isSelected ? " is-selected" : ""}`} aria-label={t("Recorde atual")}>
+              <button type="button" className="rk-hit" aria-pressed={isSelected}
+                aria-label={t("{position}º lugar: {player}, {score} pontos", { position: 1, player: nick, score: score(leader.score, locale) })}
+                onClick={() => setSelected(leader.key)} />
+              <div className="rk-plate" aria-hidden="true"><span className="rk-plate-rank"><Ordinal n={1} /></span><small>{t("RECORDE")}</small></div>
+              <img className="rk-leader-avatar" src={avatarOf(profiles, leader.uid)} alt="" />
+              <div className="rk-leader-who">
+                <span className="rk-kicker"><i aria-hidden="true" />{room.title} · {modeLabel} · {t("Online")}</span>
+                <h2>{nick}</h2>
+                <span className="rk-handle">{[real ?? (handle ? `@${handle}` : undefined), leader.you ? t("Você") : undefined].filter(Boolean).join(" · ") || "\u00a0"}</span>
+                <div className="rk-tags">
+                  {leader.mode && <span className="rk-tag is-mode">{t(MODE_LABEL[leader.mode])}</span>}
+                  {leader.continues !== undefined && <span className="rk-tag">{leader.continues === 0 ? t("0 continues · 1CC") : t("{count} continues", { count: leader.continues })}</span>}
+                  {leader.verified === false && <span className="rk-tag is-review">* {t("Em revisão")}</span>}
+                </div>
+              </div>
+              <div className="rk-leader-score">
+                <span className="rk-label">{modeLabel}</span>
+                <span className="rk-leader-num">{score(leader.score, locale)}</span>
+                {gap !== undefined && <span className="rk-gap"><b>+{gap.toLocaleString(locale)}</b> {t("à frente do 2º lugar")}</span>}
+              </div>
+              <div className="rk-leader-meta">
+                <div><span>{dateLabel}</span><span>{when ?? dash}</span></div>
+                <div><span>{t("Plataforma")}</span><span>{platformText(leader) ?? dash}</span></div>
+                <div><span>{t("Vídeo")}</span><span>{leader.video ? videoCell(leader) : <span className="rk-yt is-off is-text"><YouTubeIcon />{t("Sem vídeo")}</span>}</span></div>
+              </div>
+            </section>
+          );
+        })()}
 
-        <div className="room-ranking-list rk-standings">
-          <h2 className="rk-title">{scope === "online" ? t("Classificação completa") : t("Runs desta sessão")}</h2>
+        <div className="room-ranking-list rk-table">
+          <header className="rk-table-head">
+            <h2>{online_ ? t("Classificação · {mode}", { mode: modeLabel }) : t("Runs desta sessão")}</h2>
+            {online_ && online.length > 0 && <span>{total <= SLOTS ? t("Top {slots} · {count} de {slots} posições ocupadas", { slots: SLOTS, count: total }) : t("{count} jogadores", { count: total })}</span>}
+          </header>
           <div className="rk-row is-head" aria-hidden="true">
-            <span>#</span><span>{t("Jogador")}</span><span className="rk-col-when">{scope === "online" ? t("Data") : t("Início da run")}</span>
-            <span className="rk-col-mode">{scope === "online" ? t("Modo") : t("Status")}</span>
-            <span className="rk-col-plat">{scope === "online" ? t("Plataforma") : t("Duração")}</span>
-            <span className="rk-col-yt">{t("Live")}</span><span className="rk-col-score">{scope === "online" ? modeLabel : t("Placar")}</span>
+            <span className="rk-pos">{t("Pos.")}</span><span>{t("Jogador")}</span>
+            <span className="rk-r">{online_ ? modeLabel : t("Placar")}</span>
+            <span className="rk-c">{online_ ? t("Modo") : t("Status")}</span>
+            <span className="rk-c">{t("Continues")}</span>
+            <span className="rk-c">{online_ ? t("Plataforma") : t("Duração")}</span>
+            <span>{dateLabel}</span>
+            <span className="rk-c">{t("Vídeo")}</span>
           </div>
           {scope === "local" && localRecords.length === 0 && <p className="empty-state">{t("Nenhuma run deste jogo nesta sessão. Inicie o jogo pela sala para registrar uma.")}</p>}
           {scope === "online" && ranking.status === "loading" && online.length === 0 && (
@@ -354,42 +369,64 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
           <ol className="rk-list">
             {visible.map((record) => {
               const { nick, real } = identity(record);
-              const when = whenOf(record);
+              const when = dateOf(record);
               const status = statusOf(record);
               const isSelected = current?.key === record.key;
-              const rankClass = scope === "online" && record.position <= 3 ? ` rank-${record.position}` : "";
+              const place = online_ && record.position <= 3 ? ` is-p${record.position}` : "";
+              const sub = real;
               return (
-                <li key={record.key} className={`rk-row${rankClass}${record.you && scope === "online" ? " is-you" : ""}${isSelected ? " is-selected" : ""}`}>
+                <li key={record.key} className={`rk-row${place}${isSelected ? " is-selected" : ""}`}>
                   <button type="button" className="rk-hit" aria-pressed={isSelected}
-                    aria-label={scope === "online"
-                      ? t("{position}º lugar: {player}, {score} pontos", { position: record.position, player: nick, score: record.score?.toLocaleString(locale) ?? "—" })
+                    aria-label={online_
+                      ? t("{position}º lugar: {player}, {score} pontos", { position: record.position, player: nick, score: score(record.score, locale) })
                       : t("Run de {when}: {status}", { when: when ?? "—", status: status.label })}
                     onClick={() => setSelected(record.key)} />
-                  <span className="rk-pos">{String(record.position).padStart(2, "0")}</span>
+                  <span className="rk-pos"><Ordinal n={record.position} /></span>
                   <span className="rk-player">
                     <img src={avatarOf(profiles, record.uid)} alt="" />
                     <span className="rk-who">
-                      <strong>{nick}{scope === "online" && record.verified === false && <span className="rk-review" title={t("Resultado em revisão")}> *</span>}</strong>
-                      {(real || record.you) && <small>{[real, record.you && scope === "online" ? t("Você") : undefined].filter(Boolean).join(" · ")}</small>}
+                      <strong>{nick}</strong>
+                      {online_ && record.verified === false && <span className="rk-review" title={t("Resultado em revisão")}> *</span>}
+                      {sub && <small>{sub}</small>}
                     </span>
+                    {record.you && online_ && <span className="rk-tag is-you">{t("Você")}</span>}
                   </span>
-                  <span className="rk-col-when rk-when">{when ?? "—"}</span>
-                  <span className="rk-col-mode">
-                    {scope === "online"
-                      ? record.mode && <span className="rk-chip is-mode">{t(MODE_LABEL[record.mode])}</span>
+                  <span className="rk-r rk-score">{score(record.score, locale)}</span>
+                  <span className="rk-c">
+                    {online_
+                      ? record.mode ? <span className="rk-chip">{t(MODE_LABEL[record.mode])}</span> : dash
                       : <span className={`run-badge run-${status.tone}`}>{status.label}</span>}
                   </span>
-                  <span className="rk-col-plat">
-                    {scope === "online"
-                      ? record.platform ? <span className="rk-chip">{t(PLATFORM_LABEL[record.platform])}</span> : <span className="rk-dash" title={t("Plataforma ainda não informada pelo servidor")}>—</span>
-                      : <span className="rk-when">{record.inProgress ? t("Em andamento") : record.durationMs !== undefined ? formatDuration(record.durationMs) : "—"}</span>}
+                  <span className="rk-c rk-cc">{continuesCell(record)}</span>
+                  <span className="rk-c">
+                    {online_
+                      ? platformText(record) ?? <span className="rk-none" title={t("Plataforma ainda não informada pelo servidor")}>—</span>
+                      : record.inProgress ? t("Em andamento") : record.durationMs !== undefined ? formatDuration(record.durationMs) : dash}
                   </span>
-                  <span className="rk-col-yt">{videoButton(record, true)}</span>
-                  <span className="rk-col-score rk-row-score"><ArcadeScore value={record.score} locale={locale} /></span>
+                  <span className="rk-when">{when ?? dash}</span>
+                  <span className="rk-c">{videoCell(record)}</span>
+                </li>
+              );
+            })}
+            {Array.from({ length: emptySlots }, (_, index) => {
+              const position = lastPosition + index + 1;
+              return (
+                <li key={`vago-${position}`} className="rk-row is-vacant" aria-label={t("{position}º lugar vago", { position })}>
+                  <span className="rk-pos"><Ordinal n={position} /></span>
+                  <span className="rk-initials" aria-hidden="true">_ _ _</span>
+                  <span className="rk-r rk-score" aria-hidden="true">· · · · · ·</span>
+                  <span className="rk-c" aria-hidden="true">—</span><span className="rk-c" aria-hidden="true">—</span>
+                  <span className="rk-c" aria-hidden="true">—</span><span aria-hidden="true">—</span><span className="rk-c" aria-hidden="true">—</span>
                 </li>
               );
             })}
           </ol>
+          {online_ && online.length > 0 && (
+            <footer className="rk-table-foot">
+              <span>{onlineRecords.some((record) => record.verified === false) && <><span className="rk-review">*</span> {t("Resultado em revisão pela equipe ShmupX")}</>}</span>
+              {onlineRecords.some((record) => !record.platform || !record.video) && <span>{t("Plataforma e vídeo aparecem quando o servidor enviar esses dados")}</span>}
+            </footer>
+          )}
           {scope === "local" && localRecords.length > 0 && <p className="muted room-ranking-note">{t("O placar de cada run aparece aqui quando o backend publicar o resultado aprovado.")}</p>}
         </div>
       </div>
@@ -398,24 +435,45 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
         <h2>{t("DETALHES DO REGISTRO")}</h2>
         {current ? (() => {
           const { nick, real } = identity(current);
+          const handle = handleOf(current.uid);
           const status = statusOf(current);
           const thumbOk = current.video && thumbFailed !== current.video.id;
+          const sub = [real ?? (handle ? `@${handle}` : undefined), current.you ? t("Você") : undefined].filter(Boolean).join(" · ");
+          const stats: { label: string; value: ReactNode; tone?: string }[] = online_ ? [
+            { label: t("Enviado em"), value: current.submittedAt !== undefined ? formatWhen(current.submittedAt, locale) : dash },
+            { label: t("Posição"), value: t("{position}º de {total}", { position: current.position, total }) },
+            { label: t("Modo"), value: current.mode ? t(MODE_LABEL[current.mode]) : dash },
+            { label: t("Continues"), value: current.continues === undefined ? dash : current.continues === 0 ? t("0 · 1CC") : current.continues },
+            { label: t("Vidas perdidas"), value: current.livesLost ?? dash },
+            { label: t("Runs"), value: current.runs ?? dash },
+            { label: t("Nota normalizada"), value: current.rating !== undefined ? current.rating.toFixed(2) : dash },
+            { label: t("Status"), value: status.label, tone: status.tone },
+            { label: t("Plataforma"), value: platformText(current) ?? dash },
+            { label: t("Início da run"), value: current.startedAt !== undefined ? formatWhen(current.startedAt, locale) : dash },
+            ...(current.durationMs !== undefined ? [{ label: t("Duração"), value: formatDuration(current.durationMs) }] : []),
+          ] : [
+            { label: t("Início da run"), value: current.startedAt !== undefined ? formatWhen(current.startedAt, locale) : dash },
+            { label: t("Duração"), value: current.inProgress ? t("Em andamento") : current.durationMs !== undefined ? formatDuration(current.durationMs) : dash },
+            { label: t("Status"), value: status.label, tone: status.tone },
+            { label: t("Placar"), value: score(current.score, locale) },
+          ];
           return (
             <>
-              <div className={`rk-thumb${current.video ? "" : " is-empty"}`}>
+              <div className={`rk-video${current.video ? "" : " is-empty"}`}>
+                <span className="rk-corner is-tl" aria-hidden="true" /><span className="rk-corner is-br" aria-hidden="true" />
                 {current.video ? (
-                  <button type="button" className="rk-thumb-play" onClick={() => openYouTube(current.video!.id)}
+                  <button type="button" className="rk-video-play" onClick={() => openYouTube(current.video!.id)}
                     aria-label={current.video.live ? t("Assistir à live no YouTube") : t("Assistir no YouTube")}>
                     {thumbOk && <img src={`https://i.ytimg.com/vi/${current.video.id}/hqdefault.jpg`} alt="" onError={() => setThumbFailed(current.video!.id)} />}
-                    <span className="rk-play" aria-hidden="true"><PlayIcon /></span>
-                    {current.video.live && <span className="rk-thumb-live"><span className="rk-live-dot" aria-hidden="true" />LIVE</span>}
-                    <span className="rk-thumb-cap">{room.title}{current.mode ? ` · ${t(MODE_LABEL[current.mode])}` : ""}</span>
+                    <span className="rk-video-btn" aria-hidden="true"><i /></span>
+                    {current.video.live && <span className="rk-video-live"><span className="rk-live-dot" aria-hidden="true" />LIVE</span>}
                   </button>
                 ) : (
-                  <div className="rk-thumb-placeholder">
-                    <span aria-hidden="true"><PlayIcon /></span>
-                    <p>{t("Sem vídeo do YouTube para este registro.")}</p>
-                  </div>
+                  <>
+                    <span className="rk-video-btn" aria-hidden="true"><i /></span>
+                    <b>{t("Sem vídeo do YouTube")}</b>
+                    <span>{t("Este registro não tem gravação publicada.")}</span>
+                  </>
                 )}
               </div>
 
@@ -423,34 +481,20 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
                 <img src={avatarOf(profiles, current.uid)} alt="" />
                 <div>
                   <strong>{nick}</strong>
-                  <small>{[real, current.you ? t("Você") : undefined].filter(Boolean).join(" · ") || "\u00a0"}</small>
+                  <small>{sub || "\u00a0"}</small>
                 </div>
+                {online_ && <span className="rk-detail-rank"><Ordinal n={current.position} /></span>}
               </div>
 
-              <div className="rk-big-score" aria-label={t("Placar")}>
-                <span className="rk-big-label">{current.mode ? t(MODE_LABEL[current.mode]) : t("Placar")}</span>
-                <ArcadeScore value={current.score} locale={locale} />
+              <div className="rk-detail-score" aria-label={t("Placar")}>
+                <span className="rk-label">{current.mode ? t(MODE_LABEL[current.mode]) : t("Placar")}</span>
+                <span className="rk-detail-num">{score(current.score, locale)}</span>
               </div>
-
-              {(current.mode || current.platform || current.continues === 0) && (
-                <div className="rk-chips is-left">
-                  {current.mode && <span className="rk-chip is-mode">{t(MODE_LABEL[current.mode])}</span>}
-                  {current.platform && <span className="rk-chip">{t(PLATFORM_LABEL[current.platform])}</span>}
-                  {current.continues === 0 && <span className="rk-chip is-cc">{t("1CC · sem continues")}</span>}
-                </div>
-              )}
 
               <dl className="rk-stats">
-                {current.startedAt !== undefined && <div><dt>{t("Início da run")}</dt><dd className="is-mono">{formatWhen(current.startedAt, locale)}</dd></div>}
-                {current.startedAt === undefined && current.submittedAt !== undefined && <div><dt>{t("Enviado em")}</dt><dd className="is-mono">{formatWhen(current.submittedAt, locale)}</dd></div>}
-                {(current.durationMs !== undefined || current.inProgress) && <div><dt>{t("Duração")}</dt><dd>{current.inProgress ? t("Em andamento") : formatDuration(current.durationMs!)}</dd></div>}
-                {current.platform && <div><dt>{t("Plataforma")}</dt><dd>{t(PLATFORM_LABEL[current.platform])}</dd></div>}
-                {current.continues !== undefined && <div><dt>{t("Continues")}</dt><dd>{current.continues === 0 ? t("0 · 1CC") : current.continues}</dd></div>}
-                {scope === "online" && <div><dt>{t("Posição")}</dt><dd className="is-mono">{String(current.position).padStart(2, "0")} / {String(total).padStart(2, "0")}</dd></div>}
-                <div><dt>{t("Status")}</dt><dd className={`rk-status is-${status.tone}`}>{status.label}</dd></div>
-                {current.livesLost !== undefined && current.livesLost !== null && <div><dt>{t("Vidas perdidas")}</dt><dd>{current.livesLost}</dd></div>}
-                {current.runs !== undefined && <div><dt>{t("Runs")}</dt><dd>{current.runs}</dd></div>}
-                {current.rating !== undefined && <div><dt>{t("Nota normalizada")}</dt><dd className="is-mono">{current.rating.toFixed(2)}</dd></div>}
+                {stats.map((item) => (
+                  <div key={item.label}><dt>{item.label}</dt><dd className={item.tone ? `rk-status is-${item.tone}` : undefined}>{item.value}</dd></div>
+                ))}
               </dl>
 
               {current.run?.message && <p className="muted" role="status">{current.run.message}</p>}
@@ -463,14 +507,12 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
                 </div>
               )}
 
-              {current.video && (
-                <div className="rk-cta">
-                  <p>{current.video.live ? t("Ao vivo agora no YouTube") : t("Vídeo da run no YouTube")}</p>
-                  <button type="button" className="rk-watch" onClick={() => openYouTube(current.video!.id)}>
-                    <PlayIcon />{current.video.live ? t("Assistir à live") : t("Assistir no YouTube")}
-                  </button>
-                </div>
-              )}
+              <div className="rk-actions">
+                <button type="button" className="room-action rk-watch" disabled={!current.video} onClick={() => current.video && openYouTube(current.video.id)}>
+                  <YouTubeIcon />{current.video?.live ? t("Assistir à live") : t("Assistir no YouTube")}
+                </button>
+                {!current.video && <p>{t("Disponível quando a run tiver vídeo vinculado")}</p>}
+              </div>
             </>
           );
         })() : (
@@ -481,6 +523,11 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   );
 }
 
-function PlayIcon() {
-  return <svg className="rk-play-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 1.5v9l8-4.5z" /></svg>;
+function YouTubeIcon() {
+  return (
+    <svg className="rk-yt-icon" viewBox="0 0 18 13" aria-hidden="true" focusable="false">
+      <rect x=".5" y=".5" width="17" height="12" rx="2" />
+      <path d="M7 3.8 12 6.5 7 9.2Z" />
+    </svg>
+  );
 }

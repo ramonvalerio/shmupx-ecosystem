@@ -265,6 +265,18 @@ const RANKING_SCREEN_ENGLISH: Record<string, string> = {
   "Ao vivo agora no YouTube": "Live now on YouTube", "Vídeo da run no YouTube": "Run video on YouTube",
 };
 for (const [key, value] of Object.entries(RANKING_SCREEN_ENGLISH)) ENGLISH[key] ??= value;
+// Ranking da sala v2 (faixa do recorde, placar do Top 10 e detalhes em tabela).
+const RANKING_V2_ENGLISH: Record<string, string> = {
+  "Recorde atual": "Current record", "RECORDE": "RECORD", "0 continues · 1CC": "0 continues · 1CC", "à frente do 2º lugar": "ahead of 2nd place",
+  "Vídeo": "Video", "Sem vídeo": "No video", "Classificação · {mode}": "Standings · {mode}", "Pos.": "Pos.",
+  "Top {slots} · {count} de {slots} posições ocupadas": "Top {slots} · {count} of {slots} spots taken", "{position}º lugar vago": "#{position} open spot",
+  "Resultado em revisão pela equipe ShmupX": "Result under review by the ShmupX team",
+  "Plataforma e vídeo aparecem quando o servidor enviar esses dados": "Platform and video show up once the server sends them",
+  "{position}º de {total}": "#{position} of {total}", "Sem vídeo do YouTube": "No YouTube video",
+  "Este registro não tem gravação publicada.": "This record has no published recording.",
+  "Disponível quando a run tiver vídeo vinculado": "Available once the run has a linked video",
+};
+for (const [key, value] of Object.entries(RANKING_V2_ENGLISH)) ENGLISH[key] ??= value;
 
 // Pasta do Fightcade escolhida à mão (Importar jogos › Emulador, Configurações e aviso de jogo que não abre).
 const FIGHTCADE_FOLDER_ENGLISH: Record<string, string> = {
