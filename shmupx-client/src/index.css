@@ -627,6 +627,13 @@ button:disabled { opacity: .5; cursor: default; }
 .mapper-spot.is-saved .mapper-hit { stroke: #3ddc84; fill: #3ddc8433; }
 @keyframes mapper-pulse { 50% { stroke-opacity: .25; fill-opacity: .3; } }
 .mapper-number { fill: #fff; font-size: 17px; pointer-events: none; }
+/* Botão apertado no controle ou teclado: a tampa afunda e escurece; volta ao soltar. */
+.mapper-cap { transform-box: fill-box; transform-origin: center; transition: transform 70ms ease-out, filter 70ms ease-out; }
+.mapper-spot.is-pressed .mapper-cap { transform: translate(1px, 3px) scale(.9); filter: brightness(.72); transition-duration: 30ms; }
+.mapper-spot.is-pressed .mapper-arrow { fill: #fff; }
+.mapper-coin-slot { transition: fill 70ms; }
+.mapper-spot.is-pressed .mapper-coin-slot { fill: var(--cyan); }
+@media (prefers-reduced-motion: reduce) { .mapper-cap { transition: none; } }
 .mapper-caption { fill: #c9d3d8; font-size: 11px; letter-spacing: .12em; pointer-events: none; }
 .mapper-caption.is-dark { fill: #4b5359; }
 .mapper-screen text { fill: var(--cyan); font-size: 26px; letter-spacing: .14em; }

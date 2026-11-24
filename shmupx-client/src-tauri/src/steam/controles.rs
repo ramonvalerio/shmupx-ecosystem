@@ -133,7 +133,7 @@ pub struct CapturaState(Mutex<Option<Child>>);
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EventoCaptura {
-    /// `ready` (pronto para ler), `input` (aperto) ou `ended` (o motor fechou).
+    /// `ready` (pronto para ler), `input` (aperto), `release` (soltou) ou `ended` (o motor fechou).
     kind: String,
     code: Option<String>,
     label: Option<String>,
@@ -159,7 +159,7 @@ fn argumentos_da_captura(dados: &Path) -> Vec<String> {
     .collect()
 }
 
-/// Abre o motor em modo captura, se ainda não estiver aberto. Os apertos chegam por `engine://capture`.
+/// Abre o motor em modo captura, se ainda não estiver aberto. Os apertos e as solturas chegam por `engine://capture`.
 #[tauri::command]
 pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) -> Result<(), String> {
     let mut atual = estado.0.lock().map_err(|e| e.to_string())?;
@@ -193,6 +193,7 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
                 let kind = match valor.get("ev").and_then(|v| v.as_str()) {
                     Some("capture_ready") => "ready",
                     Some("input") => "input",
+                    Some("release") => "release",
                     _ => continue,
                 };
                 let _ = app.emit(

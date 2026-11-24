@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
-import { CONTROLS, describeInput, useControlMapping, type ControlId, type MappedControl } from "../data/emulatorControls";
+import { CONTROLS, describeInput, pressedControls, useControlMapping, type ControlId, type MappedControl } from "../data/emulatorControls";
 
 /** Evento do motor em modo captura (Rust `steam/controles.rs`). */
 interface CaptureEvent {
-  kind: "ready" | "input" | "ended";
+  kind: "ready" | "input" | "release" | "ended";
   code?: string;
   label?: string;
   device?: string;
@@ -34,6 +34,63 @@ const SPOTS: Record<ControlId, { x: number; y: number; r: number }> = {
 };
 const ARROW: Partial<Record<ControlId, number>> = { up: 0, right: 90, down: 180, left: 270 };
 
+/** Centro da base da alavanca e da bola em repouso (a bola fica um pouco acima, pela perspectiva). */
+const LEVER_BASE = { x: 186, y: 486 };
+const LEVER_BALL = { x: 185, y: 482 };
+/** Quanto a bola anda ao inclinar a alavanca até o fim. */
+const LEVER_TRAVEL = 12;
+
+/**
+ * Alavanca com mola: a bola vai até a direção apertada (e diagonais) e volta ao centro ao soltar,
+ * com uma leve sobra no fim, como uma alavanca de verdade. Anima direto no SVG (sem re-render a
+ * cada quadro); com "reduzir movimento" do sistema, só pula para a posição.
+ */
+function useLeverSpring(target: { x: number; y: number }) {
+  const ball = useRef<SVGGElement>(null);
+  const shaft = useRef<SVGLineElement>(null);
+  const state = useRef({ x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, frame: 0, last: 0 });
+  useEffect(() => {
+    const st = state.current;
+    st.tx = target.x;
+    st.ty = target.y;
+    const draw = () => {
+      ball.current?.setAttribute("transform", `translate(${st.x.toFixed(2)} ${st.y.toFixed(2)})`);
+      shaft.current?.setAttribute("x2", (LEVER_BALL.x + st.x).toFixed(2));
+      shaft.current?.setAttribute("y2", (LEVER_BALL.y + st.y).toFixed(2));
+    };
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      Object.assign(st, { x: st.tx, y: st.ty, vx: 0, vy: 0 });
+      draw();
+      return;
+    }
+    if (st.frame) return;
+    // Mola um pouco abaixo do amortecimento crítico: rápida, com uma sobra pequena.
+    const STIFFNESS = 1100;
+    const DAMPING = 2 * Math.sqrt(STIFFNESS) * 0.72;
+    st.last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(0.032, (now - st.last) / 1000);
+      st.last = now;
+      for (const [p, v, t] of [["x", "vx", "tx"], ["y", "vy", "ty"]] as const) {
+        const accel = STIFFNESS * (st[t] - st[p]) - DAMPING * st[v];
+        st[v] += accel * dt;
+        st[p] += st[v] * dt;
+      }
+      draw();
+      const resting = Math.abs(st.tx - st.x) < 0.05 && Math.abs(st.ty - st.y) < 0.05 && Math.abs(st.vx) < 1 && Math.abs(st.vy) < 1;
+      if (resting) {
+        Object.assign(st, { x: st.tx, y: st.ty, vx: 0, vy: 0, frame: 0 });
+        draw();
+        return;
+      }
+      st.frame = requestAnimationFrame(step);
+    };
+    st.frame = requestAnimationFrame(step);
+  }, [target.x, target.y]);
+  useEffect(() => () => cancelAnimationFrame(state.current.frame), []);
+  return { ball, shaft };
+}
+
 /**
  * Gabinete arcade grande para mapear os controles do ShmupX Emulator: clique num botão do painel
  * (ou na lista) e aperte o botão, tecla ou direção que quer usar. Grava na hora, sem "Salvar".
@@ -46,6 +103,8 @@ export default function CabinetControlMapper() {
   const [waiting, setWaiting] = useState<ControlId | null>(null);
   const [flash, setFlash] = useState<{ control: ControlId; text: string } | null>(null);
   const [hover, setHover] = useState<ControlId | null>(null);
+  /** Códigos apertados agora no controle ou teclado (o motor avisa aperto e soltura). */
+  const [held, setHeld] = useState<ReadonlySet<string>>(() => new Set());
   const waitingRef = useRef<ControlId | null>(null);
   waitingRef.current = waiting;
   const assignRef = useRef(assign);
@@ -65,9 +124,15 @@ export default function CabinetControlMapper() {
       const data = event.payload;
       if (data.kind === "ready") { setEngine("ready"); restarts = 0; return; }
       if (data.kind === "ended") {
+        setHeld(new Set());
         if (restarts++ < 3) { setEngine("starting"); void start(); } else setEngine("unavailable");
         return;
       }
+      if (data.kind === "release") {
+        if (data.code) setHeld((current) => { const next = new Set(current); next.delete(data.code!); return next; });
+        return;
+      }
+      if (data.code) setHeld((current) => new Set(current).add(data.code!));
       const control = waitingRef.current;
       if (!control || !data.code) return;
       if (data.code === "KEYCODE_ESC") { setWaiting(null); return; }
@@ -124,7 +189,16 @@ export default function CabinetControlMapper() {
     : flash ? [t("GRAVADO!"), labelOf(flash.control).toUpperCase()]
     : [t("CLIQUE NUM BOTÃO"), t("DO PAINEL")];
 
-  const spotClass = (id: ControlId) => `mapper-spot ${waiting === id ? "is-waiting" : ""} ${flash?.control === id ? "is-saved" : ""} ${hover === id ? "is-hover" : ""} ${mapping[id] ? "is-mapped" : ""}`;
+  const pressed = pressedControls(mapping, held);
+  const lever = useLeverSpring((() => {
+    const dx = (pressed.has("right") ? 1 : 0) - (pressed.has("left") ? 1 : 0);
+    const dy = (pressed.has("down") ? 1 : 0) - (pressed.has("up") ? 1 : 0);
+    // Na diagonal, a bola anda o mesmo tanto que numa direção só (alavanca de 8 direções).
+    const scale = dx && dy ? LEVER_TRAVEL / Math.SQRT2 : LEVER_TRAVEL;
+    return { x: dx * scale, y: dy * scale };
+  })());
+
+  const spotClass = (id: ControlId) => `mapper-spot ${pressed.has(id) ? "is-pressed" : ""} ${waiting === id ? "is-waiting" : ""} ${flash?.control === id ? "is-saved" : ""} ${hover === id ? "is-hover" : ""} ${mapping[id] ? "is-mapped" : ""}`;
   const spotProps = (id: ControlId) => ({
     className: spotClass(id),
     role: "button",
@@ -169,10 +243,15 @@ export default function CabinetControlMapper() {
         <polyline points="330,502 384,488 492,482" fill="none" stroke="#5c656b" strokeWidth="46" strokeLinecap="round" strokeLinejoin="round" />
         <polyline points="330,502 384,488 492,482" fill="none" stroke="#3a4045" strokeWidth="42" strokeLinecap="round" strokeLinejoin="round" />
 
-        {/* Alavanca: base, bola vermelha; as setas em volta são as direções */}
-        <circle cx="186" cy="486" r="22" fill="#0b0d0f" stroke="#2a3136" strokeWidth="2" />
-        <circle cx="185" cy="482" r="14" fill="url(#mapper-red)" />
-        <circle cx="181" cy="477" r="4" fill="#fff" fillOpacity=".35" />
+        {/* Alavanca: base, haste e bola vermelha, que se inclina com as direções apertadas; as setas
+            em volta são as direções */}
+        <circle cx={LEVER_BASE.x} cy={LEVER_BASE.y} r="22" fill="#0b0d0f" stroke="#2a3136" strokeWidth="2" />
+        <circle cx={LEVER_BASE.x} cy={LEVER_BASE.y} r="7" fill="#22272b" />
+        <line ref={lever.shaft} x1={LEVER_BASE.x} y1={LEVER_BASE.y} x2={LEVER_BALL.x} y2={LEVER_BALL.y} stroke="#3a4045" strokeWidth="7" strokeLinecap="round" />
+        <g ref={lever.ball} className="mapper-lever-ball">
+          <circle cx={LEVER_BALL.x} cy={LEVER_BALL.y} r="14" fill="url(#mapper-red)" />
+          <circle cx={LEVER_BALL.x - 4} cy={LEVER_BALL.y - 5} r="4" fill="#fff" fillOpacity=".35" />
+        </g>
         {(["up", "right", "down", "left"] as ControlId[]).map((id) => (
           <g key={id} {...spotProps(id)}>
             <circle cx={SPOTS[id].x} cy={SPOTS[id].y} r={SPOTS[id].r} className="mapper-hit" />
@@ -183,7 +262,8 @@ export default function CabinetControlMapper() {
         {/* START azul, pequeno, entre a alavanca e os botões */}
         <g {...spotProps("start")}>
           <circle cx={SPOTS.start.x} cy={SPOTS.start.y} r={SPOTS.start.r + 8} className="mapper-hit" />
-          <circle cx={SPOTS.start.x} cy={SPOTS.start.y} r={SPOTS.start.r} fill="url(#mapper-blue)" />
+          <circle cx={SPOTS.start.x + 1} cy={SPOTS.start.y + 2} r={SPOTS.start.r} fill="#0b0d0f" />
+          <circle cx={SPOTS.start.x} cy={SPOTS.start.y} r={SPOTS.start.r} fill="url(#mapper-blue)" className="mapper-cap" />
           <text x={SPOTS.start.x} y={SPOTS.start.y + 26} textAnchor="middle" className="mapper-caption">START</text>
         </g>
 
@@ -192,8 +272,10 @@ export default function CabinetControlMapper() {
           <g key={id} {...spotProps(id)}>
             <circle cx={SPOTS[id].x} cy={SPOTS[id].y} r={SPOTS[id].r + 5} className="mapper-hit" />
             <ellipse cx={SPOTS[id].x + 2} cy={SPOTS[id].y + 4} rx={SPOTS[id].r} ry={SPOTS[id].r * 0.8} fill="#0b0d0f" />
-            <circle cx={SPOTS[id].x} cy={SPOTS[id].y} r={SPOTS[id].r} fill="url(#mapper-red)" />
-            <text x={SPOTS[id].x} y={SPOTS[id].y + 6} textAnchor="middle" className="mapper-number">{index + 1}</text>
+            <g className="mapper-cap">
+              <circle cx={SPOTS[id].x} cy={SPOTS[id].y} r={SPOTS[id].r} fill="url(#mapper-red)" />
+              <text x={SPOTS[id].x} y={SPOTS[id].y + 6} textAnchor="middle" className="mapper-number">{index + 1}</text>
+            </g>
           </g>
         ))}
 
@@ -204,7 +286,7 @@ export default function CabinetControlMapper() {
         <g {...spotProps("coin")}>
           <rect x="396" y="548" width="132" height="82" rx="6" className="mapper-hit mapper-door" />
           <rect x="446" y="556" width="32" height="32" rx="4" fill="#9aa3a9" stroke="#7d878e" strokeWidth="2" />
-          <rect x="460" y="562" width="4" height="20" rx="2" fill="#2b3035" />
+          <rect x="460" y="562" width="4" height="20" rx="2" fill="#2b3035" className="mapper-coin-slot" />
           <rect x="440" y="596" width="44" height="12" rx="3" fill="#8a939a" stroke="#7d878e" />
           <text x="462" y="624" textAnchor="middle" className="mapper-caption is-dark">{t("FICHA")}</text>
         </g>

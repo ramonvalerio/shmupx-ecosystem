@@ -3,18 +3,39 @@ import { useCallback, useState } from "react";
 /** Controles do painel do gabinete que o jogador mapeia (Configurações › Controle). Mesmos ids do Rust (`steam/controles.rs`). */
 export type ControlId = "up" | "down" | "left" | "right" | "button1" | "button2" | "button3" | "button4" | "start" | "coin";
 
-export const CONTROLS: { id: ControlId; label: string; short: string; fallback: string }[] = [
-  { id: "up", label: "Cima", short: "↑", fallback: "↑" },
-  { id: "down", label: "Baixo", short: "↓", fallback: "↓" },
-  { id: "left", label: "Esquerda", short: "←", fallback: "←" },
-  { id: "right", label: "Direita", short: "→", fallback: "→" },
-  { id: "button1", label: "Botão 1", short: "1", fallback: "Ctrl" },
-  { id: "button2", label: "Botão 2", short: "2", fallback: "Alt" },
-  { id: "button3", label: "Botão 3", short: "3", fallback: "Espaço" },
-  { id: "button4", label: "Botão 4", short: "4", fallback: "Shift" },
-  { id: "start", label: "Start", short: "START", fallback: "1" },
-  { id: "coin", label: "Ficha", short: "FICHA", fallback: "5" },
+/**
+ * `defaults`: a sequência padrão do MAME para o jogador 1, a mesma de `CONTROLES` no Rust
+ * (`steam/controles.rs`): vale enquanto o controle não foi mapeado.
+ */
+export const CONTROLS: { id: ControlId; label: string; short: string; fallback: string; defaults: string[] }[] = [
+  { id: "up", label: "Cima", short: "↑", fallback: "↑", defaults: ["KEYCODE_UP", "JOYCODE_1_YAXIS_UP_SWITCH", "JOYCODE_1_HAT1UP"] },
+  { id: "down", label: "Baixo", short: "↓", fallback: "↓", defaults: ["KEYCODE_DOWN", "JOYCODE_1_YAXIS_DOWN_SWITCH", "JOYCODE_1_HAT1DOWN"] },
+  { id: "left", label: "Esquerda", short: "←", fallback: "←", defaults: ["KEYCODE_LEFT", "JOYCODE_1_XAXIS_LEFT_SWITCH", "JOYCODE_1_HAT1LEFT"] },
+  { id: "right", label: "Direita", short: "→", fallback: "→", defaults: ["KEYCODE_RIGHT", "JOYCODE_1_XAXIS_RIGHT_SWITCH", "JOYCODE_1_HAT1RIGHT"] },
+  { id: "button1", label: "Botão 1", short: "1", fallback: "Ctrl", defaults: ["KEYCODE_LCONTROL", "JOYCODE_1_BUTTON1"] },
+  { id: "button2", label: "Botão 2", short: "2", fallback: "Alt", defaults: ["KEYCODE_LALT", "JOYCODE_1_BUTTON2"] },
+  { id: "button3", label: "Botão 3", short: "3", fallback: "Espaço", defaults: ["KEYCODE_SPACE", "JOYCODE_1_BUTTON3"] },
+  { id: "button4", label: "Botão 4", short: "4", fallback: "Shift", defaults: ["KEYCODE_LSHIFT", "JOYCODE_1_BUTTON4"] },
+  { id: "start", label: "Start", short: "START", fallback: "1", defaults: ["KEYCODE_1", "JOYCODE_1_START"] },
+  { id: "coin", label: "Ficha", short: "FICHA", fallback: "5", defaults: ["KEYCODE_5", "JOYCODE_1_SELECT"] },
 ];
+
+/**
+ * Controles do gabinete acionados pelos códigos apertados agora, como no jogo: o controle mapeado
+ * responde só ao código escolhido; o não mapeado, ao padrão do MAME sem os códigos que foram dados
+ * a outro controle.
+ */
+export function pressedControls(mapping: ControlMapping, pressed: ReadonlySet<string>): Set<ControlId> {
+  const out = new Set<ControlId>();
+  if (pressed.size === 0) return out;
+  const used = new Set(CONTROLS.flatMap((c) => (mapping[c.id] ? [mapping[c.id]!.code] : [])));
+  for (const control of CONTROLS) {
+    const item = mapping[control.id];
+    const codes = item ? [item.code] : control.defaults.filter((code) => !used.has(code));
+    if (codes.some((code) => pressed.has(code))) out.add(control.id);
+  }
+  return out;
+}
 
 /** Botão, tecla ou direção que o motor leu para o controle. `code` é o código do MAME. */
 export interface MappedControl {
