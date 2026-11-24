@@ -235,7 +235,7 @@
 
 /* Menu lateral com os jogos abertos (mesma ordem das abas). */
 .navigation-tabs .rail-room { height: auto; min-height: 90px; max-height: 170px; padding: 12px 0; border-top: 1px solid #ffffff10; color: #a8c1cc; font-size: 12px; }
-.navigation-tabs .rail-room-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-height: 146px; }
+.navigation-tabs .rail-room-title { writing-mode: vertical-rl; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-height: 146px; }
 .navigation-tabs .rail-room[aria-current] { color: var(--cyan); }
 .rail-room-recording { width: 7px; height: 7px; border-radius: 50%; background: #fd4851; box-shadow: 0 0 6px #fd4851; flex-shrink: 0; }
 
