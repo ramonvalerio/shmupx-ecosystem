@@ -6,7 +6,15 @@
     "resources": {
       "bundle/validator/": "validator/",
       "bundle/games/": "games/",
-      "bundle/ffmpeg/": "ffmpeg/"
+      "bundle/ffmpeg/": "ffmpeg/",
+      "bundle/engine/": "engine/"
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "wine"
+        ]
+      }
     }
   }
 }

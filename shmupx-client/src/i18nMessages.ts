@@ -301,6 +301,7 @@ const ROMS_FOLDER_ENGLISH: Record<string, string> = {
   "Abre no ShmupX Emulator deste computador": "Opens in the ShmupX Emulator on this computer",
   "o ShmupX Emulator não foi encontrado nesta instalação: reinstale o ShmupX Client": "the ShmupX Emulator wasn't found in this installation: reinstall the ShmupX Client",
   "o ShmupX Emulator não abriu o jogo; confira o ROM na sua pasta de ROMs e tente de novo": "the ShmupX Emulator didn't open the game; check the ROM in your ROMs folder and try again",
+  "no Linux, o ShmupX Emulator roda pelo Wine, que não está instalado: instale o Wine (ex.: sudo apt install wine) e tente de novo": "on Linux, the ShmupX Emulator runs through Wine, which isn't installed: install Wine (e.g. sudo apt install wine) and try again",
 };
 for (const [key, value] of Object.entries(ROMS_FOLDER_ENGLISH)) ENGLISH[key] ??= value;
 

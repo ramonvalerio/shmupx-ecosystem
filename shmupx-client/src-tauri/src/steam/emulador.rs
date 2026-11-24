@@ -314,13 +314,24 @@ fn rom_valido(rom: &str) -> bool {
     !rom.is_empty() && rom.len() <= 32 && rom.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
-fn comando_exe(exe: &Path) -> std::process::Command {
+/// Comando que roda o ShmupX Engine (executável do Windows): direto no Windows; no Linux, pelo
+/// Wine, sem o log do Wine na saída (a telemetria sai por ela) e sem as janelas de instalar o Mono
+/// e o Gecko na primeira vez (o motor não usa .NET nem navegador).
+pub(crate) fn comando_exe(exe: &Path) -> std::process::Command {
     if cfg!(windows) {
         return std::process::Command::new(exe);
     }
     let mut comando = std::process::Command::new("wine");
-    comando.arg(exe);
+    comando.arg(exe).env("WINEDEBUG", "-all").env("WINEDLLOVERRIDES", "mscoree,mshtml=");
     comando
+}
+
+/// Erro ao abrir o motor, para o jogador: no Linux, sem o Wine, diz o que instalar.
+pub(crate) fn erro_ao_abrir(e: std::io::Error) -> String {
+    if !cfg!(windows) && e.kind() == std::io::ErrorKind::NotFound {
+        return "no Linux, o ShmupX Emulator roda pelo Wine, que não está instalado: instale o Wine (ex.: sudo apt install wine) e tente de novo".into();
+    }
+    format!("não foi possível abrir o ShmupX Emulator: {e}")
 }
 
 /// O ShmupX Emulator não veio nesta instalação (para o jogador).
@@ -383,7 +394,7 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     log::info!("emulador: ShmupX Engine {} com {rom}{}", motor.exe.display(), if motor.ranking { " (ranking)" } else { "" });
     // A saída padrão traz a telemetria (`SHMUPX {...}`): a run ranked usa o placar da memória.
     comando.stdout(std::process::Stdio::piped());
-    let mut filho = comando.spawn().map_err(|e| format!("não foi possível abrir o ShmupX Engine: {e}"))?;
+    let mut filho = comando.spawn().map_err(erro_ao_abrir)?;
     if let Some(saida) = filho.stdout.take() {
         super::telemetria::acompanhar(filho.id(), saida);
     }

@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -170,7 +170,8 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
     }
     let Motor { exe, dados, .. } = super::emulador::motor(&app).ok_or("o ShmupX Emulator não foi encontrado neste computador")?;
     std::fs::create_dir_all(dados.join("captura")).map_err(|e| format!("não foi possível preparar o ShmupX Engine: {e}"))?;
-    let mut comando = Command::new(&exe);
+    // No Linux, pelo Wine, como o jogo.
+    let mut comando = super::emulador::comando_exe(&exe);
     comando.args(argumentos_da_captura(&dados)).env("SHMUPX_CAPTURA", "1").stdout(Stdio::piped()).stderr(Stdio::null());
     if let Some(pasta) = exe.parent() {
         comando.current_dir(pasta);
@@ -180,7 +181,7 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
         use std::os::windows::process::CommandExt;
         comando.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: o motor fica escondido
     }
-    let mut filho = comando.spawn().map_err(|e| format!("não foi possível abrir o ShmupX Engine: {e}"))?;
+    let mut filho = comando.spawn().map_err(super::emulador::erro_ao_abrir)?;
     let saida = filho.stdout.take();
     *atual = Some(filho);
     drop(atual);

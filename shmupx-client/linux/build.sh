@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Roda dentro do contêiner (linux/Dockerfile): copia o repositório de /src (sem node_modules nem
-# builds do Windows), monta o que o pacote leva (motor de validação, scripts aceitos, FFmpeg) e gera
-# o .deb e o AppImage assinados em /out. Equivalente Linux do scripts/prepare-bundle.ps1 + bundle.
+# builds do Windows), monta o que o pacote leva (motor de validação, scripts aceitos, FFmpeg e o
+# ShmupX Emulator, que no Linux roda pelo Wine) e gera o .deb e o AppImage assinados em /out.
+# Equivalente Linux do scripts/prepare-bundle.ps1 + bundle.
 set -euo pipefail
 # Embutida na interface pelo Vite: sem ela o botão "Entrar com Google" não funciona.
 if [ -z "${VITE_GOOGLE_DESKTOP_CLIENT_ID:-}" ]; then
@@ -52,6 +53,23 @@ PY
 cp /opt/ffmpeg/ffmpeg "$saida/ffmpeg/ffmpeg"
 cp /opt/ffmpeg/GPLv3.txt "$saida/ffmpeg/LICENSE.txt" 2>/dev/null || true
 "$saida/validator/shmupx-validator" --list-games --games-dir "$saida/games" | head -c 300; echo
+
+# ShmupX Emulator (ShmupX Engine, executável do Windows; o Client o abre pelo Wine): o último build
+# do main que passou, da release pública windows-latest, com o SHA-256 conferido.
+python3 - "$saida/engine" <<'PY'
+import hashlib, io, sys, urllib.request, zipfile
+url = "https://github.com/ramonvalerio/shmupx-engine/releases/download/windows-latest/shmupx-engine-windows.zip"
+dados = urllib.request.urlopen(url, timeout=300).read()
+esperado = urllib.request.urlopen(url + ".sha256", timeout=60).read().decode().split()[0].lower()
+obtido = hashlib.sha256(dados).hexdigest()
+if obtido != esperado:
+    sys.exit(f"SHA-256 do ShmupX Engine não confere ({obtido}, esperado {esperado})")
+zipfile.ZipFile(io.BytesIO(dados)).extractall(sys.argv[1])
+PY
+for item in shmupx-engine.exe plugins/shmupx/init.lua COPYING VERSION.txt; do
+    [ -e "$saida/engine/$item" ] || { echo "erro: pacote do ShmupX Engine incompleto, falta $item" >&2; exit 1; }
+done
+head -1 "$saida/engine/VERSION.txt"
 
 # App
 cd /work/shmupx-client
