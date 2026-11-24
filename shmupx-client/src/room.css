@@ -421,12 +421,13 @@
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
 .room-chips { display: flex; }
-.room-chips button { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; margin-left: -1px; border: 1px solid #ffffff24; background: #141414; color: #d7e4e8; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.room-chips button { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; margin-left: -1px; border: 1px solid #ffffff1a; background: #141414; color: #d7e4e8; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .room-chips button:first-child { margin-left: 0; border-radius: 3px 0 0 3px; }
 .room-chips button:last-child { border-radius: 0 3px 3px 0; }
 .room-chips button:only-child { border-radius: 3px; }
-.room-chips button[aria-checked=true] { position: relative; z-index: 1; border-color: var(--cyan); background: #1d4b50; color: #57fcff; }
-.room-chips button:hover:not(:disabled):not([aria-checked=true]) { background: #1c1c1c; }
+/* Mesmas cores dos filtros da Coleção (`.collection-segment`): marcado em ciano cheio, texto escuro. */
+.room-chips button[aria-checked=true] { position: relative; z-index: 1; border-color: var(--cyan); background: var(--cyan); color: #06181b; }
+.room-chips button:hover:not(:disabled):not([aria-checked=true]) { background: #1f1f1f; }
 .room-chips button:disabled { opacity: .5; cursor: not-allowed; }
 
 .room-soon-note { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 12px; color: #a8c1cc; }
