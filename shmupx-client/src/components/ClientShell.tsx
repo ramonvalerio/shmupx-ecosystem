@@ -284,9 +284,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               <div className="client-status recording" role="status"><span className="status-dot" />{t("PREPARANDO LIVE")}</div>
               <span className="client-status-caption">{t("Conectando ao YouTube…")}</span>
             </>}
-          </> : <>
-            <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
-            {recordingRoom && <span className="client-status-caption">{t("Gravando · {game}", { game: recordingRoom.title })}</span>}
+          </> : recordingRoom && <>
+            {/* Parado não mostra nada; gravando, avisa que a run está sendo gravada. */}
+            <div className="client-status recording" role="status"><span className="status-dot" />{t("GRAVANDO RUN")}</div>
+            <span className="client-status-caption">{t("Gravando · {game}", { game: recordingRoom.title })}</span>
           </>}
         </div>
         {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}

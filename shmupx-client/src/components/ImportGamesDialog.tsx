@@ -44,11 +44,18 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     finally { setBusyId(null); }
   }
   function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setEmuFolderError(null); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
+  /** Mostra o resultado da leitura e, se achou o Fightcade, já importa os ROMs, sem pedir confirmação. */
+  function importEmulator(result: EmulatorScan) {
+    setEmu({ status: "done", ...result });
+    if (result.found) {
+      saveEmulatorLibrary({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
+      setImported(result.roms.length);
+    } else setImported(null);
+  }
   async function readEmulator() {
     setEmu({ status: "scanning" });
     try {
-      const result = await scanEmulator();
-      setEmu({ status: "done", ...result });
+      importEmulator(await scanEmulator());
     } catch (error) {
       setEmu({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
@@ -59,7 +66,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     setEmuFolderError(null);
     try {
       const result = await chooseEmulatorFolder(t("Pasta do Fightcade"));
-      if (result) { setEmu({ status: "done", ...result }); setImported(null); }
+      if (result) importEmulator(result);
     } catch (error) {
       setEmuFolderError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -69,7 +76,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   async function resetEmulatorAuto() {
     setEmuPicking(true);
     setEmuFolderError(null);
-    try { setEmu({ status: "done", ...(await resetEmulatorFolder()) }); setImported(null); }
+    try { importEmulator(await resetEmulatorFolder()); }
     catch (error) { setEmuFolderError(error instanceof Error ? error.message : String(error)); }
     finally { setEmuPicking(false); }
   }
@@ -89,19 +96,20 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   const dialogRef = useDialogFocus(true, back);
   useEffect(() => { dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [sourceId, scan.status, dialogRef]);
 
-  async function readSteam() {
+  /** Lê os jogos instalados e já importa para a coleção, sem pedir confirmação. */
+  async function importSteam() {
     setScan({ status: "scanning" });
     try {
       const result = await scanSteam();
-      setScan({ status: "done", found: result.found, games: result.games.filter((g) => g.installed), total: result.games.length });
+      const games = result.games.filter((g) => g.installed);
+      setScan({ status: "done", found: result.found, games, total: result.games.length });
+      if (result.found) {
+        saveSteamLibrary(games.map((g) => g.app_id), result.games.length);
+        setImported(games.length);
+      }
     } catch (error) {
       setScan({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
-  }
-  function importSteam() {
-    const games = scan.games ?? [];
-    saveSteamLibrary(games.map((g) => g.app_id), scan.total ?? games.length);
-    setImported(games.length);
   }
 
   const installed = scan.games ?? [];
@@ -133,10 +141,10 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">E</span><h3>{t("Emulador")}</h3></div>
           <p className="muted">{t(source.body)}</p>
           {emu.status === "idle" && <div className="emulator-folder-actions">
-            <button className="primary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Ler ROMs do Fightcade")}</button>
+            <button className="primary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Importar ROMs do Fightcade")}</button>
             <button className="secondary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta do Fightcade")}</button>
           </div>}
-          {emu.status === "scanning" && <p className="muted" role="status">{t("Lendo os ROMs…")}</p>}
+          {emu.status === "scanning" && <p className="muted" role="status">{t("Importando os ROMs…")}</p>}
           {emu.status === "error" && <p className="mode-error-inline" role="alert">{t(emu.error ?? "")}</p>}
           {emu.status === "done" && !emu.found && <div className="integration-notice emulator-not-found" role="alert">
             <strong>{t("Fightcade não encontrado")}</strong>
@@ -163,9 +171,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
             {emuRooms.length > 0
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{emuRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum dos seus ROMs tem sala no ShmupX ainda.")}</p>}
-            {imported === null
-              ? <button className="primary-action" onClick={() => { saveEmulatorLibrary({ root: emu.root ?? "", roms: emuRoms, importedAt: Date.now() }); setImported(emuRoms.length); }}>{t("Importar biblioteca")}</button>
-              : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
+            {imported !== null && <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
           </>}
         </>}
 
@@ -208,8 +214,8 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "steam" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">S</span><h3>{t("Steam")}</h3></div>
           <p className="muted">{t(source.body)}</p>
-          {scan.status === "idle" && <button className="primary-action" onClick={() => void readSteam()}>{t("Ler biblioteca da Steam")}</button>}
-          {scan.status === "scanning" && <p className="muted" role="status">{t("Lendo os jogos instalados…")}</p>}
+          {scan.status === "idle" && <button className="primary-action" onClick={() => void importSteam()}>{t("Importar biblioteca da Steam")}</button>}
+          {scan.status === "scanning" && <p className="muted" role="status">{t("Importando os jogos instalados…")}</p>}
           {scan.status === "error" && <p className="mode-error" role="alert">{scan.error}</p>}
           {scan.status === "done" && !scan.found && <div className="integration-notice" role="alert"><strong>{t("Steam não encontrada")}</strong><p>{t("Não encontramos a Steam neste computador. Instale a Steam e tente de novo.")}</p></div>}
           {scan.status === "done" && scan.found && <>
@@ -218,13 +224,12 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{withRoom.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum dos jogos instalados tem sala no ShmupX ainda.")}</p>}
             {withoutRoom > 0 && <p className="muted">{t("{count} outros jogos ainda não têm sala no ShmupX.", { count: withoutRoom })}</p>}
-            {imported === null
-              ? <button className="primary-action" onClick={importSteam}>{t("Importar biblioteca")}</button>
-              : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
+            {imported !== null && <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
           </>}
         </>}
       </div>
-      <footer><span className="muted">{t("Os dados são lidos só neste computador.")}</span>{onViewCollection && <button className="secondary-action" onClick={() => { onClose(); onViewCollection(); }}>{t("Ver coleção")}</button>}{!onViewCollection && <button className="secondary-action" onClick={onClose}>{t("Voltar à coleção")}</button>}</footer>
+      {/* Aberta pelas Configurações, leva à coleção; aberta pela coleção, basta o Fechar do topo. */}
+      {onViewCollection && <footer style={{ justifyContent: "flex-end" }}><button className="secondary-action" onClick={() => { onClose(); onViewCollection(); }}>{t("Ver coleção")}</button></footer>}
     </div>
   </div>;
 }

@@ -208,9 +208,10 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
       <path d="M34 182 H286 Q294 182 294 191 L295 207 Q295 216 286 216 H34 Q25 216 25 207 L26 191 Q26 182 34 182 Z" fill="#16191c" stroke="#7d878e" strokeWidth="1.5" />
       <path d="M30 186 H290" stroke="#ffffff" strokeOpacity=".12" strokeWidth="1" />
       {/* Layout do painel do Astro City: joystick à esquerda, START pequeno em cima, entre os dois, e
-          os 3 botões em arco (o 1º mais baixo, o 2º e o 3º mais altos) sobre a faixa cinza. */}
-      <polyline points="163,204 173,197.5 195,197.5" fill="none" stroke="#5c656b" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="163,204 173,197.5 195,197.5" fill="none" stroke="#3a4045" strokeWidth="13.4" strokeLinecap="round" strokeLinejoin="round" />
+          os 4 botões em arco (o 1º mais baixo, os outros mais altos) sobre a faixa cinza, como o painel
+          de Configurações › Controle. */}
+      <polyline points="163,204 173,197.5 211,197.5" fill="none" stroke="#5c656b" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="163,204 173,197.5 211,197.5" fill="none" stroke="#3a4045" strokeWidth="13.4" strokeLinecap="round" strokeLinejoin="round" />
       <ellipse cx="123" cy="200" rx="7" ry="5" fill="#0b0d0f" />
       <circle cx="122" cy="196" r="7" fill="#fd4851" />
       <circle cx="120" cy="193.5" r="2" fill="#ffffff" fillOpacity=".35" />
@@ -220,6 +221,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
       <circle cx="163" cy="204" r="4.6" fill="#fd4851" />
       <circle cx="179" cy="197.5" r="4.6" fill="#fd4851" />
       <circle cx="195" cy="197.5" r="4.6" fill="#fd4851" />
+      <circle cx="211" cy="197.5" r="4.6" fill="#fd4851" />
       {/* Corpo de baixo claro, reto: mesma largura do corpo de cima, cantos de baixo levemente arredondados */}
       <path d="M39 216 H281 V281 Q281 288 274 288 H46 Q39 288 39 281 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
       {/* Esquerda: tampa de manutenção (só o recorte e a fechadura) */}

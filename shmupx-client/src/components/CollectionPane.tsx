@@ -105,8 +105,9 @@ function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const play = useRoomPlay(room, launcher.platforms, launcher.owns);
   return <section className="collection-play" aria-label={t("Jogar")}>
-    <PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching || ranked.liveOn} compact />
-    <RankedPanel room={room} uid={uid} launcher={launcher} mode={play.mode} platform={play.platform} ranked={ranked} busy={false} compact />
+    {/* A ficha (com o saldo) em cima; abaixo, modo de jogo e plataforma e as opções da live. */}
+    <RankedPanel room={room} uid={uid} launcher={launcher} mode={play.mode} platform={play.platform} ranked={ranked} busy={false} compact
+      setup={<PlaySetup play={play} owns={launcher.owns} disabled={launcher.isLaunching || ranked.liveOn} compact />} />
     {ranked.liveError && <p className="room-banner warning" role="alert">{t(ranked.liveError)}</p>}
     {launcher.banners}
     {launcher.dialogs}
