@@ -23,7 +23,6 @@ import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
-import CreditsBadge from "./CreditsBadge";
 import OpenGameBanner from "./OpenGameBanner";
 import { visibleDialog } from "./navigationInput";
 
@@ -287,7 +286,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
             </>}
           </> : <>
             <div className={`client-status ${recordingRoom ? "recording" : ""}`} role="status"><span className="status-dot" />{recordingRoom ? t("GRAVANDO RUN") : t("PRONTO")}</div>
-            <span className="client-status-caption">{recordingRoom ? t("Gravando · {game}", { game: recordingRoom.title }) : t("Pronto para capturar")}</span>
+            {recordingRoom && <span className="client-status-caption">{t("Gravando · {game}", { game: recordingRoom.title })}</span>}
           </>}
         </div>
         {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}
@@ -307,10 +306,6 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </p>
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
-        <div className="client-topbar-actions">
-          {/* Fichas: dentro da sala ficam no cabeçalho do chat; nas outras telas, aqui. */}
-          {!(isLibrary && activeRoom && !rankingRoomIds.includes(activeRoom.id)) && <CreditsBadge uid={profile.uid} />}
-        </div>
       </header>
       <OpenGameBanner uid={profile.uid} />
       <div className="client-content">
