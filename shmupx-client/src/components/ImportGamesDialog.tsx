@@ -4,7 +4,7 @@ import { useDialogFocus } from "./useDialogFocus";
 import MisterConnect from "./MisterConnect";
 import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
-import { publish as saveEmulatorLibrary, romsFor, scanEmulator } from "../data/emulatorLibrary";
+import { chooseEmulatorFolder, emulatorFolderLabel, publish as saveEmulatorLibrary, resetEmulatorFolder, romsFor, scanEmulator, type EmulatorScan } from "../data/emulatorLibrary";
 import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "../data/misterLibrary";
 import { usePlatformOwnership } from "../data/platforms";
 import type { PlayOn } from "../types/room";
@@ -23,7 +23,10 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [scan, setScan] = useState<Scan>({ status: "idle" });
   const [imported, setImported] = useState<number | null>(null);
-  const [emu, setEmu] = useState<{ status: "idle" | "scanning" | "done" | "error"; found?: boolean; root?: string | null; roms?: string[]; error?: string }>({ status: "idle" });
+  const [emu, setEmu] = useState<{ status: "idle" | "scanning" | "done" | "error"; error?: string } & Partial<EmulatorScan>>({ status: "idle" });
+  /** Escolha de pasta do Fightcade em andamento e o motivo, se a pasta escolhida não serviu. */
+  const [emuPicking, setEmuPicking] = useState(false);
+  const [emuFolderError, setEmuFolderError] = useState<string | null>(null);
   const source = SOURCES.find((candidate) => candidate.id === sourceId);
   const playable = usePlatformOwnership();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -40,15 +43,35 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     catch (error) { setRowError(error instanceof Error ? error.message : String(error)); }
     finally { setBusyId(null); }
   }
-  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
+  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setEmuFolderError(null); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
   async function readEmulator() {
     setEmu({ status: "scanning" });
     try {
       const result = await scanEmulator();
-      setEmu({ status: "done", found: result.found, root: result.root, roms: result.roms });
+      setEmu({ status: "done", ...result });
     } catch (error) {
       setEmu({ status: "error", error: error instanceof Error ? error.message : String(error) });
     }
+  }
+  /** "Selecionar pasta do Fightcade" / "Alterar pasta": janela do sistema, guarda e lê de novo. */
+  async function pickEmulatorFolder() {
+    setEmuPicking(true);
+    setEmuFolderError(null);
+    try {
+      const result = await chooseEmulatorFolder(t("Pasta do Fightcade"));
+      if (result) { setEmu({ status: "done", ...result }); setImported(null); }
+    } catch (error) {
+      setEmuFolderError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setEmuPicking(false);
+    }
+  }
+  async function resetEmulatorAuto() {
+    setEmuPicking(true);
+    setEmuFolderError(null);
+    try { setEmu({ status: "done", ...(await resetEmulatorFolder()) }); setImported(null); }
+    catch (error) { setEmuFolderError(error instanceof Error ? error.message : String(error)); }
+    finally { setEmuPicking(false); }
   }
   const [mister, setMister] = useState<{ status: "idle" | "scanning" | "done" | "error"; host: string; password: string; mras?: string[]; roms?: string[]; error?: string; menuAdded?: string[]; menuError?: string }>(() => ({ status: "idle", host: readMisterLibrary()?.host ?? "", password: "" }));
   async function readMister() {
@@ -109,12 +132,34 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "emulator" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">E</span><h3>{t("Emulador")}</h3></div>
           <p className="muted">{t(source.body)}</p>
-          {emu.status === "idle" && <button className="primary-action" onClick={() => void readEmulator()}>{t("Ler ROMs do Fightcade")}</button>}
+          {emu.status === "idle" && <div className="emulator-folder-actions">
+            <button className="primary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Ler ROMs do Fightcade")}</button>
+            <button className="secondary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta do Fightcade")}</button>
+          </div>}
           {emu.status === "scanning" && <p className="muted" role="status">{t("Lendo os ROMs…")}</p>}
-          {emu.status === "error" && <p className="mode-error" role="alert">{emu.error}</p>}
-          {emu.status === "done" && !emu.found && <div className="integration-notice" role="alert"><strong>{t("Fightcade não encontrado")}</strong><p>{t("Não encontramos o Fightcade neste computador. Instale o Fightcade e tente de novo.")}</p></div>}
+          {emu.status === "error" && <p className="mode-error-inline" role="alert">{t(emu.error ?? "")}</p>}
+          {emu.status === "done" && !emu.found && <div className="integration-notice emulator-not-found" role="alert">
+            <strong>{t("Fightcade não encontrado")}</strong>
+            <p>{t("Não encontramos o Fightcade neste computador. Instale o Fightcade e tente de novo.")}</p>
+            <p>{t("Já tem o Fightcade em outra pasta? Selecione a pasta onde ele foi instalado (ou a pasta emulator, fbneo ou ROMs dele).")}</p>
+            <div className="emulator-folder-actions">
+              <button className="primary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta do Fightcade")}</button>
+              <button className="secondary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Procurar de novo")}</button>
+            </div>
+          </div>}
+          {emuFolderError && <p className="mode-error-inline emulator-folder-error" role="alert">{t(emuFolderError)}</p>}
+          {emu.status === "done" && emu.indisponivel && <p className="mode-error-inline" role="status">{t("A pasta escolhida ({folder}) não tem mais o Fightcade. Usando a busca automática.", { folder: emu.pasta_escolhida ?? "" })}</p>}
           {emu.status === "done" && emu.found && <>
-            <p role="status"><strong>{t("{count} ROMs em {folder}.", { count: emuRoms.length, folder: emu.root ?? "" })}</strong></p>
+            <div className="emulator-folder-row">
+              <div className="emulator-folder-path">
+                <small>{t(emu.manual ? "Pasta escolhida" : "Pasta encontrada")}</small>
+                <code title={emulatorFolderLabel(emu)}>{emulatorFolderLabel(emu)}</code>
+              </div>
+              <button className="secondary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Alterar pasta")}</button>
+            </div>
+            {emu.manual && <button type="button" className="text-action" disabled={emuPicking} onClick={() => void resetEmulatorAuto()}>{t("Usar a busca automática")}</button>}
+            {emu.emulador === false && <p className="mode-error-inline" role="status">{t("Achamos os ROMs, mas não o emulador do Fightcade (fcadefbneo.exe). Para abrir os jogos, selecione a pasta onde o Fightcade foi instalado.")}</p>}
+            <p role="status"><strong>{t("{count} ROMs em {folder}.", { count: emuRoms.length, folder: emulatorFolderLabel(emu) })}</strong></p>
             {emuRooms.length > 0
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{emuRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum dos seus ROMs tem sala no ShmupX ainda.")}</p>}

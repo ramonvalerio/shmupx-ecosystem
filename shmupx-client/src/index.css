@@ -365,6 +365,17 @@ button:disabled { opacity: .5; cursor: default; }
 .integration-notice { padding: 16px; background: #f2c14e0d; border: 1px solid #f2c14e40; border-radius: 4px; font-size: 12px; line-height: 1.8; }
 .integration-notice strong { color: #f2c14e; font-weight: 600; }
 .integration-notice p { margin: 8px 0 0; }
+/* Pasta do Fightcade (Importar jogos › Emulador): escolher, mostrar e trocar a pasta mapeada. */
+.emulator-folder-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.emulator-folder-row { display: flex; align-items: center; gap: 12px; margin: 14px 0 6px; padding: 10px 12px; background: #57fcff0a; border: 1px solid #57fcff2e; border-radius: 4px; }
+.emulator-folder-path { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.emulator-folder-path small { color: #ffffff8c; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.emulator-folder-path code { overflow: hidden; color: var(--cyan); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.emulator-folder-row .secondary-action { flex: none; padding: 6px 12px; font-size: 12px; }
+.emulator-folder-error { margin-top: 10px; color: #c8605a; }
+.launch-problem-folder { display: grid; gap: 8px; justify-items: start; margin: 0 0 16px; }
+.theme-light .emulator-folder-row { background: #1f6feb0d; border-color: #1f6feb33; }
+.theme-light .emulator-folder-path small { color: #10233f99; }
 .import-candidates-empty { text-align: center; padding: 32px 12px; }
 .import-candidates-empty > span { font-size: 32px; color: var(--cyan); }
 .import-candidates-empty h3 { margin: 18px 0; font-size: 16px; }

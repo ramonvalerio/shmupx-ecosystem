@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useI18n } from "../i18n";
+import { chooseEmulatorFolder } from "../data/emulatorLibrary";
 import type { MisterReach } from "../data/launchFailure";
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -109,7 +111,7 @@ function content(kind: LaunchProblemKind, game: string, t: Translate): { title: 
         text: t("Para jogar no emulador, o Fightcade precisa estar instalado neste computador."),
         steps: [
           t("Instale o Fightcade (fightcade.com) e baixe {game} por ele.", { game }),
-          t("Se o Fightcade já está instalado em outra pasta, escolha essa pasta em Configurações › Bibliotecas."),
+          t("Se o Fightcade já está instalado em outra pasta, clique em \"Selecionar pasta do Fightcade\" e indique onde ele está."),
           t("Depois, volte aqui e tente de novo."),
         ],
       };
@@ -127,6 +129,27 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
   const { t } = useI18n();
   const ref = useDialogFocus(true, onClose);
   const { title, text, steps } = content(kind, game, t);
+  // Fightcade fora das pastas de costume: o jogador indica a pasta aqui mesmo e tenta de novo.
+  const [picking, setPicking] = useState(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  async function pickFolder() {
+    setPicking(true);
+    setFolderError(null);
+    try {
+      const result = await chooseEmulatorFolder(t("Pasta do Fightcade"));
+      if (!result) return;
+      if (!result.found || result.emulador === false) {
+        setFolderError(t("Achamos os ROMs, mas não o emulador do Fightcade (fcadefbneo.exe). Para abrir os jogos, selecione a pasta onde o Fightcade foi instalado."));
+        return;
+      }
+      onClose();
+      onRetry?.();
+    } catch (error) {
+      setFolderError(t(error instanceof Error ? error.message : String(error)));
+    } finally {
+      setPicking(false);
+    }
+  }
   return (
     <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div ref={ref} role="alertdialog" aria-modal="true" aria-labelledby="launch-problem-title" aria-describedby="launch-problem-text" tabIndex={-1} className="controller-dialog close-room-dialog launch-problem-dialog">
@@ -137,6 +160,10 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
           </div>
         </header>
         {steps.length > 0 && <ol className="launch-problem-steps">{steps.map((step) => <li key={step}>{step}</li>)}</ol>}
+        {kind === "fightcade-missing" && <div className="launch-problem-folder">
+          <button type="button" className="secondary-action" disabled={picking} onClick={() => void pickFolder()}>{t(picking ? "Abrindo…" : "Selecionar pasta do Fightcade")}</button>
+          {folderError && <p className="mode-error-inline" role="alert">{folderError}</p>}
+        </div>}
         <footer>
           {onRetry ? <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button> : <span />}
           <button type="button" className="primary-action" onClick={() => { onClose(); onRetry?.(); }}>{t(onRetry ? "Tentar de novo" : "Entendi")}</button>

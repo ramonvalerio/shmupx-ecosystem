@@ -217,7 +217,7 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Fightcade não encontrado": "Fightcade not found",
   "Para jogar no emulador, o Fightcade precisa estar instalado neste computador.": "To play on the emulator, Fightcade needs to be installed on this computer.",
   "Instale o Fightcade (fightcade.com) e baixe {game} por ele.": "Install Fightcade (fightcade.com) and download {game} through it.",
-  "Se o Fightcade já está instalado em outra pasta, escolha essa pasta em Configurações › Bibliotecas.": "If Fightcade is already installed in another folder, choose that folder in Settings › Libraries.",
+  "Se o Fightcade já está instalado em outra pasta, clique em \"Selecionar pasta do Fightcade\" e indique onde ele está.": "If Fightcade is already installed in another folder, click \"Select Fightcade folder\" and point to it.",
   "O jogo não abriu": "The game didn't start",
   "Algo impediu {game} de abrir agora.": "Something kept {game} from starting right now.",
   "Se o jogo abriu pela metade, feche-o e tente de novo.": "If the game half-opened, close it and try again.",
@@ -265,6 +265,21 @@ const RANKING_SCREEN_ENGLISH: Record<string, string> = {
   "Ao vivo agora no YouTube": "Live now on YouTube", "Vídeo da run no YouTube": "Run video on YouTube",
 };
 for (const [key, value] of Object.entries(RANKING_SCREEN_ENGLISH)) ENGLISH[key] ??= value;
+
+// Pasta do Fightcade escolhida à mão (Importar jogos › Emulador, Configurações e aviso de jogo que não abre).
+const FIGHTCADE_FOLDER_ENGLISH: Record<string, string> = {
+  "Selecionar pasta do Fightcade": "Select Fightcade folder", "Selecionar pasta": "Select folder", "Alterar pasta": "Change folder",
+  "Pasta do Fightcade": "Fightcade folder", "Procurar de novo": "Search again", "Pasta escolhida": "Selected folder", "Pasta encontrada": "Detected folder",
+  "Usar a busca automática": "Use automatic detection",
+  "Já tem o Fightcade em outra pasta? Selecione a pasta onde ele foi instalado (ou a pasta emulator, fbneo ou ROMs dele).": "Already have Fightcade in another folder? Select the folder where it's installed (or its emulator, fbneo or ROMs folder).",
+  "A pasta escolhida ({folder}) não tem mais o Fightcade. Usando a busca automática.": "The selected folder ({folder}) no longer has Fightcade. Using automatic detection.",
+  "Achamos os ROMs, mas não o emulador do Fightcade (fcadefbneo.exe). Para abrir os jogos, selecione a pasta onde o Fightcade foi instalado.": "We found the ROMs, but not the Fightcade emulator (fcadefbneo.exe). To launch games, select the folder where Fightcade is installed.",
+  "Não encontramos o Fightcade neste computador. Se ele está instalado em outra pasta, clique em \"Selecionar pasta\" e indique onde.": "We couldn't find Fightcade on this computer. If it's installed in another folder, click \"Select folder\" and point to it.",
+  "Escolha uma pasta.": "Choose a folder.",
+  "Fightcade não encontrado neste computador: instale o Fightcade ou selecione a pasta dele em Importar jogos › Emulador": "Fightcade wasn't found on this computer: install Fightcade or select its folder in Import games › Emulator",
+  "achamos a pasta de ROMs escolhida, mas não o emulador do Fightcade (fcadefbneo.exe): selecione a pasta onde o Fightcade foi instalado em Importar jogos › Emulador": "we found the selected ROMs folder, but not the Fightcade emulator (fcadefbneo.exe): select the folder where Fightcade is installed in Import games › Emulator",
+};
+for (const [key, value] of Object.entries(FIGHTCADE_FOLDER_ENGLISH)) ENGLISH[key] ??= value;
 
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {

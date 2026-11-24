@@ -12,7 +12,7 @@ import type { PlayerProfile } from "../auth/firebase";
 import { useYouTube } from "../data/useLive";
 import YouTubeNoChannelDialog from "./YouTubeNoChannelDialog";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
-import { romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
+import { publish as saveEmulatorLibrary, romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
 
 const GROUPS = [
@@ -55,9 +55,11 @@ function YouTubeCard() {
 }
 
 /** Uma biblioteca conectada (Steam, Fightcade, Local): situação, contagem e ações. */
-function LibraryRow({ icon, name, connected, soon, games, installed, installedLabel, syncedAt, folder, busy, onConnect, onSync, onDisconnect }: {
+function LibraryRow({ icon, name, connected, soon, games, installed, installedLabel, syncedAt, folder, busy, onConnect, onSync, onDisconnect, onChooseFolder }: {
   icon: ReactNode; name: string; connected: boolean; soon?: boolean; games?: number; installed?: number; installedLabel?: string; syncedAt?: number; folder?: string; busy?: boolean;
   onConnect?: () => void; onSync?: () => void; onDisconnect?: () => void;
+  /** Escolher a pasta da biblioteca à mão (ex.: Fightcade fora das pastas de costume). */
+  onChooseFolder?: () => void;
 }) {
   const { t, locale } = useI18n();
   const date = syncedAt ? new Date(syncedAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : null;
@@ -70,8 +72,8 @@ function LibraryRow({ icon, name, connected, soon, games, installed, installedLa
       </div>
       <div className="library-row-actions">
         {connected
-          ? <><button className="secondary-action" disabled={busy} onClick={onSync}>{t(busy ? "Sincronizando…" : "Sincronizar")}</button><button className="secondary-action" disabled={busy} onClick={onDisconnect}>{t("Desconectar")}</button></>
-          : <button className="secondary-action" disabled={soon || busy} onClick={onConnect} title={soon ? t("A leitura desta biblioteca ainda não está disponível nesta versão.") : undefined}>{t(busy ? "Conectando…" : "Conectar")}</button>}
+          ? <><button className="secondary-action" disabled={busy} onClick={onSync}>{t(busy ? "Sincronizando…" : "Sincronizar")}</button>{onChooseFolder && <button className="secondary-action" disabled={busy} onClick={onChooseFolder}>{t("Alterar pasta")}</button>}<button className="secondary-action" disabled={busy} onClick={onDisconnect}>{t("Desconectar")}</button></>
+          : <><button className="secondary-action" disabled={soon || busy} onClick={onConnect} title={soon ? t("A leitura desta biblioteca ainda não está disponível nesta versão.") : undefined}>{t(busy ? "Conectando…" : "Conectar")}</button>{onChooseFolder && <button className="secondary-action" disabled={busy} onClick={onChooseFolder}>{t("Selecionar pasta")}</button>}</>}
       </div>
     </div>
     {connected && <div className="library-row-stats">
@@ -98,9 +100,22 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
     setError(null);
     try {
       const result = await emulator.refresh();
-      if (!result.found) setError(t("Não encontramos o Fightcade neste computador. Instale o Fightcade e tente de novo."));
+      if (!result.found) setError(t("Não encontramos o Fightcade neste computador. Se ele está instalado em outra pasta, clique em \"Selecionar pasta\" e indique onde."));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmuBusy(false);
+    }
+  }
+  /** Pasta do Fightcade escolhida à mão: guarda no app e conecta (ou atualiza) a biblioteca. */
+  async function chooseEmulatorFolder() {
+    setEmuBusy(true);
+    setError(null);
+    try {
+      const result = await emulator.chooseFolder(t("Pasta do Fightcade"));
+      if (result?.found) saveEmulatorLibrary({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
+    } catch (e) {
+      setError(t(e instanceof Error ? e.message : String(e)));
     } finally {
       setEmuBusy(false);
     }
@@ -124,7 +139,7 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
       <LibraryRow icon={<IconGamepad />} name="Steam" connected={Boolean(steam.library)} games={steam.library?.total} installed={steam.library?.appIds.length} syncedAt={steam.library?.importedAt} busy={busy}
         onConnect={() => void syncSteam()} onSync={() => void syncSteam()} onDisconnect={clearSteamLibrary} />
       <LibraryRow icon={<IconFolder />} name={t("Emulador")} connected={Boolean(emulator.library)} games={emuGames} installed={emulator.library?.roms.length} installedLabel="ROMs" syncedAt={emulator.library?.importedAt} folder={emulator.library?.root} busy={emuBusy}
-        onConnect={() => void syncEmulator()} onSync={() => void syncEmulator()} onDisconnect={emulator.disconnect} />
+        onConnect={() => void syncEmulator()} onSync={() => void syncEmulator()} onDisconnect={emulator.disconnect} onChooseFolder={() => void chooseEmulatorFolder()} />
       <LibraryRow icon={<IconFolder />} name={t("Local")} connected={false} soon />
     </div>
     {error && <p className="mode-error" role="alert">{error}</p>}

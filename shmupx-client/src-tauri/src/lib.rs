@@ -46,6 +46,7 @@ pub fn run() {
             steam::commands::inicializar_jogo_emulador,
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
+            steam::commands::emulador_definir_pasta,
             steam::commands::mister_biblioteca,
             steam::commands::mister_usuarios,
             steam::commands::mister_conectar,

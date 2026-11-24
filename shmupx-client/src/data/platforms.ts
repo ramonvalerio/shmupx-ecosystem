@@ -75,7 +75,8 @@ export async function installCheck(room: GameRoom, platform: PlayOn): Promise<"o
   if (platform === "emulator") {
     const current = readEmulatorLibrary();
     const result = await scanEmulator(current?.root || undefined);
-    if (!result.found) return "no-app";
+    // Sem o emulador (só a pasta de ROMs escolhida), o jogo não abre: é como não ter o Fightcade.
+    if (!result.found || result.emulador === false) return "no-app";
     if (current) saveEmulatorLibrary({ root: result.root ?? current.root, roms: result.roms, importedAt: Date.now() });
     return romsFor(room).some((rom) => result.roms.includes(rom)) ? "ok" : "missing";
   }
