@@ -556,18 +556,30 @@
 .room-header-side.is-compact .room-credits strong { font-size: 46px; }
 .room-header-side.is-compact .room-coin-actions { width: 100%; }
 
-/* Depois da ficha: Training Mode (grátis, sem ranking) ou Ranked Mode (1 ficha), lado a lado. */
-.play-mode-dialog { width: min(560px, 100%); }
-.play-mode-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 20px 22px; }
-.play-mode-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-recessed); color: inherit; text-align: left; cursor: pointer; transition: border-color .12s, background .12s; }
-.play-mode-choice strong { display: flex; align-items: center; gap: 8px; font-size: 17px; letter-spacing: .04em; text-transform: uppercase; color: #57fcff; }
-.play-mode-choice small { font-size: 12px; line-height: 1.45; color: #a8c1cc; }
-.play-mode-cost { padding: 2px 8px; border: 1px solid #57fcff59; border-radius: 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #57fcff; }
-.play-mode-choice:hover:not(:disabled), .play-mode-choice:focus-visible { border-color: var(--cyan); background: #57fcff12; outline: none; }
-.play-mode-choice.is-ranked strong { color: #ffd76a; }
-.play-mode-choice.is-ranked .play-mode-cost { border-color: #f2c14e80; color: #ffd76a; }
-.play-mode-choice.is-ranked:hover:not(:disabled), .play-mode-choice.is-ranked:focus-visible { border-color: #f2c14e; background: #f2c14e14; }
-.play-mode-choice:disabled { opacity: .5; cursor: not-allowed; }
-.theme-light .play-mode-choice strong { color: #0b4fb8; }
-.theme-light .play-mode-choice small { color: #475569; }
-@media (max-width: 560px) { .play-mode-choices { grid-template-columns: 1fr; } }
+/* Depois da ficha: Training Mode (grátis, sem ranking) ou Ranked Mode (1 ficha), em cartas com arte. */
+.play-mode-dialog { width: min(720px, 100%); }
+.play-mode-choices { --pm-cyan: #57fcff; --pm-red: #c8605a; --pm-red-soft: #e3958f; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 22px; }
+.play-mode-choice { position: relative; display: flex; flex-direction: column; justify-content: flex-end; min-height: 360px; padding: 0; overflow: hidden; border: 1px solid var(--stroke); border-radius: 6px; background: #05090d; color: inherit; text-align: left; cursor: pointer; isolation: isolate; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.play-mode-art { position: absolute; inset: 0; z-index: -1; display: flex; align-items: center; justify-content: center; padding-bottom: 96px; background: center 30% / cover no-repeat; transition: transform .3s ease, filter .2s; }
+.play-mode-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, #0000 35%, #05090dd9 72%, #05090d 100%); }
+.is-training .play-mode-art { background-image: url(/img/MODE_TRAINING.jpg); }
+.is-ranked .play-mode-art { background-image: url(/img/MODE_RANKED_BG.jpg); }
+.play-mode-coin { position: relative; z-index: 1; width: 62%; max-width: 200px; filter: drop-shadow(0 10px 22px #000c) drop-shadow(0 0 18px #c8605a55); transition: transform .3s ease; }
+.play-mode-text { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; text-align: center; }
+.play-mode-choice strong { display: inline-flex; align-items: center; justify-content: center; gap: 10px; font-size: 24px; letter-spacing: .05em; text-transform: uppercase; color: var(--pm-cyan); text-shadow: 0 0 18px #57fcff55; }
+.is-ranked strong { color: var(--pm-red-soft); text-shadow: 0 0 18px #c8605a66; }
+.play-mode-setup { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #e6eef2; }
+.play-mode-setup .is-live { display: inline-flex; align-items: center; gap: 6px; color: var(--pm-red-soft); }
+.play-mode-setup .is-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #e0524a; box-shadow: 0 0 8px #e0524a; }
+.play-mode-choice small { font-size: 12px; line-height: 1.45; color: #b6c6cf; }
+.play-mode-choice:hover:not(:disabled), .play-mode-choice:focus-visible { border-color: var(--pm-cyan); box-shadow: 0 0 0 1px var(--pm-cyan), 0 0 26px #57fcff40; transform: translateY(-3px); outline: none; }
+.play-mode-choice.is-ranked:hover:not(:disabled), .play-mode-choice.is-ranked:focus-visible { border-color: var(--pm-red); box-shadow: 0 0 0 1px var(--pm-red), 0 0 26px #c8605a55; }
+.play-mode-choice:hover:not(:disabled) .play-mode-art, .play-mode-choice:focus-visible .play-mode-art { transform: scale(1.04); }
+.play-mode-choice.is-ranked:hover:not(:disabled) .play-mode-coin { transform: scale(1.06) rotate(-4deg); }
+.play-mode-choice:disabled { cursor: not-allowed; }
+.play-mode-choice:disabled .play-mode-art { filter: grayscale(1) brightness(.55); }
+.play-mode-choice:disabled .play-mode-text { opacity: .6; }
+.play-mode-hint { align-self: center; font-size: 12px; color: #8a9aa3; }
+.theme-light .play-mode-choice small { color: #b6c6cf; }
+@media (prefers-reduced-motion: reduce) { .play-mode-choice, .play-mode-art, .play-mode-coin { transition: none; } .play-mode-choice:hover:not(:disabled) { transform: none; } }
+@media (max-width: 620px) { .play-mode-choices { grid-template-columns: 1fr; } .play-mode-choice { min-height: 240px; } .play-mode-art { padding-bottom: 80px; } .play-mode-coin { width: 40%; } }

@@ -239,7 +239,7 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Sobre {game}": "About {game}", "About": "About",
   "Clique na ficha para jogar: Training Mode ou Ranked Mode.": "Click the coin to play: Training Mode or Ranked Mode.",
   "Sem fichas: o Ranked Mode precisa de 1 ficha.": "No coins: Ranked Mode needs 1 coin.", "Como você quer jogar?": "How do you want to play?",
-  "Training Mode": "Training Mode", "Grátis": "Free", "Ranked Mode": "Ranked Mode", "1 ficha": "1 coin",
+  "Aperte 1 ou 2 para escolher": "Press 1 or 2 to choose", "Training Mode": "Training Mode", "Grátis": "Free", "Ranked Mode": "Ranked Mode", "1 ficha": "1 coin",
   "Não gasta ficha. Não vale para o ranking, não grava a run e não transmite live.": "Doesn't spend a coin. Doesn't count for the ranking, doesn't record the run and doesn't stream live.",
   "Gasta 1 ficha, grava a run, vale para o ranking e transmite a live no YouTube.": "Spends 1 coin, records the run, counts for the ranking and streams live on YouTube.",
   "Gasta 1 ficha, grava a run e vale para o ranking.": "Spends 1 coin, records the run and counts for the ranking.",
@@ -249,6 +249,22 @@ const LAUNCH_PROBLEM_ENGLISH: Record<string, string> = {
   "Se continuar, reinicie a Steam.": "If it keeps happening, restart Steam.",
 };
 for (const [key, value] of Object.entries(LAUNCH_PROBLEM_ENGLISH)) ENGLISH[key] ??= value;
+
+// Tela de ranking da sala (pódio do Top 3, classificação completa e detalhes do registro).
+const RANKING_SCREEN_ENGLISH: Record<string, string> = {
+  "Top 3 · {mode}": "Top 3 · {mode}", "Classificação completa": "Full standings", "Runs desta sessão": "Runs this session",
+  "{count} jogadores": "{count} players", "{count} runs nesta sessão": "{count} runs this session", "Atualizado às {time}": "Updated at {time}",
+  "Lugar vago": "Open spot", "Jogue Ranked Mode para entrar no pódio.": "Play Ranked Mode to take this spot.",
+  "Seja o primeiro: jogue {game} em Ranked Mode no modo {mode}.": "Be the first: play {game} in Ranked Mode, {mode} mode.",
+  "VOCÊ": "YOU", "Você": "You", "Modo": "Mode", "Continues": "Continues", "0 · 1CC": "0 · 1CC", "Enviado em": "Submitted",
+  "{position}º lugar: {player}, {score} pontos": "#{position}: {player}, {score} points", "Run de {when}: {status}": "Run from {when}: {status}",
+  "Plataforma ainda não informada pelo servidor": "Platform not reported by the server yet",
+  "Sem vídeo no YouTube": "No YouTube video", "Sem vídeo do YouTube para este registro.": "No YouTube video for this record.",
+  "Assistir à live de {player} no YouTube": "Watch {player}'s live stream on YouTube", "Assistir ao vídeo de {player} no YouTube": "Watch {player}'s video on YouTube",
+  "Assistir à live no YouTube": "Watch the live stream on YouTube", "Assistir no YouTube": "Watch on YouTube", "Assistir à live": "Watch live",
+  "Ao vivo agora no YouTube": "Live now on YouTube", "Vídeo da run no YouTube": "Run video on YouTube",
+};
+for (const [key, value] of Object.entries(RANKING_SCREEN_ENGLISH)) ENGLISH[key] ??= value;
 
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {

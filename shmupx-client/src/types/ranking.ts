@@ -14,6 +14,14 @@ export interface GameRankingEntry {
   /** `false` enquanto a gameplay está em revisão (`needs_review`). */
   verificada: boolean;
   conquistado_em: string | null;
+  // Ainda não enviados por routes/ranking_publico.rs: a tela de ranking só mostra quando vierem.
+  /** Onde a run foi jogada: "steam" | "emulator" | "mister". */
+  plataforma?: string | null;
+  /** Início da gameplay (ISO), `capture.serverStartedAt`. */
+  iniciada_em?: string | null;
+  duracao_segundos?: number | null;
+  /** Link do vídeo da run no YouTube (`https://www.youtube.com/watch?v=…`). */
+  youtube_url?: string | null;
 }
 
 export interface GameRanking {
