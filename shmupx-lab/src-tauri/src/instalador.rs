@@ -295,10 +295,20 @@ async fn rodar_build(client: &Path, ambiente: &[(String, String)], mut linha: im
         .flatten()
     {
         let tx = tx.clone();
+        // Lê bytes, não `lines()`: o PowerShell 5.1 escreve na página de código do console (cp850),
+        // e um "í" fora de UTF-8 fazia `next_line` falhar, o leitor parar e fechar o pipe — a próxima
+        // escrita do build quebrava sem mensagem nenhuma.
         tokio::spawn(async move {
-            let mut linhas = BufReader::new(leitor).lines();
-            while let Ok(Some(l)) = linhas.next_line().await {
-                let _ = tx.send(l);
+            let mut leitor = BufReader::new(leitor);
+            let mut bytes = Vec::new();
+            loop {
+                bytes.clear();
+                match leitor.read_until(b'\n', &mut bytes).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        let _ = tx.send(String::from_utf8_lossy(&bytes).into_owned());
+                    }
+                }
             }
         });
     }
