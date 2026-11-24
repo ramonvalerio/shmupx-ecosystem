@@ -9,6 +9,8 @@ import AiAssist from "./AiAssist";
 import DeleteGameDialog from "./DeleteGameDialog";
 import CoverField from "./CoverField";
 import { RobotxField } from "./RobotxEditor";
+import RankedValidationBadge from "./RankedValidationBadge";
+import type { RankedValidation } from "../../lib/rankedValidation";
 import { MODES, PLAY_ON, formatDateTime, playOnOf, slugFromName } from "./options";
 
 interface GameEditorProps {
@@ -16,6 +18,8 @@ interface GameEditorProps {
   game: CatalogGame | null;
   /** Catálogo inteiro, para recusar um ID que já existe antes de ir ao backend. */
   games: CatalogGame[];
+  /** Como o Client valida o Ranked de cada jogo (só leitura: vem das listas do Client). */
+  ranked: { byGame: Map<string, RankedValidation> | null; error: string | null };
   onClose: () => void;
   onSaved: (game: CatalogGame) => void;
   onDeleted: (game: CatalogGame) => void;
@@ -88,8 +92,30 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** Validação do Ranked no Client: só leitura, vem de `jogos-pela-memoria.json` e `scripts-aceitos.json`. */
+function RankedValidationField({ id, ranked }: { id: string; ranked: GameEditorProps["ranked"] }) {
+  const validation = ranked.byGame?.get(id);
+  const roms = validation?.roms ?? [];
+  const detail = ranked.error
+    ? `Não deu para ler as listas do Client: ${ranked.error}`
+    : roms.length > 0
+      ? `O ShmupX Emulator lê o placar da memória do jogo (ROM ${roms.join(", ")}): o Ranked não precisa de script de vídeo.`
+      : validation?.script
+        ? `O Client valida as runs pelo vídeo, com o script ${validation.script} aprovado.`
+        : "Sem mapa de memória nem script aprovado: no Client o jogo fica como Coming soon (só Training Mode).";
+  return (
+    <div>
+      <span className="mb-1.5 block text-xs font-medium text-zinc-400">Validação do Ranked</span>
+      {ranked.byGame ? <RankedValidationBadge validation={validation} /> : <span className="text-xs text-zinc-600">—</span>}
+      <span className="mt-1.5 block text-xs leading-relaxed text-zinc-500">
+        {detail} Definido no Client (jogos-pela-memoria.json e scripts-aceitos.json).
+      </span>
+    </div>
+  );
+}
+
 /** Painel lateral de criação/edição de um jogo do catálogo. */
-export default function GameEditor({ game, games, onClose, onSaved, onDeleted }: GameEditorProps) {
+export default function GameEditor({ game, games, ranked, onClose, onSaved, onDeleted }: GameEditorProps) {
   const isNew = game === null;
   const [draft, setDraft] = useState<Draft>(() => toDraft(game));
   /** Num jogo novo, o ID acompanha o título até o admin editá-lo à mão. */
@@ -338,6 +364,7 @@ export default function GameEditor({ game, games, onClose, onSaved, onDeleted }:
                   <TextInput inputMode="numeric" value={draft.minutes} onChange={(e) => patch({ minutes: e.target.value })} />
                 </Field>
               </div>
+              <RankedValidationField id={draft.id.trim()} ranked={ranked} />
               <Switch
                 checked={draft.published}
                 onChange={(published) => patch({ published })}

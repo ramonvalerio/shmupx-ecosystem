@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogGame } from "../../lib/backend";
+import { useRankedValidation } from "../../lib/rankedValidation";
 import Button from "../../components/ui/Button";
 import { IconAlert, IconCheck, IconPlus, IconRefresh, IconSearch } from "../../components/ui/Icons";
 import CatalogTable from "./CatalogTable";
@@ -24,6 +25,7 @@ export default function CatalogView({ games, loading, error, onReload, onSaved, 
   const [status, setStatus] = useState<StatusFilter>("all");
   const [editing, setEditing] = useState<Editing>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const ranked = useRankedValidation();
 
   useEffect(() => {
     if (!notice) return;
@@ -77,7 +79,7 @@ export default function CatalogView({ games, loading, error, onReload, onSaved, 
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={onReload} disabled={loading} title="Recarregar" aria-label="Recarregar">
+            <Button variant="ghost" onClick={() => { onReload(); ranked.reload(); }} disabled={loading} title="Recarregar" aria-label="Recarregar">
               <IconRefresh className={loading ? "animate-spin" : ""} />
             </Button>
             <Button variant="primary" onClick={() => setEditing("new")}>
@@ -127,6 +129,7 @@ export default function CatalogView({ games, loading, error, onReload, onSaved, 
             loading={loading}
             filtered={games.length > 0}
             selectedId={editing && editing !== "new" ? editing : null}
+            validation={ranked.byGame}
             onOpen={(game) => setEditing(game.id)}
             onCreate={() => setEditing("new")}
           />
@@ -135,7 +138,7 @@ export default function CatalogView({ games, loading, error, onReload, onSaved, 
 
       {editing !== null && (
         // `key` remonta o editor ao trocar de jogo: o rascunho e as sugestões começam limpos.
-        <GameEditor key={editing} game={editingGame} games={games} onClose={() => setEditing(null)} onSaved={handleSaved} onDeleted={handleDeleted} />
+        <GameEditor key={editing} game={editingGame} games={games} ranked={ranked} onClose={() => setEditing(null)} onSaved={handleSaved} onDeleted={handleDeleted} />
       )}
 
       {notice && (

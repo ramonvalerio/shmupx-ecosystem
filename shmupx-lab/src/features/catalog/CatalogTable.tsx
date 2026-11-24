@@ -4,7 +4,9 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { ColumnResizer, useColumnWidths, type ResizableColumn } from "../../components/ui/ColumnResizer";
 import { IconPlus } from "../../components/ui/Icons";
+import type { RankedValidation } from "../../lib/rankedValidation";
 import { formatDateTime, playOnLabels, playOnOf } from "./options";
+import RankedValidationBadge from "./RankedValidationBadge";
 
 interface CatalogTableProps {
   games: CatalogGame[];
@@ -12,6 +14,8 @@ interface CatalogTableProps {
   /** Há jogos no catálogo, mas a busca/filtro não encontrou nenhum. */
   filtered: boolean;
   selectedId: string | null;
+  /** Como o Client valida o Ranked de cada jogo (`null`: ainda carregando ou sem as listas do Client). */
+  validation: Map<string, RankedValidation> | null;
   onOpen: (game: CatalogGame) => void;
   onCreate: () => void;
 }
@@ -25,12 +29,13 @@ const COLUMNS: (ResizableColumn & { label: string; align?: "right" })[] = [
   { key: "platforms", label: "Plataformas", width: 200 },
   { key: "steam", label: "Steam", width: 110 },
   { key: "duration", label: "Run máx.", width: 100, align: "right" },
+  { key: "ranked", label: "Validação", width: 170 },
   { key: "created", label: "Criado em", width: 160 },
   { key: "updated", label: "Atualizado em", width: 160 },
   { key: "status", label: "Estado", width: 120 },
 ];
 
-export default function CatalogTable({ games, loading, filtered, selectedId, onOpen, onCreate }: CatalogTableProps) {
+export default function CatalogTable({ games, loading, filtered, selectedId, validation, onOpen, onCreate }: CatalogTableProps) {
   const { widths, resize, reset } = useColumnWidths("lab.catalogo.colunas", COLUMNS);
 
   if (loading && games.length === 0) {
@@ -122,6 +127,7 @@ export default function CatalogTable({ games, loading, filtered, selectedId, onO
               <td className={`${CELL} text-zinc-400`}>{playOnLabels(playOnOf(game)) || "—"}</td>
               <td className={`${CELL} font-mono text-xs text-zinc-400`}>{game.steam_app_id || "—"}</td>
               <td className={`${CELL} text-right text-zinc-400 tabular-nums`}>{Math.round(game.max_duration_segundos / 60)} min</td>
+              <td className={CELL}>{validation ? <RankedValidationBadge validation={validation.get(game.id)} /> : <span className="text-zinc-600">—</span>}</td>
               <td className={`${CELL} text-zinc-400 tabular-nums`}>{formatDateTime(game.created_at)}</td>
               <td className={`${CELL} text-zinc-400 tabular-nums`}>{formatDateTime(game.updated_at)}</td>
               <td className={CELL}>

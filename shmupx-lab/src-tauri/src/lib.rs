@@ -4,6 +4,7 @@ pub mod capa;
 pub mod instalador;
 pub mod net;
 pub mod notas;
+pub mod ranked;
 pub mod validacao;
 
 pub fn run() {
@@ -19,6 +20,7 @@ pub fn run() {
       instalador::publicar_instalador,
       instalador::gerar_instalador,
       notas::notas_do_client,
+      ranked::validacao_ranked_dos_jogos,
       validacao::commands::validacao_ambiente,
       validacao::commands::validacao_instalar_ytdlp,
       validacao::commands::validacao_definir_cookies,
