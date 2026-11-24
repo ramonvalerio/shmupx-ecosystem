@@ -188,6 +188,22 @@ pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super
         .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada())
 }
 
+/// Baixa para a pasta padrão (`roms` do Client) os ROMs de `roms.json` que o jogador ainda não tem
+/// em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Ver [`super::roms_auto`].
+#[tauri::command]
+pub async fn emulador_baixar_roms(app: AppHandle) -> super::roms_auto::ResultadoDownload {
+    let Some(padrao) = super::emulador::pasta_padrao_de_roms(&app) else {
+        log::warn!("roms: sem pasta padrão de ROMs para baixar");
+        return super::roms_auto::ResultadoDownload::default();
+    };
+    let escolhida = super::emulador::pasta_escolhida(&app);
+    let pasta = padrao.clone();
+    let tem = tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), None, Some(&pasta), false).roms)
+        .await
+        .unwrap_or_default();
+    super::roms_auto::baixar_faltando(&padrao, &tem).await
+}
+
 /// Guarda a pasta de ROMs escolhida pelo jogador e já lê os ROMs dela. Com `pasta` vazia, esquece a
 /// escolha e volta à pasta padrão. Se a pasta não tem ROMs, devolve o motivo e não guarda nada.
 #[tauri::command]

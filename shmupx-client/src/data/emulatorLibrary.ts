@@ -60,6 +60,28 @@ export async function scanEmulator(folder?: string): Promise<EmulatorScan> {
   return invoke("emulador_biblioteca", { pasta: folder ?? null });
 }
 
+/** Resultado do download automático dos ROMs (Rust `ResultadoDownload`). */
+export interface RomDownload {
+  baixados: string[];
+  falhas: string[];
+  em_andamento: boolean;
+}
+
+/**
+ * Baixa para a pasta `roms` do Client os ROMs da lista do Client (`src-tauri/roms.json`) que faltam
+ * neste PC. Se baixou algum, lê os ROMs de novo e atualiza a biblioteca: os jogos ganham cor na coleção.
+ */
+export async function downloadMissingRoms(): Promise<RomDownload> {
+  if (!isTauri()) return { baixados: [], falhas: [], em_andamento: false };
+  const result = await invoke<RomDownload>("emulador_baixar_roms");
+  if (result.falhas.length > 0) console.warn("ROMs: não deu para baixar:", result.falhas.join(", "));
+  if (result.baixados.length > 0) {
+    const scan = await scanEmulator(readEmulatorLibrary()?.root || undefined);
+    if (scan.found) publish({ root: scan.root ?? "", roms: scan.roms, importedAt: Date.now() });
+  }
+  return result;
+}
+
 /**
  * Abre a janela do sistema para o jogador indicar a pasta de ROMs, guarda a escolha no app e já lê
  * os ROMs dela. `null` = o jogador cancelou. Se a pasta não tem ROMs, rejeita com o motivo (em
@@ -97,8 +119,9 @@ export function useEmulatorLibrary() {
     window.addEventListener(EVENT, onChange);
     return () => window.removeEventListener(EVENT, onChange);
   }, []);
-  /** Lê de novo os ROMs (na pasta já conhecida) e guarda o resultado. */
+  /** Baixa os ROMs que faltam, lê de novo os ROMs (na pasta já conhecida) e guarda o resultado. */
   const refresh = useCallback(async () => {
+    await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
     const result = await scanEmulator(readEmulatorLibrary()?.root || undefined);
     if (result.found) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
     return result;

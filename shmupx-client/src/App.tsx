@@ -19,6 +19,7 @@ import { setAccountPlaying, useClientMisterGame, usePlayingClaim } from "./data/
 import { liveActive, useLive } from "./data/useLive";
 import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./data/misterLibrary";
 import { readMisterPlayer } from "./data/misterPlayer";
+import { downloadMissingRoms } from "./data/emulatorLibrary";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -102,6 +103,12 @@ export default function App() {
       })
       .catch((error) => console.warn("MiSTer: falha ao atualizar a biblioteca:", error));
   }, [signedUid, rooms]);
+
+  // ROMs dos jogos do catálogo (lista do Client): os que faltam são baixados ao abrir (ou recarregar) o Client.
+  useEffect(() => {
+    if (!isTauri()) return;
+    downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
+  }, []);
 
   usePlayingClaim(signedUid, ownGame
     ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? clientMister?.title ?? ownGame.gameId, device: "pc" }

@@ -8,6 +8,7 @@ pub mod detector;
 pub mod emulador;
 pub mod mister;
 pub mod mister_ssh;
+pub mod roms_auto;
 pub mod telemetria;
 pub mod treino;
 pub mod trailer;

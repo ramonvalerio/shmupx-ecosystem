@@ -1,0 +1,17 @@
+{
+  "sonicwi2": {
+    "download": "https://archive.org/download/fightcaderoms/sonicwi2.zip",
+    "require": [
+      "neogeo"
+    ]
+  },
+  "cawing": {
+    "download": "https://archive.org/download/fightcaderoms/cawing.zip"
+  },
+  "ddonpach": {
+    "download": "https://archive.org/download/fightcaderoms/ddonpach.zip"
+  },
+  "neogeo": {
+    "download": "https://archive.org/download/fightcaderoms/neogeo.zip"
+  }
+}

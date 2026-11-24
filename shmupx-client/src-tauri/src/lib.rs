@@ -50,6 +50,7 @@ pub fn run() {
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
             steam::commands::emulador_definir_pasta,
+            steam::commands::emulador_baixar_roms,
             steam::commands::mister_biblioteca,
             steam::commands::mister_usuarios,
             steam::commands::mister_conectar,
