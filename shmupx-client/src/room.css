@@ -613,6 +613,7 @@
 @media (max-width: 620px) { .play-mode-choices { grid-template-columns: 1fr; } .play-mode-choice { min-height: 240px; } .play-mode-art { padding-bottom: 80px; } .play-mode-coin { width: 40%; } }
 
 /* Denunciar e bloquear no chat (exigência da Google Play para conversa entre jogadores). */
+.chat-message .chat-body { flex: 1; }
 .chat-more { margin-left: auto; padding: 0 6px; border: 0; background: transparent; color: #6f8a94; font-size: 16px; line-height: 1; cursor: pointer; }
 .chat-more:hover, .chat-more[aria-expanded=true] { color: var(--cyan); }
 .chat-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }

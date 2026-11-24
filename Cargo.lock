@@ -5478,7 +5478,7 @@ dependencies = [
 
 [[package]]
 name = "shmupx-mobile"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.2.17",
