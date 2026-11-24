@@ -32,6 +32,7 @@ pub fn run() {
         .manage(capture::RecordingState::default())
         .manage(session::SessionState::default())
         .manage(live::LiveState::default())
+        .manage(steam::controles::CapturaState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             capture::commands::iniciar_corrida_safe,
@@ -44,6 +45,8 @@ pub fn run() {
             capture::destino::gravacoes_abrir_pasta,
             steam::commands::inicializar_jogo_steam,
             steam::commands::inicializar_jogo_emulador,
+            steam::controles::motor_captura_iniciar,
+            steam::controles::motor_captura_parar,
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
             steam::commands::emulador_definir_pasta,
@@ -99,6 +102,12 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // O motor escondido da tela de controles não pode sobrar depois do app fechar.
+            if let tauri::RunEvent::Exit = event {
+                steam::controles::encerrar(app);
+            }
+        });
 }

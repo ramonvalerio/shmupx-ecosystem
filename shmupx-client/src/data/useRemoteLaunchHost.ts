@@ -3,6 +3,8 @@ import { onSnapshot } from "firebase/firestore";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
+import { readEmulatorSettings } from "./emulatorSettings";
+import { readEmulatorControls } from "./emulatorControls";
 import { setPendingRunMode } from "./gameModes";
 import { stillInstalled, usePlatformOwnership } from "./platforms";
 import {
@@ -91,7 +93,7 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
           if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
           await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training });
         } else {
-          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training });
+          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
         }
         awaitingRun.current = training ? null : { id: command.id, gameId: room.id };
         answer(command.id, "started", training

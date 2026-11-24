@@ -124,15 +124,31 @@ struct EmuladorAbertoPayload {
 /// pelo jogador em "Selecionar pasta do Fightcade", guardada no app, vem antes). Avisa
 /// `emulator://game-launched` com o processo do emulador, que a gravação vigia como na Steam.
 #[tauri::command]
-pub async fn inicializar_jogo_emulador(app: AppHandle, jogo_id: String, roms: Vec<String>, pasta: Option<String>, treino: Option<bool>, janela: Option<bool>) -> Result<(), String> {
+pub async fn inicializar_jogo_emulador(
+    app: AppHandle,
+    jogo_id: String,
+    roms: Vec<String>,
+    pasta: Option<String>,
+    treino: Option<bool>,
+    janela: Option<bool>,
+    motor_video: Option<super::emulador::VideoDoMotor>,
+    motor_controles: Option<Vec<super::controles::ControleMapeado>>,
+) -> Result<(), String> {
     let janela = janela.unwrap_or(false);
     let escolhida = super::emulador::pasta_escolhida(&app);
-    let motor = super::emulador::motor(&app);
+    let treino = treino.unwrap_or(false);
+    // ShmupX Engine: partida valendo ranking abre com as travas do modo ranking; treino, sem elas.
+    let motor = super::emulador::motor(&app)
+        .map(|m| super::emulador::Motor {
+            ranking: !treino,
+            video: motor_video.unwrap_or_default(),
+            controles: motor_controles.unwrap_or_default(),
+            ..m
+        });
     let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
-    let treino = treino.unwrap_or(false);
     let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
     if treino {
         super::treino::acompanhar(app.clone(), pid);

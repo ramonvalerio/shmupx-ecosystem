@@ -101,6 +101,7 @@ pub async fn iniciar_corrida_safe(
         run_id: inicio.run_id,
         token: token.clone(),
         video_path: output_path,
+        jogo_pid,
     });
     drop(guard);
 
@@ -182,6 +183,7 @@ struct AnaliseJob {
     run_id: String,
     token: String,
     video_path: PathBuf,
+    jogo_pid: Option<u32>,
 }
 
 /// O ID token do Firebase vale ~1 h: uma análise longa na fila envia com o token atual da sessão.
@@ -202,6 +204,7 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
         run_id: handle.run_id,
         token: handle.token,
         video_path: handle.video_path,
+        jogo_pid: handle.jogo_pid,
     };
     match backend::encerrar_run(&token_atual(app, &job.token), &job.run_id).await {
         Ok(()) => {}
@@ -236,6 +239,44 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
 /// Espera a vez na fila, analisa o vídeo e envia o resultado. Sem prazo para a análise: o limite
 /// de tempo é da gameplay, já registrado no encerramento.
 async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
+    // Jogo validado pela memória (ShmupX Engine, ex.: Aero Fighters 2): o placar vem da telemetria
+    // do motor, exato, sem analisar o vídeo. Partida que a telemetria mostra não valer (fora do
+    // modo ranking, velocidade alterada) não é enviada nem pode ser analisada de novo pelo vídeo.
+    let memoria = match job.jogo_pid {
+        Some(pid) => crate::steam::telemetria::tomar(pid, std::time::Duration::from_secs(5)).await,
+        None => None,
+    };
+    let pela_memoria = match memoria.as_ref().map(crate::steam::telemetria::resultado) {
+        Some(Ok(Some(resultado))) => Some(resultado),
+        Some(Err(motivo)) => {
+            log::warn!("capture: run {} recusada pela telemetria: {motivo}", job.run_id);
+            emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(format!("a run não vale para o ranking: {motivo}")), None);
+            return;
+        }
+        _ => None,
+    };
+    if let Some(resultado) = pela_memoria {
+        log::info!(
+            "capture: run {} pela memória: placar {}, vidas perdidas {}, nave {:?}, {}",
+            job.run_id,
+            resultado.placar,
+            resultado.vidas_perdidas,
+            resultado.nave,
+            if resultado.game_over { "game over" } else { "encerrada antes do game over" }
+        );
+        match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0).await {
+            Ok(_) => {
+                pendentes::remover(app, &job.run_id);
+                emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "submitted", None, Some(resultado.placar));
+            }
+            Err(error) => {
+                log::warn!("capture: run {} (memória) não enviada: {error}", job.run_id);
+                emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(format!("falha ao enviar resultado: {error}")), None);
+            }
+        }
+        return;
+    }
+
     let fila = app.state::<AnalysisQueue>().0.clone();
     let _vez = fila.lock().await;
     let result = async {
@@ -295,7 +336,7 @@ pub fn reanalisar_run(app: AppHandle, run_id: String) -> Result<(), String> {
         .snapshot()
         .token
         .ok_or("sem sessão: entre com sua conta Google")?;
-    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: run.video_path };
+    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: run.video_path, jogo_pid: None };
     emit_run(&app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
     tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
     Ok(())

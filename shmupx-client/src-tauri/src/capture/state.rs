@@ -17,6 +17,8 @@ pub struct RunHandle {
     pub run_id: String,
     pub token: String,
     pub video_path: PathBuf,
+    /// Processo do jogo: no ShmupX Engine, a telemetria dele decide a run pela memória.
+    pub jogo_pid: Option<u32>,
 }
 
 /// Fila das análises: uma por vez (são pesadas), em ordem de chegada (o `Mutex` do Tokio é

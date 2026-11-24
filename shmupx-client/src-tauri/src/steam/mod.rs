@@ -3,10 +3,12 @@
 
 pub mod biblioteca;
 pub mod commands;
+pub mod controles;
 pub mod detector;
 pub mod emulador;
 pub mod mister;
 pub mod mister_ssh;
+pub mod telemetria;
 pub mod treino;
 pub mod trailer;
 

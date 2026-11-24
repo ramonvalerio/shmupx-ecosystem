@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { liveActive, useLive, useYouTube } from "../data/useLive";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import { readEmulatorSettings } from "../data/emulatorSettings";
+import { readEmulatorControls } from "../data/emulatorControls";
 import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
 import { useDialogFocus } from "./useDialogFocus";
@@ -51,7 +53,7 @@ export function useRankedLive(room: GameRoom) {
     if (!(await ensureInstalled(platform))) return;
     try {
       if (platform === "emulator") {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
         await live.start(room.id, `${room.title} · ShmupX`, prefs.public, 0);
       } else {
         await live.start(room.id, `${room.title} · ShmupX`, prefs.public, room.steamAppId);
@@ -142,13 +144,15 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
  * ou abaixo, as opções da partida — live no YouTube e quem pode assistir.
  * Usado na sala (cabeçalho) e no painel da Coleção (`compact`).
  */
-export default function RankedPanel({ room, uid, launcher, mode, platform, ranked, busy, compact = false }: {
+export default function RankedPanel({ room, uid, launcher, mode, platform, ranked, busy, compact = false, setup }: {
   room: GameRoom;
   uid: string | undefined;
   launcher: ReturnType<typeof useGameLauncher>;
   mode: GameMode;
   platform: PlayOn | null;
   ranked: ReturnType<typeof useRankedLive>;
+  /** Modo de jogo e plataforma logo abaixo da ficha (painel da Coleção). */
+  setup?: ReactNode;
   /** Jogo aberto ou parando: sem Play Ranked e com as opções presas. */
   busy: boolean;
   compact?: boolean;
@@ -212,6 +216,7 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
       <CreditsBadge uid={uid} className="room-credits" spin={coinSpin} onPlay={insertCoin} live={withLive}
         playDisabled={launcher.isLaunching || busy || liveOn}
         playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t("Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
+      {setup}
       {choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} onTraining={playTraining} onRanked={playRanked} onClose={() => setChoosing(false)} />}
       <div className="room-coin-actions">
         {liveHereOn && (

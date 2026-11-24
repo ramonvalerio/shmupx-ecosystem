@@ -2,9 +2,8 @@ import { useI18n } from "../i18n";
 import { useState, type ReactNode } from "react";
 import { PageHeading, type Section } from "./ClientPages";
 import { defaultPreferences, type ClientPreferences } from "./settingsState";
-import ConfigureControllerDialog from "./ConfigureControllerDialog";
-import { readMappings } from "./controllerMappings";
 import ImportGamesDialog from "./ImportGamesDialog";
+import CabinetControlMapper from "./CabinetControlMapper";
 import MisterConnect from "./MisterConnect";
 import ProfileSettings from "./ProfileSettings";
 import StorageSettings from "./StorageSettings";
@@ -14,11 +13,13 @@ import YouTubeNoChannelDialog from "./YouTubeNoChannelDialog";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
+import { EMULATOR_RESOLUTIONS, defaultEmulatorSettings, useEmulatorSettings, type EmulatorResolution } from "../data/emulatorSettings";
 
 const GROUPS = [
   { id: "profile", title: "Perfil", detail: "Avatar, nome, nick e assinatura", icon: "◉" },
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas, plataformas e MiSTer FPGA", icon: "▦" },
   { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
+  { id: "emulator", title: "Emulador", detail: "Janela, scanlines e resolução", icon: "▶" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
   { id: "storage", title: "Armazenamento", detail: "Destino das gravações", icon: "▣" },
   { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●" },
@@ -29,6 +30,23 @@ const GROUPS = [
 function SettingsCard({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
   const { t } = useI18n();
   return <section className="dashboard-panel settings-card"><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
+}
+
+/** Como o ShmupX Emulator abre os jogos de arcade neste PC. Vale para a próxima vez que o jogo abrir. */
+function EmulatorSettingsCard() {
+  const { t } = useI18n();
+  const { settings, update, saved } = useEmulatorSettings();
+  const crt = settings.resolution === "crt15";
+  const resolution = EMULATOR_RESOLUTIONS.find((r) => r.id === settings.resolution) ?? EMULATOR_RESOLUTIONS[0];
+  return <>
+    <SettingsCard title="Vídeo do emulador" detail="Como o ShmupX Emulator abre os jogos de arcade neste computador. Vale a partir do próximo jogo aberto.">
+      <label className="checkbox-field"><input type="checkbox" checked={settings.windowed} onChange={(event) => update({ ...settings, windowed: event.target.checked })} />{t("Abrir em janela")}</label>
+      <label className="checkbox-field"><input type="checkbox" checked={settings.scanlines && !crt} disabled={crt} onChange={(event) => update({ ...settings, scanlines: event.target.checked })} />{t("Scanlines (linhas de TV de tubo)")}</label>
+      <label className="settings-field">{t("Resolução de vídeo")}<select value={settings.resolution} onChange={(event) => update({ ...settings, resolution: event.target.value as EmulatorResolution })}>{EMULATOR_RESOLUTIONS.map((r) => <option key={r.id} value={r.id}>{t(r.label)}</option>)}</select></label>
+      <p className="muted">{t(resolution.detail)}</p>
+    </SettingsCard>
+    <SettingsCard title="Preferências do emulador"><p className="muted" role="status">{saved ? t("As alterações são salvas automaticamente neste computador.") : t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.")}</p><button className="secondary-action" onClick={() => update(defaultEmulatorSettings())}>{t("Restaurar padrão do emulador")}</button></SettingsCard>
+  </>;
 }
 
 /** YouTube do jogador: conectar o canal para transmitir ao vivo (START LIVE na sala). */
@@ -153,20 +171,10 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
 }) {
   const { t } = useI18n();
   const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("profile");
-  const [controllers, setControllers] = useState<{ id: string; standard: boolean }[]>([]);
-  const [controllerMessage, setControllerMessage] = useState("");
-  const [configureController,setConfigureController] = useState(false);
   const [importOpen,setImportOpen] = useState(false);
-  function detectControllers() {
-    try {
-      const devices = navigator.getGamepads ? [...navigator.getGamepads()].filter((pad): pad is Gamepad => pad !== null && pad.connected) : [];
-      setControllers(devices.map((pad) => ({id:pad.id, standard:pad.mapping === "standard" || readMappings().some((mapping)=>mapping.deviceId===pad.id)})));
-      setControllerMessage(devices.length ? "controllers-detected" : "Nenhum controle detectado. Conecte-o e pressione um botão antes de consultar novamente.");
-    } catch { setControllers([]); setControllerMessage("A leitura de controles não está disponível neste ambiente."); }
-  }
+
   return <div className="client-page settings-page">
     {importOpen && <ImportGamesDialog rooms={rooms} onClose={()=>setImportOpen(false)} onViewCollection={()=>onNavigate("collection")} />}
-    {configureController && <ConfigureControllerDialog onClose={()=>{setConfigureController(false);detectControllers();}} />}
     <PageHeading title={t("Configurações")} detail={t("Biblioteca, captura e preferências do cliente.")} />
     <div className="settings-layout">
       <nav className="settings-menu" aria-label={t("Grupos de configurações")}>{GROUPS.map((item) => <button key={item.id} aria-current={group === item.id ? "page" : undefined} onClick={() => setGroup(item.id)}><span aria-hidden="true">{item.icon}</span><span><strong>{t(item.title)}</strong><small>{t(item.detail)}</small></span></button>)}</nav>
@@ -186,7 +194,8 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         </>}
         {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect /></SettingsCard></>}
         {group === "integrations" && <YouTubeCard />}
-        {group === "controller" && <><SettingsCard title={t("Dispositivo de entrada")} detail={t("Consulte os controles que este ambiente disponibiliza ao cliente.")}><button className="secondary-action" onClick={detectControllers}>{t("Detectar controles")}</button><p className="muted" role="status">{controllerMessage === "controllers-detected" ? t("{count} controle(s) detectado(s).",{count:controllers.length}) : t(controllerMessage)}</p>{controllers.length > 0 && <ul className="controller-devices">{controllers.map((device, index) => <li key={`${index}:${device.id}`}>{device.id} · {t(device.standard ? "compatível com Big Picture" : "mapeamento não padrão")}</li>)}</ul>}</SettingsCard><SettingsCard title={t("Comandos do Big Picture")}><dl className="settings-facts"><dt>{t("Navegar")}</dt><dd>{t("Direcional ou analógico esquerdo")}</dd><dt>{t("Confirmar")}</dt><dd>{t("A")}</dd><dt>{t("Voltar / fechar")}</dt><dd>{t("B")}</dd><dt>{t("Teclado")}</dt><dd>{t("Setas, Enter e Esc")}</dd><dt>{t("Alternar Big Picture")}</dt><dd>{t("Alt+Enter")}</dd><dt>{t("Comunicação por voz no desktop")}</dt><dd>{t("Select / View / Back")}</dd></dl><button className="primary-action" onClick={()=>setConfigureController(true)}>{t("Configurar controle")}</button><p className="muted">{t("O perfil personalizado afeta apenas a navegação do Big Picture.")}</p></SettingsCard></>}
+        {group === "emulator" && <EmulatorSettingsCard />}
+        {group === "controller" && <><SettingsCard title="Controles do emulador" detail="Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator."><CabinetControlMapper /></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("Pasta onde os vídeos das runs são gravados.")}><StorageSettings /></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}
         {group === "capture" && <SettingsCard title={t("Fonte de captura")} detail={t("O gravador atual captura a tela inteira do Windows.")}><div className="capture-source-preview" aria-hidden="true"><span>{t("SHMUPX")}</span><span>{t("Captura da tela inteira")}</span></div><dl className="settings-facts"><dt>{t("Origem")}</dt><dd>{t("Tela inteira")}</dd><dt>{t("Início")}</dt><dd>{t("Após autorização da run")}</dd><dt>{t("Encerramento")}</dt><dd>{t("Manual ou pelo limite da ficha")}</dd></dl><p className="muted">{t("A seleção de janela do cliente original ainda não está disponível.")}</p></SettingsCard>}

@@ -5,6 +5,8 @@ import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
+import { readEmulatorSettings } from "../data/emulatorSettings";
+import { readEmulatorControls } from "../data/emulatorControls";
 import { tableRomsFor } from "../data/emulatorRoms";
 import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
@@ -279,7 +281,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
         await watchSteamLaunch(room.steamAppId, retry);
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
       } else {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
       }
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gravar run nem gastar ficha.", { game: room.title }));
     } catch (failure) {

@@ -243,6 +243,51 @@ pub fn guardar_escolhida(app: &AppHandle, pasta: Option<&str>) -> Result<(), Str
 pub struct Motor {
     pub exe: PathBuf,
     pub dados: PathBuf,
+    /// Partida valendo ranking: abre com `-shmupx_ranked` (velocidade original, sem save state,
+    /// menus, cheats ou scripts). No modo treino fica tudo liberado.
+    pub ranking: bool,
+    /// Preferências de vídeo do jogador (Configurações › Emulador).
+    pub video: VideoDoMotor,
+    /// Botões do gabinete mapeados pelo jogador (Configurações › Controle).
+    pub controles: Vec<super::controles::ControleMapeado>,
+}
+
+/// Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Valores ausentes ficam
+/// com o padrão: em janela, com scanlines, na resolução nativa do monitor.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct VideoDoMotor {
+    pub windowed: bool,
+    pub scanlines: bool,
+    /// `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC.
+    pub resolution: String,
+}
+
+impl Default for VideoDoMotor {
+    fn default() -> Self {
+        Self { windowed: true, scanlines: true, resolution: "native".into() }
+    }
+}
+
+/// Cadeia de efeitos (bgfx) das scanlines, publicada junto do motor em `bgfx/chains/`.
+const CADEIA_SCANLINES: &str = "shmupx-scanlines";
+
+/// Argumentos de vídeo do motor para as preferências do jogador. `janela` (gravação que precisa
+/// da janela) força o modo janela. Scanlines só com a cadeia presente; numa TV de tubo, nunca (a
+/// TV já desenha as linhas).
+fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+    args.push(if janela || video.windowed { "-window" } else { "-nowindow" }.into());
+    let crt = video.resolution == "crt15";
+    // O GroovyMAME vem configurado para TV de tubo (generic_15); num monitor comum isso trocaria o
+    // monitor para 640x480. `lcd` mantém a resolução nativa do monitor.
+    if !crt {
+        args.extend(["-monitor".into(), "lcd".into()]);
+    }
+    if video.scanlines && !crt && scanlines_disponiveis {
+        args.extend(["-video".into(), "bgfx".into(), "-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
+    }
+    args
 }
 
 const MOTOR_EXE: &str = "shmupx-engine.exe";
@@ -263,7 +308,7 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     }
     let exe = pastas.into_iter().map(|p| p.join(MOTOR_EXE)).find(|e| e.is_file())?;
     let dados = app.path().app_data_dir().ok()?.join("engine");
-    Some(Motor { exe, dados })
+    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![] })
 }
 
 /// Nome curto de ROM do FBNeo (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
@@ -328,19 +373,63 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
         .arg("-snapshot_directory").arg(motor.dados.join("snap"))
         .arg("-inipath").arg(motor.dados.join("ini"))
         .args(["-plugin", "shmupx", "-skip_gameinfo"]);
-    if janela {
-        comando.arg("-window");
+    if motor.ranking {
+        comando.arg("-shmupx_ranked");
     }
-    if let Some(pasta) = motor.exe.parent() {
-        comando.current_dir(pasta);
+    let pasta_do_motor = motor.exe.parent().map(Path::to_path_buf).unwrap_or_default();
+    let scanlines_disponiveis = pasta_do_motor.join("bgfx").join("chains").join(format!("{CADEIA_SCANLINES}.json")).is_file();
+    if motor.video.scanlines && !scanlines_disponiveis {
+        log::warn!("emulador: scanlines pedidas, mas o ShmupX Engine não tem bgfx/chains/{CADEIA_SCANLINES}.json; abrindo sem");
     }
-    log::info!("emulador: ShmupX Engine {} com {rom}", motor.exe.display());
-    let filho = comando.spawn().map_err(|e| format!("não foi possível abrir o ShmupX Engine: {e}"))?;
+    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis));
+    // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
+    // abre com os controles padrão.
+    match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
+        Ok(args) => {
+            comando.args(args);
+        }
+        Err(e) => log::warn!("emulador: {e}"),
+    }
+    // O motor acha bgfx/, artwork/ e plugins/ relativos à pasta dele.
+    if motor.exe.parent().is_some() {
+        comando.current_dir(&pasta_do_motor);
+    }
+    log::info!("emulador: ShmupX Engine {} com {rom}{}", motor.exe.display(), if motor.ranking { " (ranking)" } else { "" });
+    // A saída padrão traz a telemetria (`SHMUPX {...}`): a run ranked usa o placar da memória.
+    comando.stdout(std::process::Stdio::piped());
+    let mut filho = comando.spawn().map_err(|e| format!("não foi possível abrir o ShmupX Engine: {e}"))?;
+    if let Some(saida) = filho.stdout.take() {
+        super::telemetria::acompanhar(filho.id(), saida);
+    }
     Ok((filho.id(), rom.clone()))
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn video_do_motor_vira_argumentos() {
+        let padrao = VideoDoMotor::default();
+        assert_eq!(
+            argumentos_de_video(&padrao, false, true),
+            ["-window", "-monitor", "lcd", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
+        );
+        // Sem a cadeia no pacote, abre sem scanlines em vez de falhar.
+        assert_eq!(argumentos_de_video(&padrao, false, false), ["-window", "-monitor", "lcd"]);
+        let tela_cheia = VideoDoMotor { windowed: false, scanlines: false, ..padrao.clone() };
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true), ["-nowindow", "-monitor", "lcd"]);
+        // A gravação que precisa da janela vence a tela cheia.
+        assert_eq!(argumentos_de_video(&tela_cheia, true, true)[0], "-window");
+        // TV de tubo: resolução do GroovyMAME (15 kHz) e nada de scanlines por cima.
+        let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao };
+        assert_eq!(argumentos_de_video(&crt, false, true), ["-window"]);
+    }
+
+    #[test]
+    fn video_do_motor_aceita_campos_ausentes() {
+        let v: VideoDoMotor = serde_json::from_str(r#"{"scanlines":false}"#).unwrap();
+        assert_eq!(v, VideoDoMotor { scanlines: false, ..VideoDoMotor::default() });
+    }
+
     use super::*;
 
     /// Monta uma instalação falsa do Fightcade numa pasta temporária.
