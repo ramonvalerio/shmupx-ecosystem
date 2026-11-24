@@ -317,13 +317,22 @@ fn rom_valido(rom: &str) -> bool {
 /// Comando que roda o ShmupX Engine (executável do Windows): direto no Windows; no Linux, pelo
 /// Wine, sem o log do Wine na saída (a telemetria sai por ela) e sem as janelas de instalar o Mono
 /// e o Gecko na primeira vez (o motor não usa .NET nem navegador).
+/// No Windows o motor é um programa de console: sem `CREATE_NO_WINDOW` ele abriria um terminal
+/// preto ao lado do jogo.
 pub(crate) fn comando_exe(exe: &Path) -> std::process::Command {
-    if cfg!(windows) {
-        return std::process::Command::new(exe);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut comando = std::process::Command::new(exe);
+        comando.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        comando
     }
-    let mut comando = std::process::Command::new("wine");
-    comando.arg(exe).env("WINEDEBUG", "-all").env("WINEDLLOVERRIDES", "mscoree,mshtml=");
-    comando
+    #[cfg(not(windows))]
+    {
+        let mut comando = std::process::Command::new("wine");
+        comando.arg(exe).env("WINEDEBUG", "-all").env("WINEDLLOVERRIDES", "mscoree,mshtml=");
+        comando
+    }
 }
 
 /// Erro ao abrir o motor, para o jogador: no Linux, sem o Wine, diz o que instalar.
@@ -393,10 +402,22 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     }
     log::info!("emulador: ShmupX Engine {} com {rom}{}", motor.exe.display(), if motor.ranking { " (ranking)" } else { "" });
     // A saída padrão traz a telemetria (`SHMUPX {...}`): a run ranked usa o placar da memória.
-    comando.stdout(std::process::Stdio::piped());
+    // Os avisos do motor (ROM incompleto etc.) vão para o log do Client, não para um terminal.
+    comando.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
     let mut filho = comando.spawn().map_err(erro_ao_abrir)?;
     if let Some(saida) = filho.stdout.take() {
         super::telemetria::acompanhar(filho.id(), saida);
+    }
+    if let Some(erros) = filho.stderr.take() {
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for linha in std::io::BufReader::new(erros).lines().map_while(Result::ok) {
+                let linha = linha.trim();
+                if !linha.is_empty() {
+                    log::info!("ShmupX Engine: {linha}");
+                }
+            }
+        });
     }
     Ok((filho.id(), rom.clone()))
 }

@@ -176,11 +176,6 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
     if let Some(pasta) = exe.parent() {
         comando.current_dir(pasta);
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        comando.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: o motor fica escondido
-    }
     let mut filho = comando.spawn().map_err(super::emulador::erro_ao_abrir)?;
     let saida = filho.stdout.take();
     *atual = Some(filho);
