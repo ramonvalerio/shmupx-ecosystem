@@ -157,6 +157,13 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ name: "Admin" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ lastSeen: now })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ score: 1 })));
+  // Jogo aberto na conta: id e título juntos, para a lista de jogadores da sala.
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing", playingGameId: "darius-gaiden", playingTitle: "Darius Gaiden" })));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "live", liveVideoId: "dQw4w9WgXcQ", liveViewers: 3, playingGameId: "earthion", playingTitle: "Earthion" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "darius-gaiden" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "x/../y", playingTitle: "X" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "ketsui", playingTitle: "" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "ketsui", playingTitle: "K".repeat(81) })));
   await assertFails(deleteDoc(doc(db("bob"), "rooms/earthion/presence/alice")));
   await assertSucceeds(deleteDoc(doc(alice, "rooms/earthion/presence/alice")));
 });
