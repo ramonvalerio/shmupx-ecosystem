@@ -11,6 +11,7 @@ interface CatalogViewProps {
   error: string | null;
   onReload: () => void;
   onSaved: (game: CatalogGame) => void;
+  onDeleted: (id: string) => void;
 }
 
 type StatusFilter = "all" | "published" | "draft";
@@ -18,7 +19,7 @@ type StatusFilter = "all" | "published" | "draft";
 type Editing = "new" | string | null;
 
 /** Página do catálogo: lista com busca e filtros; criação e edição num painel lateral. */
-export default function CatalogView({ games, loading, error, onReload, onSaved }: CatalogViewProps) {
+export default function CatalogView({ games, loading, error, onReload, onSaved, onDeleted }: CatalogViewProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [editing, setEditing] = useState<Editing>(null);
@@ -51,6 +52,12 @@ export default function CatalogView({ games, loading, error, onReload, onSaved }
     onSaved(game);
     setEditing(null);
     setNotice(`${game.title} ${game.published ? "publicado" : "salvo como rascunho"}.`);
+  }
+
+  function handleDeleted(game: CatalogGame) {
+    onDeleted(game.id);
+    setEditing(null);
+    setNotice(`${game.title} excluído do catálogo.`);
   }
 
   const FILTERS: { id: StatusFilter; label: string }[] = [
@@ -128,7 +135,7 @@ export default function CatalogView({ games, loading, error, onReload, onSaved }
 
       {editing !== null && (
         // `key` remonta o editor ao trocar de jogo: o rascunho e as sugestões começam limpos.
-        <GameEditor key={editing} game={editingGame} onClose={() => setEditing(null)} onSaved={handleSaved} />
+        <GameEditor key={editing} game={editingGame} games={games} onClose={() => setEditing(null)} onSaved={handleSaved} onDeleted={handleDeleted} />
       )}
 
       {notice && (

@@ -31,5 +31,10 @@ export function useAdminCatalog(enabled: boolean) {
     );
   }, []);
 
-  return { games, loading, error, reload, upsert };
+  /** Tira da lista o jogo que o backend acabou de excluir. */
+  const remove = useCallback((id: string) => {
+    setGames((current) => current.filter((game) => game.id !== id));
+  }, []);
+
+  return { games, loading, error, reload, upsert, remove };
 }

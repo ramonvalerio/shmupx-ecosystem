@@ -23,7 +23,7 @@ where
 {
     Router::new()
         .route("/api/admin/games", get(listar_jogos))
-        .route("/api/admin/games/{id}", put(salvar_jogo))
+        .route("/api/admin/games/{id}", post(criar_jogo).put(salvar_jogo).delete(excluir_jogo))
         .route("/api/admin/games/{id}/robotx", get(obter_robotx).put(salvar_robotx))
         .route("/api/admin/releases", get(listar_versoes))
         .route("/api/admin/releases/draft", get(rascunho_aberto))
@@ -55,6 +55,45 @@ async fn listar_jogos(
     Ok(Json(catalogo::listar(&firestore).await?))
 }
 
+/// `POST /api/admin/games/{id}`: cadastra um jogo novo. ID já usado = `409`, nada é sobrescrito.
+async fn criar_jogo(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+    Json(entrada): Json<JogoEntrada>,
+) -> Result<Json<Jogo>, AppError> {
+    exigir_admin(&usuario)?;
+    let jogo = catalogo::criar(&firestore, &id, entrada).await?;
+    println!("catálogo: {} criou o jogo {} (published={})", usuario.uid, jogo.id, jogo.published);
+    registrar_no_rascunho(&firestore, None, &jogo).await;
+    Ok(Json(jogo))
+}
+
+/// `DELETE /api/admin/games/{id}`: tira o jogo do catálogo (some do Client e fecha novas runs).
+/// Runs e rankings já gravados com o ID ficam guardados.
+async fn excluir_jogo(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    exigir_admin(&usuario)?;
+    let jogo = catalogo::excluir(&firestore, &id).await?;
+    println!("catálogo: {} excluiu o jogo {} (published={})", usuario.uid, jogo.id, jogo.published);
+    // Para os jogadores, excluir um jogo publicado é o mesmo que retirá-lo do catálogo.
+    registrar_no_rascunho(&firestore, Some(&jogo), &Jogo { published: false, ..jogo.clone() }).await;
+    Ok(Json(serde_json::json!({ "id": jogo.id })))
+}
+
+/// A alteração entra no rascunho da próxima versão. Falhar aqui não desfaz o catálogo, que já
+/// vale para os jogadores: só fica registrado no log.
+async fn registrar_no_rascunho(firestore: &Firestore, antes: Option<&Jogo>, depois: &Jogo) {
+    for mudanca in catalogo::mudancas_do_jogo(antes, depois) {
+        if let Err(e) = versoes::registrar_mudanca(firestore, mudanca).await {
+            eprintln!("versões: falha ao registrar a mudança do jogo {} no rascunho: {e:?}", depois.id);
+        }
+    }
+}
+
 /// `PUT /api/admin/games/{id}`: cria ou atualiza o jogo. `published: true` o torna visível ao
 /// Client e liberado para runs; `false` o esconde e bloqueia novas runs.
 async fn salvar_jogo(
@@ -67,13 +106,7 @@ async fn salvar_jogo(
     let antes = catalogo::obter(&firestore, &id).await?;
     let jogo = catalogo::salvar(&firestore, &id, entrada).await?;
     println!("catálogo: {} salvou o jogo {} (published={})", usuario.uid, jogo.id, jogo.published);
-    // A alteração entra no rascunho da próxima versão. Falhar aqui não desfaz o catálogo, que já
-    // vale para os jogadores: só fica registrado no log.
-    for mudanca in catalogo::mudancas_do_jogo(antes.as_ref(), &jogo) {
-        if let Err(e) = versoes::registrar_mudanca(&firestore, mudanca).await {
-            eprintln!("versões: falha ao registrar a mudança do jogo {} no rascunho: {e:?}", jogo.id);
-        }
-    }
+    registrar_no_rascunho(&firestore, antes.as_ref(), &jogo).await;
     Ok(Json(jogo))
 }
 

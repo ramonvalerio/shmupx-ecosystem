@@ -19,10 +19,14 @@ export interface CatalogGame {
   modes: string[];
   /** Imagem do card no Client (WebP 16:9 em www.shmupx.com/catalog/covers/). */
   cover_url?: string;
+  /** Data de cadastro (ISO 8601), definida pelo backend. */
+  created_at?: string;
+  /** Última alteração, inclusive no RobotX (ISO 8601), definida pelo backend. */
+  updated_at?: string;
 }
 
 /** Os metadados opcionais substituem os anteriores: o que não for enviado é apagado. */
-export type CatalogGameInput = Omit<CatalogGame, "id">;
+export type CatalogGameInput = Omit<CatalogGame, "id" | "created_at" | "updated_at">;
 
 async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = getLabAuth().currentUser;
@@ -54,7 +58,20 @@ export function listGames(): Promise<CatalogGame[]> {
   return adminRequest<CatalogGame[]>("/api/admin/games");
 }
 
-/** Cria ou atualiza o jogo. `published: true` o libera ao Client; `false` o esconde. */
+/** Cadastra um jogo novo. O backend recusa um ID que já existe, sem sobrescrever o jogo. */
+export function createGame(id: string, input: CatalogGameInput): Promise<CatalogGame> {
+  return adminRequest<CatalogGame>(`/api/admin/games/${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Exclui o jogo do catálogo (some do Client na hora). Runs e rankings já gravados ficam guardados. */
+export async function deleteGame(id: string): Promise<void> {
+  await adminRequest<{ id: string }>(`/api/admin/games/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Atualiza um jogo existente. `published: true` o libera ao Client; `false` o esconde. */
 export function saveGame(id: string, input: CatalogGameInput): Promise<CatalogGame> {
   return adminRequest<CatalogGame>(`/api/admin/games/${encodeURIComponent(id)}`, {
     method: "PUT",

@@ -1,20 +1,24 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { saveGame, type CatalogGame } from "../../lib/backend";
+import { createGame, saveGame, type CatalogGame } from "../../lib/backend";
 import type { GameSuggestion } from "../../lib/ai";
 import Button from "../../components/ui/Button";
 import { Field, TextInput } from "../../components/ui/Field";
-import { IconAlert, IconClose } from "../../components/ui/Icons";
+import { IconAlert, IconClose, IconTrash } from "../../components/ui/Icons";
 import Switch from "../../components/ui/Switch";
 import AiAssist from "./AiAssist";
+import DeleteGameDialog from "./DeleteGameDialog";
 import CoverField from "./CoverField";
 import { RobotxField } from "./RobotxEditor";
-import { MODES, PLAY_ON, playOnOf, slugFromName } from "./options";
+import { MODES, PLAY_ON, formatDateTime, playOnOf, slugFromName } from "./options";
 
 interface GameEditorProps {
   /** Jogo em edição; `null` cria um novo. */
   game: CatalogGame | null;
+  /** Catálogo inteiro, para recusar um ID que já existe antes de ir ao backend. */
+  games: CatalogGame[];
   onClose: () => void;
   onSaved: (game: CatalogGame) => void;
+  onDeleted: (game: CatalogGame) => void;
 }
 
 interface Draft {
@@ -56,6 +60,12 @@ function toDraft(game: CatalogGame | null): Draft {
   };
 }
 
+/** Jogo já cadastrado com o mesmo ID (sem diferenciar maiúsculas), ao criar um novo. */
+function takenBy(draft: Draft, games: CatalogGame[]): CatalogGame | undefined {
+  const id = draft.id.trim().toLowerCase();
+  return id ? games.find((game) => game.id.toLowerCase() === id) : undefined;
+}
+
 /** Valida o rascunho; devolve a mensagem do primeiro problema ou `null`. */
 function problem(draft: Draft): string | null {
   const steamAppId = Number(draft.steamAppId);
@@ -79,7 +89,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Painel lateral de criação/edição de um jogo do catálogo. */
-export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) {
+export default function GameEditor({ game, games, onClose, onSaved, onDeleted }: GameEditorProps) {
   const isNew = game === null;
   const [draft, setDraft] = useState<Draft>(() => toDraft(game));
   /** Num jogo novo, o ID acompanha o título até o admin editá-lo à mão. */
@@ -88,14 +98,17 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
   const [unverifiedSteamId, setUnverifiedSteamId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const duplicate = isNew ? takenBy(draft, games) : undefined;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) onClose();
+      // Com a confirmação de exclusão aberta, o Esc fecha só ela.
+      if (event.key === "Escape" && !saving && !confirmDelete) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  }, [onClose, saving, confirmDelete]);
 
   const patch = (changes: Partial<Draft>) => setDraft((current) => ({ ...current, ...changes }));
 
@@ -134,11 +147,13 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
     event.preventDefault();
     const invalid = problem(draft);
     if (invalid) return setError(invalid);
+    if (duplicate) return setError(`Já existe um jogo com o ID ${duplicate.id} (${duplicate.title}).`);
 
     setSaving(true);
     setError(null);
     try {
-      const saved = await saveGame(draft.id.trim(), {
+      const save = isNew ? createGame : saveGame;
+      const saved = await save(draft.id.trim(), {
         title: draft.title.trim(),
         steam_app_id: Number(draft.steamAppId),
         max_duration_segundos: Math.round(Number(draft.minutes) * 60),
@@ -172,6 +187,11 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
           <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{isNew ? "Novo jogo" : "Editar jogo"}</p>
           <h2 className="mt-0.5 truncate text-base font-semibold text-zinc-100">{draft.title.trim() || "Sem título"}</h2>
           {draft.id && <p className="truncate font-mono text-xs text-zinc-500">{draft.id}</p>}
+          {!isNew && (
+            <p className="mt-1 text-xs text-zinc-500 tabular-nums">
+              Criado em {formatDateTime(game.created_at)} · Atualizado em {formatDateTime(game.updated_at)}
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -190,7 +210,21 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
               <Field label="Título">
                 <TextInput value={draft.title} maxLength={80} autoFocus={isNew} onChange={(e) => setTitle(e.target.value)} placeholder="ex.: Earthion" />
               </Field>
-              <Field label="ID" hint={isNew ? "Nome curto, igual ao do validador. Não pode ser alterado depois." : "O ID não muda depois de criado."}>
+              <Field
+                label="ID"
+                hint={
+                  duplicate ? (
+                    <span className="flex gap-1.5 text-red-300">
+                      <IconAlert className="mt-px flex-shrink-0" />
+                      Já existe um jogo com este ID: {duplicate.title}. Escolha outro.
+                    </span>
+                  ) : isNew ? (
+                    "Nome curto, igual ao do validador. Não pode ser alterado depois."
+                  ) : (
+                    "O ID não muda depois de criado."
+                  )
+                }
+              >
                 <TextInput
                   value={draft.id}
                   disabled={!isNew}
@@ -315,11 +349,25 @@ export default function GameEditor({ game, onClose, onSaved }: GameEditorProps) 
         </div>
 
         <footer className="flex items-center gap-3 border-t border-white/5 bg-[#0e0e11] px-6 py-3">
+          {!isNew && (
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmDelete(true)}
+              disabled={saving}
+              title="Excluir jogo"
+              aria-label="Excluir jogo"
+              className="text-red-300 hover:bg-red-500/10 hover:text-red-200"
+            >
+              <IconTrash />
+            </Button>
+          )}
           <p role={error ? "alert" : undefined} className="min-w-0 flex-1 text-xs text-red-300">{error}</p>
           <Button variant="info" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="success" type="submit" loading={saving}>{isNew ? "Criar jogo" : "Salvar"}</Button>
+          <Button variant="success" type="submit" loading={saving} disabled={Boolean(duplicate)}>{isNew ? "Criar jogo" : "Salvar"}</Button>
         </footer>
       </form>
+
+      {confirmDelete && game && <DeleteGameDialog game={game} onClose={() => setConfirmDelete(false)} onDeleted={() => onDeleted(game)} />}
     </aside>
   );
 }

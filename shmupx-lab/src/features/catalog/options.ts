@@ -53,3 +53,12 @@ export function slugFromName(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
 }
+
+const DATA_HORA = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** Data e hora locais curtas (ex.: 24/11/2026, 14:30); `—` quando o backend não informou. */
+export function formatDateTime(iso: string | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : DATA_HORA.format(date);
+}

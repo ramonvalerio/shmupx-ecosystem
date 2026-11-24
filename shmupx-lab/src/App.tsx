@@ -75,7 +75,7 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
       <AppNav view={view} onChangeView={setView} accountEmail={auth.state.email} onSignOut={auth.signOut} onSwitchEnvironment={onSwitchEnvironment} />
 
       {view === "catalog" ? (
-        <CatalogView games={catalog.games} loading={catalog.loading} error={catalog.error} onReload={catalog.reload} onSaved={catalog.upsert} />
+        <CatalogView games={catalog.games} loading={catalog.loading} error={catalog.error} onReload={catalog.reload} onSaved={catalog.upsert} onDeleted={catalog.remove} />
       ) : view === "releases" ? (
         <ReleasesView
           releases={releases.releases}

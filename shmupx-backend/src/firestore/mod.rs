@@ -133,6 +133,35 @@ impl Firestore {
         Ok(())
     }
 
+    /// Cria o documento só se ele ainda não existir (`currentDocument.exists = false`): duas
+    /// criações com o mesmo caminho não se sobrescrevem; a segunda recebe `409`.
+    pub async fn gravar_novo(&self, caminho: &str, campos: Campos) -> Result<(), AppError> {
+        let escrita = json!({
+            "update": { "name": self.nome(caminho), "fields": campos },
+            "currentDocument": { "exists": false },
+        });
+        let _: Value = self.post(&format!("{}:commit", self.raiz), &json!({ "writes": [escrita] })).await?;
+        Ok(())
+    }
+
+    /// Apaga o documento (as subcoleções, se houver, continuam). Apagar o que não existe não é erro.
+    pub async fn apagar(&self, caminho: &str) -> Result<(), AppError> {
+        let escrita = json!({ "delete": self.nome(caminho) });
+        let _: Value = self.post(&format!("{}:commit", self.raiz), &json!({ "writes": [escrita] })).await?;
+        Ok(())
+    }
+
+    /// Como [`Self::ler_documento`], mas com as datas de criação e da última escrita do documento.
+    pub async fn ler_documento_com_datas(&self, caminho: &str) -> Result<Option<DocumentoComDatas>, AppError> {
+        #[derive(Deserialize)]
+        struct Item {
+            found: Option<DocumentoBruto>,
+        }
+        let itens: Vec<Item> =
+            self.post(&format!("{}:batchGet", self.raiz), &json!({ "documents": [self.nome(caminho)] })).await?;
+        Ok(itens.into_iter().find_map(|item| item.found).map(DocumentoBruto::com_datas))
+    }
+
     /// Lê um documento fora de transação (leitura simples, sem garantia de consistência com
     /// escritas concorrentes). `None` quando não existe.
     pub async fn ler_documento(&self, caminho: &str) -> Result<Option<Campos>, AppError> {
@@ -168,16 +197,15 @@ impl Firestore {
 
     /// Lista os documentos de uma coleção de primeiro nível, como `(id, campos)`.
     pub async fn listar(&self, colecao: &str) -> Result<Vec<(String, Campos)>, AppError> {
-        #[derive(Deserialize)]
-        struct Documento {
-            name: String,
-            #[serde(default)]
-            fields: Campos,
-        }
+        Ok(self.listar_com_datas(colecao).await?.into_iter().map(|d| (d.id, d.campos)).collect())
+    }
+
+    /// Como [`Self::listar`], mas com as datas de criação e da última escrita de cada documento.
+    pub async fn listar_com_datas(&self, colecao: &str) -> Result<Vec<DocumentoComDatas>, AppError> {
         #[derive(Deserialize)]
         struct Pagina {
             #[serde(default)]
-            documents: Vec<Documento>,
+            documents: Vec<DocumentoBruto>,
             #[serde(default, rename = "nextPageToken")]
             proxima: Option<String>,
         }
@@ -200,10 +228,7 @@ impl Firestore {
                 .await
                 .map_err(|e| AppError::internal(format!("falha de rede com o Firestore: {e}")))?;
             let lote: Pagina = Self::corpo(resposta).await?;
-            for documento in lote.documents {
-                let id = documento.name.rsplit('/').next().unwrap_or_default().to_string();
-                itens.push((id, documento.fields));
-            }
+            itens.extend(lote.documents.into_iter().map(DocumentoBruto::com_datas));
             match lote.proxima {
                 Some(token) if itens.len() < LIMITE => pagina = Some(token),
                 _ => break,
@@ -377,6 +402,38 @@ impl Firestore {
 
         *cache = Some((resposta.access_token.clone(), agora + resposta.expires_in));
         Ok(resposta.access_token)
+    }
+}
+
+/// Documento lido com os metadados do Firestore: `criado_em`/`atualizado_em` em RFC 3339, como o
+/// servidor devolve (`createTime`/`updateTime`); qualquer escrita no documento muda o segundo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocumentoComDatas {
+    pub id: String,
+    pub campos: Campos,
+    pub criado_em: Option<String>,
+    pub atualizado_em: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DocumentoBruto {
+    name: String,
+    #[serde(default)]
+    fields: Campos,
+    #[serde(default, rename = "createTime")]
+    criado_em: Option<String>,
+    #[serde(default, rename = "updateTime")]
+    atualizado_em: Option<String>,
+}
+
+impl DocumentoBruto {
+    fn com_datas(self) -> DocumentoComDatas {
+        DocumentoComDatas {
+            id: self.name.rsplit('/').next().unwrap_or_default().to_string(),
+            campos: self.fields,
+            criado_em: self.criado_em,
+            atualizado_em: self.atualizado_em,
+        }
     }
 }
 

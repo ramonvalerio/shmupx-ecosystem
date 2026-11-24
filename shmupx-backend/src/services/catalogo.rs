@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::firestore::valor::{
     booleano, data, inteiro, lista_de_textos, ler_booleano, ler_inteiro, ler_lista_de_textos, ler_texto, texto,
 };
-use crate::firestore::{Campos, Firestore};
+use crate::firestore::{Campos, DocumentoComDatas, Firestore};
 use crate::services::gameplays::id_valido;
 use crate::services::versoes::Mudanca;
 
@@ -64,7 +64,7 @@ pub struct JogoEntrada {
     pub cover_url: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, PartialEq)]
 pub struct Jogo {
     pub id: String,
     pub title: String,
@@ -85,6 +85,12 @@ pub struct Jogo {
     pub modes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    /// Quando o jogo foi cadastrado (RFC 3339, do Firestore). Só na visão do admin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    /// Última alteração do jogo, inclusive no RobotX (RFC 3339, do Firestore).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 /// Texto opcional aparado: vazio vira `None`; acima do limite é erro.
@@ -180,6 +186,30 @@ const MASCARA: [&str; 13] = [
 /// Cria ou atualiza `games/{id}`. Só toca os campos do catálogo, preservando o que outras
 /// partes (ex.: dados do validador, no futuro) gravarem no mesmo documento.
 pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jogo, AppError> {
+    gravar(fs, id, entrada, false).await
+}
+
+/// Cadastra um jogo novo. Recusa (`409`) um ID que já existe, em vez de sobrescrever o jogo.
+pub async fn criar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jogo, AppError> {
+    if let Some(existente) = obter(fs, id).await? {
+        return Err(id_em_uso(id, &existente.title));
+    }
+    gravar(fs, id, entrada, true).await
+}
+
+fn id_em_uso(id: &str, titulo: &str) -> AppError {
+    AppError::conflict(format!("já existe um jogo com o ID {id} ({titulo})"))
+}
+
+/// Remove `games/{id}` (com o RobotX, que fica no mesmo documento). Runs e rankings já gravados
+/// com esse ID continuam onde estão. Devolve o jogo como estava; `404` se não existe.
+pub async fn excluir(fs: &Firestore, id: &str) -> Result<Jogo, AppError> {
+    let jogo = obter(fs, id).await?.ok_or_else(|| AppError::not_found(format!("jogo {id} não existe")))?;
+    fs.apagar(&format!("games/{id}")).await?;
+    Ok(jogo)
+}
+
+async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> Result<Jogo, AppError> {
     let entrada = validar(id, entrada)?;
     let mut campos = Campos::new();
     let mut inserir = |nome: &str, valor| {
@@ -210,8 +240,21 @@ pub async fn salvar(fs: &Firestore, id: &str, entrada: JogoEntrada) -> Result<Jo
     if !entrada.platforms.is_empty() {
         inserir("platforms", lista_de_textos(&entrada.platforms));
     }
-    fs.gravar(&format!("games/{id}"), campos, &MASCARA).await?;
+    let caminho = format!("games/{id}");
+    if novo {
+        // A checagem em `criar` dá a mensagem; esta pega quem criou o mesmo ID entre ela e aqui.
+        fs.gravar_novo(&caminho, campos).await.map_err(|e| match e {
+            AppError::Conflict(_) => id_em_uso(id, &entrada.title),
+            outro => outro,
+        })?;
+    } else {
+        fs.gravar(&caminho, campos, &MASCARA).await?;
+    }
+    // Relê só as datas, que quem define é o Firestore.
+    let datas = fs.ler_documento_com_datas(&caminho).await?;
     Ok(Jogo {
+        created_at: datas.as_ref().and_then(|d| d.criado_em.clone()),
+        updated_at: datas.and_then(|d| d.atualizado_em),
         id: id.to_string(),
         title: entrada.title,
         steam_app_id: entrada.steam_app_id,
@@ -233,7 +276,7 @@ pub async fn obter(fs: &Firestore, id: &str) -> Result<Option<Jogo>, AppError> {
     if !id_valido(id) {
         return Ok(None);
     }
-    Ok(fs.ler_documento(&format!("games/{id}")).await?.map(|campos| jogo_de(id.to_string(), &campos)))
+    Ok(fs.ler_documento_com_datas(&format!("games/{id}")).await?.map(jogo_com_datas))
 }
 
 const NOMES_MODOS: [(&str, &str); 3] = [("highscore", "pontuação"), ("1cc", "1 crédito"), ("caravan", "caravana")];
@@ -288,14 +331,17 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
 
 /// Todos os jogos, publicados ou não (visão do admin), ordenados por id.
 pub async fn listar(fs: &Firestore) -> Result<Vec<Jogo>, AppError> {
-    let mut jogos: Vec<Jogo> = fs
-        .listar("games")
-        .await?
-        .into_iter()
-        .map(|(id, campos)| jogo_de(id, &campos))
-        .collect();
+    let mut jogos: Vec<Jogo> = fs.listar_com_datas("games").await?.into_iter().map(jogo_com_datas).collect();
     jogos.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(jogos)
+}
+
+fn jogo_com_datas(documento: DocumentoComDatas) -> Jogo {
+    Jogo {
+        created_at: documento.criado_em,
+        updated_at: documento.atualizado_em,
+        ..jogo_de(documento.id, &documento.campos)
+    }
 }
 
 fn jogo_de(id: String, campos: &Campos) -> Jogo {
@@ -312,6 +358,8 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         platforms: ler_lista_de_textos(campos, "platforms"),
         modes: ler_lista_de_textos(campos, "modes"),
         cover_url: ler_texto(campos, "coverUrl"),
+        created_at: None,
+        updated_at: None,
         id,
     }
 }
@@ -480,6 +528,37 @@ mod tests {
         // Despublicar fecha novas runs de novo.
         salvar(&fs, &id, JogoEntrada { published: false, ..entrada() }).await.unwrap();
         assert!(gameplays::iniciar(&fs, &uid, &id, &gameplays::Detalhes::default()).await.is_err());
+    }
+
+    /// Criar recusa ID repetido; as datas vêm do Firestore; excluir tira o jogo da listagem.
+    #[tokio::test]
+    #[ignore = "exige o emulador do Firestore"]
+    async fn criar_recusa_id_repetido_e_excluir_remove_no_emulador() {
+        assert!(std::env::var("FIRESTORE_EMULATOR_HOST").is_ok(), "este teste só roda no emulador");
+        // SAFETY: teste isolado com --ignored; nenhuma outra thread lê estas variáveis agora.
+        unsafe { std::env::set_var("FIREBASE_PROJECT_ID", "demo-shmupx") };
+        let fs = Firestore::do_ambiente().unwrap();
+        let id = format!("jogo-{}", Uuid::new_v4());
+
+        let criado = criar(&fs, &id, entrada()).await.unwrap();
+        assert!(criado.created_at.is_some() && criado.updated_at.is_some());
+        let repetido = criar(&fs, &id, JogoEntrada { title: "Outro".into(), ..entrada() }).await;
+        assert!(matches!(repetido, Err(AppError::Conflict(_))));
+        assert_eq!(obter(&fs, &id).await.unwrap().unwrap().title, "Earthion", "o original fica intacto");
+
+        // A precondição do Firestore também barra a criação por cima, sem a checagem prévia.
+        assert!(matches!(gravar(&fs, &id, entrada(), true).await, Err(AppError::Conflict(_))));
+
+        let listado = listar(&fs).await.unwrap().into_iter().find(|j| j.id == id).unwrap();
+        assert_eq!(listado.created_at, criado.created_at);
+
+        let salvo = salvar(&fs, &id, JogoEntrada { title: "Earthion 2".into(), ..entrada() }).await.unwrap();
+        assert_eq!(salvo.created_at, criado.created_at, "editar não muda a data de criação");
+        assert!(salvo.updated_at >= criado.updated_at);
+
+        assert_eq!(excluir(&fs, &id).await.unwrap().title, "Earthion 2");
+        assert!(obter(&fs, &id).await.unwrap().is_none());
+        assert!(matches!(excluir(&fs, &id).await, Err(AppError::NotFound(_))));
     }
 
     /// Metadados gravados voltam na listagem e são apagados quando saem da entrada.
