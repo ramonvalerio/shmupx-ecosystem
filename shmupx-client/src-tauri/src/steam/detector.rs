@@ -66,7 +66,7 @@ pub fn processos_na_pasta(pasta: &std::path::Path) -> Vec<u32> {
         .collect()
 }
 
-/// Processos com este nome de executável (ex.: `fcadefbneo.exe`, o emulador do Fightcade).
+/// Processos com este nome de executável (ex.: `shmupx-engine.exe`, o ShmupX Emulator).
 pub fn processos_por_nome(nome: &str) -> Vec<u32> {
     let mut system = System::new_all();
     system.refresh_processes(ProcessesToUpdate::All, true);

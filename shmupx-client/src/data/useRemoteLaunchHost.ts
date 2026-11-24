@@ -85,7 +85,7 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
         if (!(await stillInstalled(room, command.platform))) {
           answer(command.id, "failed", command.platform === "steam"
             ? `${room.title} não está instalado na Steam do PC.`
-            : `O ROM de ${room.title} não está no Fightcade do PC.`);
+            : `O ROM de ${room.title} não está na pasta de ROMs do PC (ou o ShmupX Emulator não foi encontrado).`);
           return;
         }
         if (!training && command.mode) setPendingRunMode(room.id, command.mode);

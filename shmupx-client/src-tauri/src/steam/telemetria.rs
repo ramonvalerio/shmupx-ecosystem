@@ -129,7 +129,7 @@ pub struct ResultadoMemoria {
 }
 
 /// Decide a run pela telemetria. `Ok(None)`: este jogo/processo não vale pela memória (outro jogo,
-/// Fightcade, motor sem telemetria) e a run segue pelo vídeo. `Err`: a telemetria mostra que a
+/// emulador sem telemetria) e a run segue pelo vídeo. `Err`: a telemetria mostra que a
 /// partida não vale (fora do modo ranking, sem o estado inicial, velocidade alterada).
 pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
     let Some(rom) = t.rom.as_deref() else { return Ok(None) };

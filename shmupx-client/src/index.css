@@ -365,7 +365,7 @@ button:disabled { opacity: .5; cursor: default; }
 .integration-notice { padding: 16px; background: #f2c14e0d; border: 1px solid #f2c14e40; border-radius: 4px; font-size: 12px; line-height: 1.8; }
 .integration-notice strong { color: #f2c14e; font-weight: 600; }
 .integration-notice p { margin: 8px 0 0; }
-/* Pasta do Fightcade (Importar jogos › Emulador): escolher, mostrar e trocar a pasta mapeada. */
+/* Pasta de ROMs (Importar jogos › Emulador): escolher, mostrar e trocar a pasta mapeada. */
 .emulator-folder-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .emulator-folder-row { display: flex; align-items: center; gap: 12px; margin: 14px 0 6px; padding: 10px 12px; background: #57fcff0a; border: 1px solid #57fcff2e; border-radius: 4px; }
 .emulator-folder-path { display: grid; flex: 1; gap: 4px; min-width: 0; }

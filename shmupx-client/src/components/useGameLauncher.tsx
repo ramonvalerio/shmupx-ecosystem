@@ -236,15 +236,15 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   }
 
   /**
-   * Confere se o jogo está instalado (Steam) ou com o ROM no Fightcade (emulador) antes de abrir;
+   * Confere se o jogo está instalado (Steam) ou com o ROM na pasta de ROMs (ShmupX Emulator) antes de abrir;
    * se não, mostra o aviso do que falta. Usado também pela live da sala.
    */
   async function ensureInstalled(platform: PlayOn, retry?: () => void): Promise<boolean> {
     if (platform === "mister") return true;
     const check = await installCheck(room, platform);
     if (check === "ok") return true;
-    logFailure(platform === "steam" ? "steam" : "emulador", `${room.title}: ${check === "no-app" ? (platform === "steam" ? "Steam não encontrada" : "Fightcade não encontrado") : "jogo/ROM não encontrado"}`);
-    setProblem({ kind: platform === "steam" ? (check === "no-app" ? "steam-app-missing" : "steam-missing") : (check === "no-app" ? "fightcade-missing" : "rom-missing"), retry });
+    logFailure(platform === "steam" ? "steam" : "emulador", `${room.title}: ${check === "no-app" ? (platform === "steam" ? "Steam não encontrada" : "ShmupX Emulator não encontrado") : "jogo/ROM não encontrado"}`);
+    setProblem({ kind: platform === "steam" ? (check === "no-app" ? "steam-app-missing" : "steam-missing") : (check === "no-app" ? "emulator-missing" : "rom-missing"), retry });
     return false;
   }
 
@@ -370,7 +370,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
               {PLAY_ON.filter((p) => choosing.platforms.includes(p.id)).map((p) => (
                 <button key={p.id} type="button" role="radio" aria-checked={choosing.platform === p.id} className="import-source-option" onClick={() => setChoosing({ ...choosing, platform: p.id })}>
                   <span className="platform-mark" aria-hidden="true">{p.label[0]}</span>
-                  <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no Fightcade (FBNeo) deste computador" : choosing.kind === "training" ? "Abre no MiSTer como CONVIDADO (sem ficha nem ranking online)" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
+                  <span><strong>{t(p.label)}</strong><small>{t(p.id === "steam" ? "Abre pela Steam deste computador" : p.id === "emulator" ? "Abre no ShmupX Emulator deste computador" : choosing.kind === "training" ? "Abre no MiSTer como CONVIDADO (sem ficha nem ranking online)" : "Abre no MiSTer pela rede, já com o seu jogador")}</small></span>
                   <span className={`import-availability ${playable.owns(room, p.id) ? "is-available" : ""}`}>{t(playable.owns(room, p.id) ? "Na sua biblioteca" : "Não importado")}</span>
                 </button>
               ))}

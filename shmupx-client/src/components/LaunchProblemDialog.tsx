@@ -14,7 +14,7 @@ export type LaunchProblemKind =
   | "steam-app-missing"
   | "steam-timeout"
   | "rom-missing"
-  | "fightcade-missing"
+  | "emulator-missing"
   | "launch-failed";
 
 type Translate = ReturnType<typeof useI18n>["t"];
@@ -101,19 +101,19 @@ function content(kind: LaunchProblemKind, game: string, t: Translate): { title: 
       };
     case "rom-missing":
       return {
-        title: t("{game} não foi encontrado no Fightcade", { game }),
-        text: t("Para jogar no emulador, o jogo precisa estar baixado no Fightcade deste computador."),
-        steps: [t("Abra o Fightcade e procure {game}.", { game }), t("Baixe o jogo e espere terminar."), t("Volte aqui e tente de novo.")],
-      };
-    case "fightcade-missing":
-      return {
-        title: t("Fightcade não encontrado"),
-        text: t("Para jogar no emulador, o Fightcade precisa estar instalado neste computador."),
+        title: t("{game} não está nos seus ROMs", { game }),
+        text: t("Para jogar no ShmupX Emulator, o ROM do jogo precisa estar na pasta de ROMs deste computador."),
         steps: [
-          t("Instale o Fightcade (fightcade.com) e baixe {game} por ele.", { game }),
-          t("Se o Fightcade já está instalado em outra pasta, clique em \"Selecionar pasta do Fightcade\" e indique onde ele está."),
-          t("Depois, volte aqui e tente de novo."),
+          t("Coloque o ROM de {game} (arquivo .zip) na sua pasta de ROMs.", { game }),
+          t("Se ele está em outra pasta, clique em “Selecionar pasta de ROMs” e indique onde."),
+          t("Volte aqui e tente de novo."),
         ],
+      };
+    case "emulator-missing":
+      return {
+        title: t("ShmupX Emulator não encontrado"),
+        text: t("O ShmupX Emulator vem com o ShmupX Client, mas não foi encontrado nesta instalação."),
+        steps: [t("Reinstale o ShmupX Client."), t("Depois, volte aqui e tente de novo.")],
       };
     case "launch-failed":
       return {
@@ -129,17 +129,17 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
   const { t } = useI18n();
   const ref = useDialogFocus(true, onClose);
   const { title, text, steps } = content(kind, game, t);
-  // Fightcade fora das pastas de costume: o jogador indica a pasta aqui mesmo e tenta de novo.
+  // ROMs fora das pastas de costume: o jogador indica a pasta aqui mesmo e tenta de novo.
   const [picking, setPicking] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   async function pickFolder() {
     setPicking(true);
     setFolderError(null);
     try {
-      const result = await chooseEmulatorFolder(t("Pasta do Fightcade"));
+      const result = await chooseEmulatorFolder(t("Pasta de ROMs"));
       if (!result) return;
-      if (!result.found || result.emulador === false) {
-        setFolderError(t("Achamos os ROMs, mas não o emulador do Fightcade (fcadefbneo.exe). Para abrir os jogos, selecione a pasta onde o Fightcade foi instalado."));
+      if (!result.found) {
+        setFolderError(t("Não encontramos ROMs neste computador."));
         return;
       }
       onClose();
@@ -160,8 +160,8 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
           </div>
         </header>
         {steps.length > 0 && <ol className="launch-problem-steps">{steps.map((step) => <li key={step}>{step}</li>)}</ol>}
-        {kind === "fightcade-missing" && <div className="launch-problem-folder">
-          <button type="button" className="secondary-action" disabled={picking} onClick={() => void pickFolder()}>{t(picking ? "Abrindo…" : "Selecionar pasta do Fightcade")}</button>
+        {kind === "rom-missing" && <div className="launch-problem-folder">
+          <button type="button" className="secondary-action" disabled={picking} onClick={() => void pickFolder()}>{t(picking ? "Abrindo…" : "Selecionar pasta de ROMs")}</button>
           {folderError && <p className="mode-error-inline" role="alert">{folderError}</p>}
         </div>}
         <footer>

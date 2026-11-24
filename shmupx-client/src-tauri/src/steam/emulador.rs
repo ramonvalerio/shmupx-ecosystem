@@ -1,7 +1,7 @@
-//! Biblioteca de emulador (port do `FightcadeGameLibraryProvider` do Client antigo): acha a
-//! instalação do Fightcade (FBNeo, `emulator/fbneo/fcadefbneo.exe`) e lista os ROMs `.zip` que o
-//! jogador tem. "Ter o jogo" no emulador = ter o ROM; quem cruza ROM com o catálogo é a interface.
-//! Só lê arquivos deste PC; nada é enviado.
+//! Biblioteca do emulador: a pasta de ROMs (`.zip`) do jogador. Os jogos abrem no ShmupX Emulator
+//! (ShmupX Engine, que vem com o Client); "ter o jogo" = ter o ROM, e quem cruza ROM com o catálogo
+//! é a interface. A busca automática também olha as pastas de ROMs de instalações antigas do
+//! Fightcade, onde muitos jogadores já guardam os ROMs. Só lê arquivos deste PC; nada é enviado.
 
 use std::path::{Path, PathBuf};
 
@@ -11,18 +11,17 @@ use tauri::{AppHandle, Manager};
 #[derive(Debug, Serialize)]
 pub struct BibliotecaEmulador {
     pub found: bool,
-    /// Pasta do Fightcade encontrada (para mostrar ao jogador): a raiz da instalação ou, sem o
-    /// emulador, a pasta de ROMs escolhida.
+    /// Pasta dos ROMs encontrada (para mostrar ao jogador).
     pub root: Option<String>,
     /// Nomes curtos dos ROMs (`ket`, `sonicwi2`…), sem `.zip`, em minúsculas e sem repetição.
     pub roms: Vec<String>,
-    /// A pasta usada veio da escolha do jogador ("Selecionar pasta do Fightcade"), não da busca automática.
+    /// A pasta usada veio da escolha do jogador ("Selecionar pasta de ROMs"), não da busca automática.
     pub manual: bool,
     /// Pasta escolhida pelo jogador e guardada, se houver (mesmo que não esteja disponível agora).
     pub pasta_escolhida: Option<String>,
-    /// Havia uma pasta escolhida, mas ela não tem mais o Fightcade (disco removido?): busca automática.
+    /// Havia uma pasta escolhida, mas ela não tem mais ROMs (disco removido?): busca automática.
     pub indisponivel: bool,
-    /// Achou o emulador (`fcadefbneo.exe`), então dá para abrir jogos; sem ele, só a pasta de ROMs.
+    /// O ShmupX Emulator está nesta instalação do Client, então dá para abrir os jogos.
     pub emulador: bool,
 }
 
@@ -38,7 +37,7 @@ fn executavel(raiz: &Path) -> PathBuf {
     EXECUTAVEL.iter().fold(raiz.to_path_buf(), |p, parte| p.join(parte))
 }
 
-/// Pastas onde o Fightcade costuma ser instalado (as do Client antigo, mais a raiz de cada disco).
+/// Pastas de costume de instalações antigas do Fightcade (com os ROMs do jogador), mais a raiz de cada disco.
 fn candidatas() -> Vec<PathBuf> {
     let mut bases: Vec<PathBuf> = ["USERPROFILE", "LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"]
         .iter()
@@ -84,10 +83,9 @@ fn tem_roms(pasta: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Entende a pasta que o jogador escolheu: a raiz do Fightcade, a `emulator`, a `fbneo`, uma pasta
-/// de ROMs (`emulator/fbneo/ROMs`, `ROMs/FBNeo ROMs` ou qualquer outra com `.zip`), o próprio
-/// `fcadefbneo.exe` ou a pasta que contém a `Fightcade`. Erro (em português, para o jogador) se
-/// ela não parece do Fightcade.
+/// Entende a pasta que o jogador escolheu: qualquer pasta com ROMs (`.zip`) ou uma instalação antiga
+/// do Fightcade (a raiz, `emulator`, `fbneo`, as pastas de ROMs dela ou a pasta que a contém), de
+/// onde os ROMs são lidos. Erro (em português, para o jogador) se não houver ROMs.
 fn resolver_escolhida(caminho: &Path) -> Result<Instalacao, String> {
     let caminho = if caminho.is_file() { caminho.parent().unwrap_or(caminho) } else { caminho };
     if !caminho.is_dir() {
@@ -103,15 +101,11 @@ fn resolver_escolhida(caminho: &Path) -> Result<Instalacao, String> {
     if let Some(raiz) = ["Fightcade", "Fightcade2"].iter().map(|n| caminho.join(n)).find(|c| executavel(c).is_file()) {
         return Ok(Instalacao { raiz: Some(raiz), roms: None });
     }
-    // Só uma pasta de ROMs (sem o emulador por perto): dá para ler os jogos; para abrir, a busca
-    // automática ainda tenta achar o emulador.
+    // Qualquer pasta com ROMs (`.zip`).
     if tem_roms(caminho) {
         return Ok(Instalacao { raiz: None, roms: Some(caminho.to_path_buf()) });
     }
-    Err(format!(
-        "Essa pasta não parece ser do Fightcade: não achamos o emulador (emulator\\fbneo\\fcadefbneo.exe) nem ROMs (.zip) em {}. Escolha a pasta onde o Fightcade foi instalado (ex.: C:\\Fightcade) ou a pasta de ROMs dele.",
-        caminho.display()
-    ))
+    Err(format!("Não achamos ROMs (arquivos .zip) em {}. Escolha a pasta onde estão os ROMs dos seus jogos.", caminho.display()))
 }
 
 fn preenchido(caminho: Option<&str>) -> Option<&str> {
@@ -163,12 +157,15 @@ fn pastas_de_roms(inst: &Instalacao) -> Vec<PathBuf> {
     pastas
 }
 
-/// Lê os ROMs. `escolhida`: a pasta guardada pelo jogador; `informada`: a que a interface conhece.
-pub fn ler(escolhida: Option<&str>, informada: Option<&str>) -> BibliotecaEmulador {
+/// Lê os ROMs. `escolhida`: a pasta guardada pelo jogador; `informada`: a que a interface conhece;
+/// `emulador`: o ShmupX Emulator está nesta instalação (ver [`motor`]).
+pub fn ler(escolhida: Option<&str>, informada: Option<&str>, emulador: bool) -> BibliotecaEmulador {
     let Resolvida { inst, manual, indisponivel } = resolver(escolhida, informada);
     let pasta_escolhida = preenchido(escolhida).map(str::to_string);
-    let Some(root) = inst.raiz.clone().or_else(|| inst.roms.clone()) else {
-        return BibliotecaEmulador { pasta_escolhida, indisponivel, ..BibliotecaEmulador::nao_encontrada() };
+    // Para o jogador: a pasta de ROMs (a escolhida, ou a primeira com ROMs da instalação achada).
+    let root = inst.roms.clone().or_else(|| pastas_de_roms(&inst).into_iter().find(|p| tem_roms(p))).or_else(|| inst.raiz.clone());
+    let Some(root) = root else {
+        return BibliotecaEmulador { pasta_escolhida, indisponivel, emulador, ..BibliotecaEmulador::nao_encontrada() };
     };
     let mut roms: Vec<String> = Vec::new();
     for pasta in pastas_de_roms(&inst) {
@@ -190,19 +187,19 @@ pub fn ler(escolhida: Option<&str>, informada: Option<&str>) -> BibliotecaEmulad
         manual,
         pasta_escolhida,
         indisponivel,
-        emulador: inst.raiz.is_some(),
+        emulador,
     }
 }
 
-/// Confere a pasta escolhida pelo jogador e devolve o caminho a guardar (a raiz do Fightcade ou
-/// a pasta de ROMs), ou o motivo de ela não servir.
+/// Confere a pasta escolhida pelo jogador e devolve o caminho a guardar (a pasta de ROMs, ou a da
+/// instalação antiga que tem os ROMs), ou o motivo de ela não servir.
 pub fn validar_escolhida(caminho: &str) -> Result<String, String> {
     let caminho = preenchido(Some(caminho)).ok_or_else(|| "Escolha uma pasta.".to_string())?;
     let inst = resolver_escolhida(Path::new(caminho))?;
     Ok(inst.para_guardar().unwrap_or_else(|| PathBuf::from(caminho)).to_string_lossy().into_owned())
 }
 
-// Escolha guardada em `<pasta de dados>/fightcade.json` (como a pasta das gravações).
+// Escolha guardada em `<pasta de dados>/fightcade.json` (nome antigo, mantido para não perder a escolha).
 
 #[derive(Serialize, Deserialize, Default)]
 struct Config {
@@ -213,7 +210,7 @@ fn arquivo(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| format!("não foi possível resolver a pasta de dados do app: {e}"))?.join("fightcade.json"))
 }
 
-/// Pasta do Fightcade escolhida pelo jogador, se houver.
+/// Pasta de ROMs escolhida pelo jogador, se houver.
 pub fn pasta_escolhida(app: &AppHandle) -> Option<String> {
     let config: Config = arquivo(app).ok().and_then(|a| std::fs::read(a).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     config.pasta.filter(|p| !p.trim().is_empty())
@@ -225,13 +222,13 @@ pub fn guardar_escolhida(app: &AppHandle, pasta: Option<&str>) -> Result<(), Str
     match pasta {
         Some(pasta) => {
             if let Some(dir) = arquivo.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| format!("não foi possível guardar a pasta do Fightcade: {e}"))?;
+                std::fs::create_dir_all(dir).map_err(|e| format!("não foi possível guardar a pasta de ROMs: {e}"))?;
             }
             let json = serde_json::to_vec_pretty(&Config { pasta: Some(pasta.to_string()) }).map_err(|e| e.to_string())?;
-            std::fs::write(&arquivo, json).map_err(|e| format!("não foi possível guardar a pasta do Fightcade: {e}"))
+            std::fs::write(&arquivo, json).map_err(|e| format!("não foi possível guardar a pasta de ROMs: {e}"))
         }
         None => match std::fs::remove_file(&arquivo) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("não foi possível esquecer a pasta do Fightcade: {e}")),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("não foi possível esquecer a pasta de ROMs: {e}")),
             _ => Ok(()),
         },
     }
@@ -294,7 +291,7 @@ const MOTOR_EXE: &str = "shmupx-engine.exe";
 
 /// Acha o ShmupX Engine: junto do app (`engine/` nos recursos do instalador), na pasta de
 /// `SHMUPX_ENGINE_DIR` ou, em desenvolvimento, no pacote de teste do repositório `shmupx-engine`
-/// (`shmupx-engine/dist/teste`, ao lado do `shmupx-ecosystem`). Sem ele, o jogo abre no Fightcade.
+/// (`shmupx-engine/dist/teste`, ao lado do `shmupx-ecosystem`). Sem ele, os jogos de emulador não abrem.
 pub fn motor(app: &AppHandle) -> Option<Motor> {
     let mut pastas: Vec<PathBuf> = Vec::new();
     if let Ok(recursos) = app.path().resource_dir() {
@@ -311,45 +308,25 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![] })
 }
 
-/// Nome curto de ROM do FBNeo (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
+/// Nome curto de ROM (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
 /// letras minúsculas, dígitos e `_`.
 fn rom_valido(rom: &str) -> bool {
     !rom.is_empty() && rom.len() <= 32 && rom.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
-/// Abre o jogo com o primeiro ROM da lista que o jogador tem: no ShmupX Engine, se houver
-/// (`motor`), senão no FBNeo do Fightcade (`fcadefbneo.exe <rom>`, a partir da pasta do emulador,
-/// como no Client antigo). Em tela cheia; com `janela`, em janela. Devolve o PID e o ROM aberto.
+/// O ShmupX Emulator não veio nesta instalação (para o jogador).
+pub const SEM_EMULADOR: &str = "o ShmupX Emulator não foi encontrado nesta instalação: reinstale o ShmupX Client";
+
+/// Abre o jogo no ShmupX Emulator com o primeiro ROM da lista que o jogador tem. Em tela cheia;
+/// com `janela`, em janela. Devolve o PID e o ROM aberto.
 pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, roms: &[String], janela: bool, motor: Option<&Motor>) -> Result<(u32, String), String> {
     let roms: Vec<String> = roms.iter().map(|r| r.trim().to_lowercase()).filter(|r| rom_valido(r)).collect();
     if roms.is_empty() {
         return Err("o Client ainda não sabe abrir este jogo no emulador".into());
     }
+    let motor = motor.ok_or(SEM_EMULADOR)?;
     let Resolvida { inst, .. } = resolver(escolhida, informada);
-    if let Some(motor) = motor {
-        return abrir_no_motor(motor, &pastas_de_roms(&inst), &roms, janela);
-    }
-    let Some(raiz) = inst.raiz.clone() else {
-        if inst.roms.is_some() {
-            return Err("achamos a pasta de ROMs escolhida, mas não o emulador do Fightcade (fcadefbneo.exe): selecione a pasta onde o Fightcade foi instalado em Importar jogos › Emulador".into());
-        }
-        return Err("Fightcade não encontrado neste computador: instale o Fightcade ou selecione a pasta dele em Importar jogos › Emulador".into());
-    };
-    let pastas = pastas_de_roms(&inst);
-    let Some(rom) = roms.iter().find(|rom| pastas.iter().any(|p| p.join(format!("{rom}.zip")).is_file())) else {
-        return Err(format!("o ROM deste jogo ({}) não está no Fightcade: baixe-o pelo Fightcade e tente de novo", roms.join(" ou ")));
-    };
-    let exe = executavel(&raiz);
-    let mut comando = std::process::Command::new(&exe);
-    comando.arg(rom);
-    if janela {
-        comando.arg("-w");
-    }
-    if let Some(pasta) = exe.parent() {
-        comando.current_dir(pasta);
-    }
-    let filho = comando.spawn().map_err(|e| format!("não foi possível abrir o emulador: {e}"))?;
-    Ok((filho.id(), rom.clone()))
+    abrir_no_motor(motor, &pastas_de_roms(&inst), &roms, janela)
 }
 
 /// Abre no ShmupX Engine: `shmupx-engine <rom> -rompath <pastas>` com o plugin de telemetria. Os
@@ -480,18 +457,19 @@ mod tests {
         std::fs::create_dir_all(&roms).unwrap();
         std::fs::write(roms.join("sonicwi2.zip"), b"").unwrap();
         assert_eq!(resolver_escolhida(&roms), Ok(Instalacao { raiz: None, roms: Some(roms.clone()) }));
-        let lida = ler(Some(&roms.to_string_lossy()), None);
-        assert!(lida.found && lida.manual && !lida.indisponivel);
+        let lida = ler(Some(&roms.to_string_lossy()), None, true);
+        assert!(lida.found && lida.manual && !lida.indisponivel && lida.emulador);
+        assert_eq!(lida.root.as_deref(), Some(&*roms.to_string_lossy()));
         assert!(lida.roms.contains(&"sonicwi2".to_string()));
         let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]
-    fn pasta_sem_fightcade_da_erro_claro() {
+    fn pasta_sem_roms_da_erro_claro() {
         let base = std::env::temp_dir().join(format!("shmupx-fc-teste-{}-vazia", std::process::id()));
         std::fs::create_dir_all(&base).unwrap();
         let erro = resolver_escolhida(&base).unwrap_err();
-        assert!(erro.contains("não parece ser do Fightcade"), "{erro}");
+        assert!(erro.contains("Não achamos ROMs"), "{erro}");
         let _ = std::fs::remove_dir_all(base);
     }
 
@@ -499,8 +477,8 @@ mod tests {
     fn escolhida_que_sumiu_volta_a_busca_automatica() {
         let base = fightcade_falso("informada");
         let raiz = base.join("Fightcade");
-        let lida = ler(Some("C:\\pasta-que-nao-existe"), Some(&raiz.to_string_lossy()));
-        assert!(lida.indisponivel && !lida.manual && lida.found && lida.emulador);
+        let lida = ler(Some("C:\\pasta-que-nao-existe"), Some(&raiz.to_string_lossy()), false);
+        assert!(lida.indisponivel && !lida.manual && lida.found && !lida.emulador);
         assert!(lida.roms.contains(&"dariusg".to_string()) && lida.roms.contains(&"ket".to_string()));
         let _ = std::fs::remove_dir_all(base);
     }
@@ -513,13 +491,15 @@ mod tests {
         assert!(!rom_valido("../x"));
         assert!(!rom_valido("ket -w"));
         assert!(abrir(None, None, &["../../x".into()], false, None).is_err());
+        // Sem o ShmupX Emulator, nada abre (não há outro emulador).
+        assert_eq!(abrir(None, None, &["sonicwi2".into()], false, None), Err(SEM_EMULADOR.to_string()));
     }
 
-    /// Lê o Fightcade deste PC: `cargo test -- --ignored fightcade_deste_pc --nocapture`.
+    /// Lê os ROMs deste PC: `cargo test -- --ignored roms_deste_pc --nocapture`.
     #[test]
-    #[ignore = "depende do Fightcade instalado"]
-    fn fightcade_deste_pc() {
-        let b = ler(None, None);
+    #[ignore = "depende dos ROMs deste PC"]
+    fn roms_deste_pc() {
+        let b = ler(None, None, true);
         println!("found={} root={:?} roms={} {:?}", b.found, b.root, b.roms.len(), b.roms.iter().take(12).collect::<Vec<_>>());
     }
 }

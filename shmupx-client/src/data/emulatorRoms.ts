@@ -1,7 +1,7 @@
 import type { GameRoom } from "../types/room";
 
 /**
- * ROMs do FBNeo (Fightcade) de cada jogo do catálogo. O ROM é ligado ao jogo pelo nome (id ou
+ * ROMs de cada jogo do catálogo (nomes curtos do MAME/FBNeo). O ROM é ligado ao jogo pelo nome (id ou
  * título normalizado) com esta tabela, a mesma do Client antigo; sem entrada na tabela, vale o
  * título sem separadores (`R-Type` → `rtype`), o nome curto que o FBNeo usa em muitos jogos.
  */

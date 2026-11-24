@@ -72,11 +72,11 @@ function YouTubeCard() {
   </SettingsCard>;
 }
 
-/** Uma biblioteca conectada (Steam, Fightcade, Local): situação, contagem e ações. */
+/** Uma biblioteca conectada (Steam, ROMs do emulador, Local): situação, contagem e ações. */
 function LibraryRow({ icon, name, connected, soon, games, installed, installedLabel, syncedAt, folder, busy, onConnect, onSync, onDisconnect, onChooseFolder }: {
   icon: ReactNode; name: string; connected: boolean; soon?: boolean; games?: number; installed?: number; installedLabel?: string; syncedAt?: number; folder?: string; busy?: boolean;
   onConnect?: () => void; onSync?: () => void; onDisconnect?: () => void;
-  /** Escolher a pasta da biblioteca à mão (ex.: Fightcade fora das pastas de costume). */
+  /** Escolher a pasta da biblioteca à mão (ex.: ROMs fora das pastas de costume). */
   onChooseFolder?: () => void;
 }) {
   const { t, locale } = useI18n();
@@ -118,19 +118,19 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
     setError(null);
     try {
       const result = await emulator.refresh();
-      if (!result.found) setError(t("Não encontramos o Fightcade neste computador. Se ele está instalado em outra pasta, clique em \"Selecionar pasta\" e indique onde."));
+      if (!result.found) setError(t("Não encontramos ROMs neste computador. Se eles estão em outra pasta, clique em “Selecionar pasta” e indique onde."));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setEmuBusy(false);
     }
   }
-  /** Pasta do Fightcade escolhida à mão: guarda no app e conecta (ou atualiza) a biblioteca. */
+  /** Pasta de ROMs escolhida à mão: guarda no app e conecta (ou atualiza) a biblioteca. */
   async function chooseEmulatorFolder() {
     setEmuBusy(true);
     setError(null);
     try {
-      const result = await emulator.chooseFolder(t("Pasta do Fightcade"));
+      const result = await emulator.chooseFolder(t("Pasta de ROMs"));
       if (result?.found) saveEmulatorLibrary({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
     } catch (e) {
       setError(t(e instanceof Error ? e.message : String(e)));

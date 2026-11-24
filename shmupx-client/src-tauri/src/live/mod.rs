@@ -225,16 +225,16 @@ pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: S
     }
 }
 
-/// PIDs do jogo da sala: pela pasta de instalação da Steam ou, sem Steam, o emulador do Fightcade.
+/// PIDs do jogo da sala: pela pasta de instalação da Steam ou, sem Steam, o ShmupX Emulator.
 fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
     match steam_app_id.filter(|id| *id > 0) {
         Some(app_id) => crate::steam::biblioteca::pasta_do_jogo(app_id).map(|p| crate::steam::detector::processos_na_pasta(&p)).unwrap_or_default(),
-        None => crate::steam::detector::processos_por_nome("fcadefbneo.exe"),
+        None => crate::steam::detector::processos_por_nome("shmupx-engine.exe"),
     }
 }
 
 /// Janela do jogo: a que já está aberta ou espera ela aparecer. Na Steam, abre o jogo (até 90 s);
-/// no emulador, a interface acabou de abrir o FBNeo e a janela leva uns segundos (até 60 s), como
+/// no emulador, a interface acabou de abrir o ShmupX Emulator e a janela leva uns segundos (até 60 s), como
 /// o `WaitingForGame` do Client antigo.
 async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_app_id: Option<u32>) -> Result<janela::Window, String> {
     let procurar = move || {
@@ -261,11 +261,11 @@ async fn achar_janela(app: &AppHandle, live: &LiveState, base: &Estado, steam_ap
             tokio::time::sleep(Duration::from_secs(2)).await;
             return Ok(tauri::async_runtime::spawn_blocking(procurar).await.ok().flatten().unwrap_or(janela));
         }
-        // Emulador que nem chegou a abrir (ROM ruim, FBNeo fechado): não espera o prazo todo.
+        // Emulador que nem chegou a abrir (ROM ruim, emulador fechado): não espera o prazo todo.
         if steam_app_id.filter(|id| *id > 0).is_none() && inicio.elapsed() > Duration::from_secs(15) {
             let vivo = tauri::async_runtime::spawn_blocking(move || !pids_do_jogo(None).is_empty()).await.unwrap_or(false);
             if !vivo {
-                return Err("o emulador não abriu o jogo; confira o ROM no Fightcade e tente de novo".to_string());
+                return Err("o ShmupX Emulator não abriu o jogo; confira o ROM na sua pasta de ROMs e tente de novo".to_string());
             }
         }
     }

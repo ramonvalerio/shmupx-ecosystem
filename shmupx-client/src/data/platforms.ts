@@ -51,8 +51,8 @@ export function usePlatformOwnership() {
 }
 
 /**
- * Confere, logo antes de iniciar, se o jogo continua instalado neste PC (Steam) ou com o ROM no
- * Fightcade (emulador). Atualiza a biblioteca importada com o que achou: um jogo desinstalado
+ * Confere, logo antes de iniciar, se o jogo continua instalado neste PC (Steam) ou com o ROM na
+ * pasta de ROMs (ShmupX Emulator). Atualiza a biblioteca importada com o que achou: um jogo desinstalado
  * volta ao preto e branco na coleção. O MiSTer é outro aparelho: não é conferido aqui.
  */
 export async function stillInstalled(room: GameRoom, platform: PlayOn): Promise<boolean> {
@@ -60,8 +60,8 @@ export async function stillInstalled(room: GameRoom, platform: PlayOn): Promise<
 }
 
 /**
- * Como `stillInstalled`, dizendo o que falta: `no-app` = a Steam ou o Fightcade não estão neste PC;
- * `missing` = o jogo (ou o ROM) não está neles.
+ * Como `stillInstalled`, dizendo o que falta: `no-app` = a Steam ou o ShmupX Emulator não estão neste
+ * PC; `missing` = o jogo (ou o ROM) não está neles.
  */
 export async function installCheck(room: GameRoom, platform: PlayOn): Promise<"ok" | "missing" | "no-app"> {
   if (platform === "steam") {
@@ -75,8 +75,9 @@ export async function installCheck(room: GameRoom, platform: PlayOn): Promise<"o
   if (platform === "emulator") {
     const current = readEmulatorLibrary();
     const result = await scanEmulator(current?.root || undefined);
-    // Sem o emulador (só a pasta de ROMs escolhida), o jogo não abre: é como não ter o Fightcade.
-    if (!result.found || result.emulador === false) return "no-app";
+    // Sem o ShmupX Emulator nesta instalação, nenhum jogo de emulador abre.
+    if (result.emulador === false) return "no-app";
+    if (!result.found) return "missing";
     if (current) saveEmulatorLibrary({ root: result.root ?? current.root, roms: result.roms, importedAt: Date.now() });
     return romsFor(room).some((rom) => result.roms.includes(rom)) ? "ok" : "missing";
   }
