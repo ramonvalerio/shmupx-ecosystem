@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 
 /** Controles do painel do gabinete que o jogador mapeia (Configurações › Controle). Mesmos ids do Rust (`steam/controles.rs`). */
 export type ControlId = "up" | "down" | "left" | "right" | "button1" | "button2" | "button3" | "button4" | "start" | "coin";
@@ -91,12 +91,22 @@ export function describeInput(item: MappedControl, t: (text: string, values?: Re
   return item.deviceName ? `${item.deviceName} · ${what}` : what;
 }
 
+/** Mapeamento atual, um só no Client: o gabinete da Coleção vê na hora o que a tela de controles grava. */
+let currentMapping: ControlMapping | null = null;
+const mappingListeners = new Set<() => void>();
+const mappingSnapshot = () => (currentMapping ??= readControlMapping());
+const subscribeMapping = (listener: () => void) => {
+  mappingListeners.add(listener);
+  return () => { mappingListeners.delete(listener); };
+};
+
 /** Mapeamento com gravação automática neste computador. `saved` = false se o armazenamento falhou. */
 export function useControlMapping() {
-  const [mapping, setMapping] = useState<ControlMapping>(readControlMapping);
+  const mapping = useSyncExternalStore(subscribeMapping, mappingSnapshot);
   const [saved, setSaved] = useState(true);
   const persist = useCallback((next: ControlMapping) => {
-    setMapping(next);
+    currentMapping = next;
+    for (const listener of mappingListeners) listener();
     try {
       if (Object.keys(next).length === 0) window.localStorage.removeItem(KEY);
       else window.localStorage.setItem(KEY, JSON.stringify(next));

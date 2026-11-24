@@ -5,6 +5,10 @@ import { createPortal } from "react-dom";
 import { setCabinetMuted, setCabinetVolume, useCabinetMuted, useCabinetVolume, useGameVideo } from "../data/gameVideo";
 import { useDialogFocus } from "./useDialogFocus";
 import { useI18n } from "../i18n";
+import { useControlMapping, type ControlId } from "../data/emulatorControls";
+import { useEngineCapture } from "../data/engineCapture";
+import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
+import EmulatorControlsDialog from "./EmulatorControlsDialog";
 
 /**
  * Monitor TATE (vertical) quando a arte do jogo é mais alta que larga: as artes de jogos de tela
@@ -35,6 +39,34 @@ const SCREEN = {
   yoko: { x: 58, y: 50, width: 204, height: 153, rx: 6 },
   tate: { x: 102, y: 47, width: 116, height: 155, rx: 6 },
 };
+
+/** Alavanca do gabinete pequeno (dentro do painel, já deslocado): base, bola em repouso e curso. */
+const LEVER: LeverGeometry = { base: { x: 123, y: 200 }, ball: { x: 122, y: 196 }, travel: 6 };
+/** Os 4 botões vermelhos em arco, do 1 ao 4. */
+const BUTTONS: { id: ControlId; x: number; y: number }[] = [
+  { id: "button1", x: 163, y: 204 },
+  { id: "button2", x: 179, y: 197.5 },
+  { id: "button3", x: 195, y: 197.5 },
+  { id: "button4", x: 211, y: 197.5 },
+];
+
+/** O Client está na frente (com foco e visível): ao abrir um jogo, ele perde o foco. */
+function useWindowActive() {
+  const read = () => document.hasFocus() && document.visibilityState === "visible";
+  const [active, setActive] = useState(read);
+  useEffect(() => {
+    const update = () => setActive(read());
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+  return active;
+}
 
 function SpeakerIcon({ silent }: { silent: boolean }) {
   return (
@@ -155,10 +187,21 @@ function VideoModal({ title, src, start, onClose }: { title: string; src: string
 
 /**
  * Gabinete arcade com a capa do jogo na tela. Com `video` (Minhas coleções), a tela mostra o
- * trailer do jogo quando houver; na sala, fica a imagem.
+ * trailer do jogo quando houver; na sala, fica a imagem. Com `controls` (Minhas coleções), o painel
+ * testa o controle: a alavanca e os botões se mexem com o controle ou o teclado do jogador (pelo
+ * motor de captura, enquanto o Client está na frente), e clicar no gabinete fora da tela abre os
+ * controles do emulador.
  */
-export function ArcadeCabinet({ room, className = "", video: withVideo = false }: { room: GameRoom; className?: string; video?: boolean }) {
+export function ArcadeCabinet({ room, className = "", video: withVideo = false, controls = false }: { room: GameRoom; className?: string; video?: boolean; controls?: boolean }) {
+  const { t } = useI18n();
   const art = useGameArt(room);
+  const [configuring, setConfiguring] = useState(false);
+  const windowActive = useWindowActive();
+  const live = controls && windowActive;
+  const { mapping } = useControlMapping();
+  const { held } = useEngineCapture(live);
+  const { pressed, lever } = useCabinetPanel(mapping, held, LEVER, live);
+  const press = (id: ControlId) => (pressed.has(id) ? "is-pressed" : "");
   const video = useGameVideo(room, withVideo);
   const [videoFailed, setVideoFailed] = useState(false);
   const [modalStart, setModalStart] = useState<number | null>(null);
@@ -175,8 +218,11 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
   const id = (name: string) => `${name}-${uid}`;
   return (
     <>
+    {configuring && <EmulatorControlsDialog onClose={() => setConfiguring(false)} />}
     {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
-    <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}>
+    <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${controls ? "is-configurable" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}
+      onClick={controls ? (event) => { if (!(event.target as Element).closest("[data-cabinet-screen]")) setConfiguring(true); } : undefined}>
+      {controls && <title>{t("Clique para configurar os controles")}</title>}
       {/* Inspirado no Sega Astro City: corpo claro de cantos redondos, marquise iluminada (sem texto),
           monitor fundo em moldura escura, painel preto largo e porta da ficha embaixo. */}
       <defs>
@@ -192,15 +238,15 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
       <rect x="60" y="13.5" width="200" height="19" rx="7" fill="none" stroke="#57fcff" strokeOpacity=".25" strokeWidth="1" />
       <image href="/img/logo.png" x="124" y="14.5" width="72" height="17" preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
       {/* Moldura escura e funda do monitor (a máscara em volta do tubo) */}
-      <path d="M50 42 Q50 38 54 38 H266 Q270 38 270 42 L272 212 H48 Z" fill="#14181b" />
+      <path d="M50 42 Q50 38 54 38 H266 Q270 38 270 42 L272 212 H48 Z" fill="#14181b" data-cabinet-screen />
       {/* Vão do tubo: deitado (YOKO) ou em pé (TATE) */}
-      <rect {...bezel} fill="#050708" stroke="#2a3136" strokeWidth="2" />
-      <rect {...screen} fill="#000" />
+      <rect {...bezel} fill="#050708" stroke="#2a3136" strokeWidth="2" data-cabinet-screen />
+      <rect {...screen} fill="#000" data-cabinet-screen />
       {showVideo
         // Sem clip-path no foreignObject: o Chromium deixa de entregar o mouse aos controles. O canto
         // arredondado da tela vem do CSS (.cabinet-video).
-        ? <foreignObject {...screen}><CabinetVideo src={video!} paused={modalStart !== null} resume={resume} onFail={() => setVideoFailed(true)} onExpand={setModalStart} /></foreignObject>
-        : <image className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />}
+        ? <foreignObject {...screen} data-cabinet-screen><CabinetVideo src={video!} paused={modalStart !== null || configuring} resume={resume} onFail={() => setVideoFailed(true)} onExpand={setModalStart} /></foreignObject>
+        : <image data-cabinet-screen className={art.grayscale ? "is-not-owned" : ""} href={art.src} {...screen} preserveAspectRatio="xMidYMid meet" clipPath={`url(#${id("screen")})`} onError={art.onError} />}
       <rect {...screen} fill={`url(#${id("glass")})`} pointerEvents="none" />
       {/* Painel, corpo de baixo e portas: abaixo do monitor */}
       <g transform="translate(0 36)">
@@ -212,16 +258,19 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
           de Configurações › Controle. */}
       <polyline points="163,204 173,197.5 211,197.5" fill="none" stroke="#5c656b" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
       <polyline points="163,204 173,197.5 211,197.5" fill="none" stroke="#3a4045" strokeWidth="13.4" strokeLinecap="round" strokeLinejoin="round" />
-      <ellipse cx="123" cy="200" rx="7" ry="5" fill="#0b0d0f" />
-      <circle cx="122" cy="196" r="7" fill="#fd4851" />
-      <circle cx="120" cy="193.5" r="2" fill="#ffffff" fillOpacity=".35" />
-      {/* Crédito (START): botão redondo azul, como os vermelhos */}
-      <circle cx="145.5" cy="188" r="3.6" fill="#2f7bff" />
-      <circle cx="144.6" cy="187" r="1" fill="#ffffff" fillOpacity=".35" />
-      <circle cx="163" cy="204" r="4.6" fill="#fd4851" />
-      <circle cx="179" cy="197.5" r="4.6" fill="#fd4851" />
-      <circle cx="195" cy="197.5" r="4.6" fill="#fd4851" />
-      <circle cx="211" cy="197.5" r="4.6" fill="#fd4851" />
+      {/* Alavanca: a bola se inclina com as direções apertadas (a haste aparece ao inclinar) */}
+      <ellipse cx={LEVER.base.x} cy={LEVER.base.y} rx="7" ry="5" fill="#0b0d0f" />
+      <line ref={lever.shaft} x1={LEVER.base.x} y1={LEVER.base.y} x2={LEVER.ball.x} y2={LEVER.ball.y} stroke="#3a4045" strokeWidth="3" strokeLinecap="round" />
+      <g ref={lever.ball}>
+        <circle cx={LEVER.ball.x} cy={LEVER.ball.y} r="7" fill="#fd4851" />
+        <circle cx={LEVER.ball.x - 2} cy={LEVER.ball.y - 2.5} r="2" fill="#ffffff" fillOpacity=".35" />
+      </g>
+      {/* Crédito (START): botão redondo azul, como os vermelhos. Apertados, os botões afundam. */}
+      <g className={`cabinet-cap ${press("start")}`}>
+        <circle cx="145.5" cy="188" r="3.6" fill="#2f7bff" />
+        <circle cx="144.6" cy="187" r="1" fill="#ffffff" fillOpacity=".35" />
+      </g>
+      {BUTTONS.map((button) => <circle key={button.id} className={`cabinet-cap ${press(button.id)}`} cx={button.x} cy={button.y} r="4.6" fill="#fd4851" />)}
       {/* Corpo de baixo claro, reto: mesma largura do corpo de cima, cantos de baixo levemente arredondados */}
       <path d="M39 216 H281 V281 Q281 288 274 288 H46 Q39 288 39 281 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
       {/* Esquerda: tampa de manutenção (só o recorte e a fechadura) */}
@@ -232,7 +281,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false }
           moeda e o retorno de moedas */}
       <rect x="198" y="226" width="66" height="50" rx="3" fill="none" stroke="#8a939a" strokeWidth="1.2" />
       <rect x="221" y="234" width="20" height="20" rx="2" fill="#9aa3a9" stroke="#7d878e" strokeWidth="1" />
-      <rect x="230" y="238" width="2" height="12" rx="1" fill="#2b3035" />
+      <rect x="230" y="238" width="2" height="12" rx="1" fill="#2b3035" className={`cabinet-coin-slot ${press("coin")}`} />
       <rect x="219" y="261" width="24" height="7" rx="1.5" fill="#8a939a" stroke="#7d878e" strokeWidth=".8" />
       {/* Rodapé: linha horizontal cinza de lado a lado, com margem até a base */}
       <line x1="39.75" y1="281" x2="280.25" y2="281" stroke="#8a939a" strokeWidth="1.5" />

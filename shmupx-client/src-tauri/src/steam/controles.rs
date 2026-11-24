@@ -133,6 +133,8 @@ pub struct CapturaState(Mutex<Option<Child>>);
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EventoCaptura {
+    /// Processo do motor que mandou: o Client ignora eventos de um motor que já fechou.
+    pid: u32,
     /// `ready` (pronto para ler), `input` (aperto), `release` (soltou) ou `ended` (o motor fechou).
     kind: String,
     code: Option<String>,
@@ -159,13 +161,14 @@ fn argumentos_da_captura(dados: &Path) -> Vec<String> {
     .collect()
 }
 
-/// Abre o motor em modo captura, se ainda não estiver aberto. Os apertos e as solturas chegam por `engine://capture`.
+/// Abre o motor em modo captura, se ainda não estiver aberto, e devolve o PID dele. Os apertos e as
+/// solturas chegam por `engine://capture`, com esse PID.
 #[tauri::command]
-pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) -> Result<(), String> {
+pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) -> Result<u32, String> {
     let mut atual = estado.0.lock().map_err(|e| e.to_string())?;
     if let Some(filho) = atual.as_mut() {
         if matches!(filho.try_wait(), Ok(None)) {
-            return Ok(());
+            return Ok(filho.id());
         }
     }
     let Motor { exe, dados, .. } = super::emulador::motor(&app).ok_or("o ShmupX Emulator não foi encontrado neste computador")?;
@@ -177,6 +180,7 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
         comando.current_dir(pasta);
     }
     let mut filho = comando.spawn().map_err(super::emulador::erro_ao_abrir)?;
+    let pid = filho.id();
     let saida = filho.stdout.take();
     *atual = Some(filho);
     drop(atual);
@@ -195,6 +199,7 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
                 let _ = app.emit(
                     "engine://capture",
                     EventoCaptura {
+                        pid,
                         kind: kind.into(),
                         code: campo(&valor, "code"),
                         label: campo(&valor, "label"),
@@ -204,9 +209,9 @@ pub fn motor_captura_iniciar(app: AppHandle, estado: State<'_, CapturaState>) ->
                 );
             }
         }
-        let _ = app.emit("engine://capture", EventoCaptura { kind: "ended".into(), code: None, label: None, device: None, device_name: None });
+        let _ = app.emit("engine://capture", EventoCaptura { pid, kind: "ended".into(), code: None, label: None, device: None, device_name: None });
     });
-    Ok(())
+    Ok(pid)
 }
 
 /// Fecha o motor do modo captura (a tela de controles fechou).

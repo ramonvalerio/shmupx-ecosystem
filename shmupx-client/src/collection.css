@@ -65,6 +65,18 @@
 .collection-details > header .favorite-action:is(.is-favorite, :hover) { color: #f2c14e; }
 .arcade-cabinet { display: block; flex-shrink: 0; width: 100%; max-width: 300px; margin: 4px auto 0; }
 .arcade-cabinet-label { fill: #c9d3d8; font-size: 6px; letter-spacing: .1em; }
+/* Minhas coleções: o gabinete testa o controle (botões afundam como em Configurações › Controle) e,
+   fora da tela, abre os controles do emulador. */
+.arcade-cabinet.is-configurable { cursor: pointer; }
+.arcade-cabinet.is-configurable [data-cabinet-screen] { cursor: default; }
+.cabinet-cap { transform-box: fill-box; transform-origin: center; transition: transform 70ms ease-out, filter 70ms ease-out; }
+.cabinet-cap.is-pressed { transform: translate(.4px, 1.2px) scale(.88); filter: brightness(.72); transition-duration: 30ms; }
+.cabinet-coin-slot { transition: fill 70ms; }
+.cabinet-coin-slot.is-pressed { fill: var(--cyan); }
+@media (prefers-reduced-motion: reduce) { .cabinet-cap { transition: none; } }
+/* Modal dos controles: larga, para o gabinete e a lista lado a lado. */
+.emulator-controls-dialog { width: min(1040px, 100%); }
+.emulator-controls-dialog .controller-dialog-body { padding-top: 16px; }
 .collection-facts { display: flex; flex-direction: column; gap: 9px; margin: 0; font-size: 12px; }
 .collection-facts > div { display: flex; justify-content: space-between; gap: 12px; }
 .collection-facts dt { color: #d7e4e8; }

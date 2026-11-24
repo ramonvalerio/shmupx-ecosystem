@@ -1,19 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
-import { CONTROLS, describeInput, pressedControls, useControlMapping, type ControlId, type ControlMapping, type MappedControl } from "../data/emulatorControls";
-
-/** Evento do motor em modo captura (Rust `steam/controles.rs`). */
-interface CaptureEvent {
-  kind: "ready" | "input" | "release" | "ended";
-  code?: string;
-  label?: string;
-  device?: string;
-  deviceName?: string;
-}
-
-type EngineState = "starting" | "ready" | "unavailable";
+import { CONTROLS, describeInput, useControlMapping, type ControlId, type MappedControl } from "../data/emulatorControls";
+import { useEngineCapture, type CaptureEvent } from "../data/engineCapture";
+import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
 
 /**
  * Posição de cada controle no painel (coordenadas do SVG). O gabinete segue o desenho do
@@ -34,162 +23,8 @@ const SPOTS: Record<ControlId, { x: number; y: number; r: number }> = {
 };
 const ARROW: Partial<Record<ControlId, number>> = { up: 0, right: 90, down: 180, left: 270 };
 
-/** Centro da base da alavanca e da bola em repouso (a bola fica um pouco acima, pela perspectiva). */
-const LEVER_BASE = { x: 186, y: 486 };
-const LEVER_BALL = { x: 185, y: 482 };
-/** Quanto a bola anda ao inclinar a alavanca até o fim. */
-const LEVER_TRAVEL = 12;
-
-type Stick = { x: number; y: number };
-/** Controle cujo analógico a alavanca segue; `name` é o nome que o motor deu ao aparelho. */
-type StickDevice = { name: string | null };
-/** Códigos do MAME das direções pela alavanca do controle (eixos X/Y como chave). */
-const AXIS_SWITCH = /^JOYCODE_\d+_[XY]AXIS_\w+_SWITCH$/;
-const DIRECTIONS = ["up", "down", "left", "right"] as const;
-/** Zona morta do analógico (tremida em repouso) e ponto em que a direção conta como apertada. */
-const STICK_DEADZONE = 0.12;
-const STICK_SWITCH = 0.5;
-
-/**
- * De qual controle ler o analógico: o das direções mapeadas pela alavanca (eixos X/Y). Direção sem
- * mapeamento usa o padrão do MAME, que inclui a alavanca do controle; tudo no teclado ou no
- * direcional digital, nenhum (aí vale só o que o motor avisa).
- */
-function stickDevice(mapping: ControlMapping): StickDevice | null {
-  const axis = DIRECTIONS.map((id) => mapping[id]).find((item) => item && AXIS_SWITCH.test(item.code));
-  if (axis) return { name: axis.deviceName ?? null };
-  return DIRECTIONS.some((id) => !mapping[id]) ? { name: null } : null;
-}
-
-/**
- * Posição do analógico pela Gamepad API do WebView, em -1..1 dentro do círculo (a diagonal anda o
- * mesmo tanto que uma direção só). `null` sem controle à vista. Com vários controles, vale o de
- * mesmo nome do mapeado; entre eles (ou sem nome), o que está mais inclinado.
- */
-function readStick(device: StickDevice): Stick | null {
-  let pads: Gamepad[];
-  try {
-    pads = Array.from(navigator.getGamepads?.() ?? []).filter((pad): pad is Gamepad => !!pad && pad.connected && pad.axes.length >= 2);
-  } catch {
-    return null;
-  }
-  if (pads.length === 0) return null;
-  const wanted = device.name?.trim().toLowerCase();
-  const named = wanted
-    ? pads.filter((pad) => {
-        const id = pad.id.toLowerCase();
-        const base = id.replace(/\s*\(.*$/, "").trim();
-        return id.includes(wanted) || (base.length > 0 && wanted.includes(base));
-      })
-    : [];
-  let best = { x: 0, y: 0, mag: 0 };
-  for (const pad of named.length ? named : pads) {
-    const x = Number.isFinite(pad.axes[0]) ? pad.axes[0] : 0;
-    const y = Number.isFinite(pad.axes[1]) ? pad.axes[1] : 0;
-    const mag = Math.hypot(x, y);
-    if (mag > best.mag) best = { x, y, mag };
-  }
-  if (best.mag < STICK_DEADZONE) return { x: 0, y: 0 };
-  const scaled = Math.min(1, (best.mag - STICK_DEADZONE) / (1 - STICK_DEADZONE));
-  return { x: (best.x / best.mag) * scaled, y: (best.y / best.mag) * scaled };
-}
-
-function stickDirections(stick: Stick): string {
-  return [
-    stick.y < -STICK_SWITCH ? "up" : "",
-    stick.y > STICK_SWITCH ? "down" : "",
-    stick.x < -STICK_SWITCH ? "left" : "",
-    stick.x > STICK_SWITCH ? "right" : "",
-  ].filter(Boolean).join(",");
-}
-
-/**
- * Alavanca do painel. Com o analógico do controle à vista, a bola segue o eixo quadro a quadro, em
- * qualquer ângulo (girar o direcional faz a alavanca girar junto). Sem ele (teclado, direcional
- * digital), mola: a bola vai até a direção apertada (e diagonais) e volta ao centro ao soltar, com
- * uma leve sobra no fim. Anima direto no SVG (sem re-render a cada quadro); com "reduzir movimento"
- * do sistema, a mola só pula para a posição. `onStick` avisa quando o controle aparece/some e quando
- * as direções do analógico mudam.
- */
-function useLever(target: Stick, device: StickDevice | null, onStick: (live: boolean, dirs: string) => void) {
-  const ball = useRef<SVGGElement>(null);
-  const shaft = useRef<SVGLineElement>(null);
-  const state = useRef({ x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, frame: 0, last: 0, live: false, dirs: "" });
-  const deviceRef = useRef(device);
-  deviceRef.current = device;
-  const onStickRef = useRef(onStick);
-  onStickRef.current = onStick;
-  const kick = useRef<() => void>(() => undefined);
-
-  useEffect(() => {
-    const st = state.current;
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    // Mola um pouco abaixo do amortecimento crítico: rápida, com uma sobra pequena.
-    const STIFFNESS = 1100;
-    const DAMPING = 2 * Math.sqrt(STIFFNESS) * 0.72;
-    const draw = () => {
-      ball.current?.setAttribute("transform", `translate(${st.x.toFixed(2)} ${st.y.toFixed(2)})`);
-      shaft.current?.setAttribute("x2", (LEVER_BALL.x + st.x).toFixed(2));
-      shaft.current?.setAttribute("y2", (LEVER_BALL.y + st.y).toFixed(2));
-    };
-    const step = (now: number) => {
-      const dt = Math.min(0.032, (now - st.last) / 1000);
-      st.last = now;
-      const stick = deviceRef.current ? readStick(deviceRef.current) : null;
-      const live = stick !== null;
-      const dirs = stick ? stickDirections(stick) : "";
-      if (live !== st.live || dirs !== st.dirs) {
-        st.live = live;
-        st.dirs = dirs;
-        onStickRef.current(live, dirs);
-      }
-      if (stick && (stick.x || stick.y)) {
-        // O analógico manda: a bola fica exatamente onde o eixo está.
-        Object.assign(st, { x: stick.x * LEVER_TRAVEL, y: stick.y * LEVER_TRAVEL, vx: 0, vy: 0 });
-      } else if (reduced) {
-        Object.assign(st, { x: st.tx, y: st.ty, vx: 0, vy: 0 });
-      } else {
-        for (const [p, v, t] of [["x", "vx", "tx"], ["y", "vy", "ty"]] as const) {
-          const accel = STIFFNESS * (st[t] - st[p]) - DAMPING * st[v];
-          st[v] += accel * dt;
-          st[p] += st[v] * dt;
-        }
-      }
-      const resting = Math.abs(st.tx - st.x) < 0.05 && Math.abs(st.ty - st.y) < 0.05 && Math.abs(st.vx) < 1 && Math.abs(st.vy) < 1;
-      if (resting && !(stick && (stick.x || stick.y))) Object.assign(st, { x: st.tx, y: st.ty, vx: 0, vy: 0 });
-      draw();
-      // Com controle à vista, lê o analógico todo quadro; sem ele, para quando a mola assenta.
-      st.frame = live || !resting ? requestAnimationFrame(step) : 0;
-    };
-    kick.current = () => {
-      if (st.frame) return;
-      st.last = performance.now();
-      st.frame = requestAnimationFrame(step);
-    };
-    // O WebView só mostra o controle depois do primeiro aperto nele: aí o evento acorda a leitura.
-    const onConnect = () => kick.current();
-    window.addEventListener("gamepadconnected", onConnect);
-    window.addEventListener("gamepaddisconnected", onConnect);
-    kick.current();
-    return () => {
-      window.removeEventListener("gamepadconnected", onConnect);
-      window.removeEventListener("gamepaddisconnected", onConnect);
-      cancelAnimationFrame(st.frame);
-      st.frame = 0;
-    };
-  }, []);
-
-  useEffect(() => {
-    state.current.tx = target.x;
-    state.current.ty = target.y;
-    kick.current();
-  }, [target.x, target.y]);
-
-  // Mapeamento mudou (outro controle ou alavanca no teclado): volta a ler.
-  useEffect(() => kick.current(), [device?.name, device === null]);
-
-  return { ball, shaft };
-}
+/** Base da alavanca, bola em repouso (um pouco acima, pela perspectiva) e quanto ela anda até o fim. */
+const LEVER: LeverGeometry = { base: { x: 186, y: 486 }, ball: { x: 185, y: 482 }, travel: 12 };
 
 /**
  * Gabinete arcade grande para mapear os controles do ShmupX Emulator: clique num botão do painel
@@ -199,59 +34,28 @@ function useLever(target: Stick, device: StickDevice | null, onStick: (live: boo
 export default function CabinetControlMapper() {
   const { t } = useI18n();
   const { mapping, assign, reset, saved } = useControlMapping();
-  const [engine, setEngine] = useState<EngineState>("starting");
   const [waiting, setWaiting] = useState<ControlId | null>(null);
   const [flash, setFlash] = useState<{ control: ControlId; text: string } | null>(null);
   const [hover, setHover] = useState<ControlId | null>(null);
-  /** Códigos apertados agora no controle ou teclado (o motor avisa aperto e soltura). */
-  const [held, setHeld] = useState<ReadonlySet<string>>(() => new Set());
   const waitingRef = useRef<ControlId | null>(null);
   waitingRef.current = waiting;
-  const assignRef = useRef(assign);
-  assignRef.current = assign;
-  const tRef = useRef(t);
-  tRef.current = t;
 
-  // Motor em modo captura enquanto a tela está aberta; se ele fechar (Esc no motor), abre de novo.
-  useEffect(() => {
-    if (!isTauri()) { setEngine("unavailable"); return; }
-    let alive = true;
-    let restarts = 0;
-    let stop: (() => void) | undefined;
-    const start = () => invoke("motor_captura_iniciar").catch(() => { if (alive) setEngine("unavailable"); });
-    void listen<CaptureEvent>("engine://capture", (event) => {
-      if (!alive) return;
-      const data = event.payload;
-      if (data.kind === "ready") { setEngine("ready"); restarts = 0; return; }
-      if (data.kind === "ended") {
-        setHeld(new Set());
-        if (restarts++ < 3) { setEngine("starting"); void start(); } else setEngine("unavailable");
-        return;
-      }
-      if (data.kind === "release") {
-        if (data.code) setHeld((current) => { const next = new Set(current); next.delete(data.code!); return next; });
-        return;
-      }
-      if (data.code) setHeld((current) => new Set(current).add(data.code!));
-      const control = waitingRef.current;
-      if (!control || !data.code) return;
-      if (data.code === "KEYCODE_ESC") { setWaiting(null); return; }
-      const item: MappedControl = { code: data.code, label: data.label ?? data.code, device: data.device, deviceName: data.deviceName };
-      const moved = assignRef.current(control, item);
-      setWaiting(null);
-      const name = CONTROLS.find((c) => c.id === control)!.label;
-      const text = moved
-        ? tRef.current("{control}: {input}. Saiu de {other}, que voltou ao padrão.", { control: tRef.current(name), input: describeInput(item, tRef.current), other: tRef.current(CONTROLS.find((c) => c.id === moved)!.label) })
-        : tRef.current("{control}: {input}", { control: tRef.current(name), input: describeInput(item, tRef.current) });
-      setFlash({ control, text });
-    }).then((unlisten) => { if (alive) stop = unlisten; else unlisten(); });
-    void start();
-    return () => {
-      alive = false;
-      stop?.();
-      void invoke("motor_captura_parar").catch(() => undefined);
-    };
-  }, []);
+  // Motor em modo captura enquanto a tela está aberta (o mesmo do gabinete da Coleção). Esperando
+  // um aperto, ele vira o controle escolhido.
+  const onInput = (data: CaptureEvent) => {
+    const control = waitingRef.current;
+    if (!control || !data.code) return;
+    if (data.code === "KEYCODE_ESC") { setWaiting(null); return; }
+    const item: MappedControl = { code: data.code, label: data.label ?? data.code, device: data.device, deviceName: data.deviceName };
+    const moved = assign(control, item);
+    setWaiting(null);
+    const name = CONTROLS.find((c) => c.id === control)!.label;
+    const text = moved
+      ? t("{control}: {input}. Saiu de {other}, que voltou ao padrão.", { control: t(name), input: describeInput(item, t), other: t(CONTROLS.find((c) => c.id === moved)!.label) })
+      : t("{control}: {input}", { control: t(name), input: describeInput(item, t) });
+    setFlash({ control, text });
+  };
+  const { engine, held } = useEngineCapture(true, onInput);
 
   // Esperando o aperto: as teclas não mexem na tela (Espaço e Enter não clicam de novo); Esc cancela.
   useEffect(() => {
@@ -289,21 +93,7 @@ export default function CabinetControlMapper() {
     : flash ? [t("GRAVADO!"), labelOf(flash.control).toUpperCase()]
     : [t("CLIQUE NUM BOTÃO"), t("DO PAINEL")];
 
-  // Com o analógico lido pelo WebView, ele manda na alavanca e nas setas: os apertos de eixo que o
-  // motor avisa ficam de fora (chegam um pouco depois e fariam a bola pular para o fim).
-  const [stick, setStick] = useState<{ live: boolean; dirs: string }>({ live: false, dirs: "" });
-  const device = stickDevice(mapping);
-  const stickLive = stick.live && device !== null;
-  const digital = pressedControls(mapping, stickLive ? new Set([...held].filter((code) => !AXIS_SWITCH.test(code))) : held);
-  const pressed = new Set(digital);
-  if (stickLive) for (const dir of stick.dirs.split(",")) if (dir) pressed.add(dir as ControlId);
-  const lever = useLever((() => {
-    const dx = (digital.has("right") ? 1 : 0) - (digital.has("left") ? 1 : 0);
-    const dy = (digital.has("down") ? 1 : 0) - (digital.has("up") ? 1 : 0);
-    // Na diagonal, a bola anda o mesmo tanto que numa direção só (alavanca de 8 direções).
-    const scale = dx && dy ? LEVER_TRAVEL / Math.SQRT2 : LEVER_TRAVEL;
-    return { x: dx * scale, y: dy * scale };
-  })(), device, (live, dirs) => setStick({ live, dirs }));
+  const { pressed, lever } = useCabinetPanel(mapping, held, LEVER);
 
   const spotClass = (id: ControlId) => `mapper-spot ${pressed.has(id) ? "is-pressed" : ""} ${waiting === id ? "is-waiting" : ""} ${flash?.control === id ? "is-saved" : ""} ${hover === id ? "is-hover" : ""} ${mapping[id] ? "is-mapped" : ""}`;
   const spotProps = (id: ControlId) => ({
@@ -352,12 +142,12 @@ export default function CabinetControlMapper() {
 
         {/* Alavanca: base, haste e bola vermelha, que se inclina com as direções apertadas; as setas
             em volta são as direções */}
-        <circle cx={LEVER_BASE.x} cy={LEVER_BASE.y} r="22" fill="#0b0d0f" stroke="#2a3136" strokeWidth="2" />
-        <circle cx={LEVER_BASE.x} cy={LEVER_BASE.y} r="7" fill="#22272b" />
-        <line ref={lever.shaft} x1={LEVER_BASE.x} y1={LEVER_BASE.y} x2={LEVER_BALL.x} y2={LEVER_BALL.y} stroke="#3a4045" strokeWidth="7" strokeLinecap="round" />
+        <circle cx={LEVER.base.x} cy={LEVER.base.y} r="22" fill="#0b0d0f" stroke="#2a3136" strokeWidth="2" />
+        <circle cx={LEVER.base.x} cy={LEVER.base.y} r="7" fill="#22272b" />
+        <line ref={lever.shaft} x1={LEVER.base.x} y1={LEVER.base.y} x2={LEVER.ball.x} y2={LEVER.ball.y} stroke="#3a4045" strokeWidth="7" strokeLinecap="round" />
         <g ref={lever.ball} className="mapper-lever-ball">
-          <circle cx={LEVER_BALL.x} cy={LEVER_BALL.y} r="14" fill="url(#mapper-red)" />
-          <circle cx={LEVER_BALL.x - 4} cy={LEVER_BALL.y - 5} r="4" fill="#fff" fillOpacity=".35" />
+          <circle cx={LEVER.ball.x} cy={LEVER.ball.y} r="14" fill="url(#mapper-red)" />
+          <circle cx={LEVER.ball.x - 4} cy={LEVER.ball.y - 5} r="4" fill="#fff" fillOpacity=".35" />
         </g>
         {(["up", "right", "down", "left"] as ControlId[]).map((id) => (
           <g key={id} {...spotProps(id)}>

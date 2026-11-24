@@ -270,7 +270,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           <h2>{selected.title}</h2>
           <button className={`favorite-action ${preferences.favorites.includes(selected.id) ? "is-favorite" : ""}`} aria-pressed={preferences.favorites.includes(selected.id)} aria-label={t(preferences.favorites.includes(selected.id) ? "Remover {game} dos favoritos" : "Adicionar {game} aos favoritos", { game: selected.title })} onClick={() => toggleFavorite(selected.id)}>{preferences.favorites.includes(selected.id) ? "★" : "☆"}</button>
         </header>
-        <ArcadeCabinet room={selected} video />
+        <ArcadeCabinet room={selected} video controls />
         <PlayPanel key={selected.id} room={selected} uid={uid} />
       </> : <p className="collection-details-empty">{t("Selecione um jogo para ver os detalhes.")}</p>}
     </aside>}
