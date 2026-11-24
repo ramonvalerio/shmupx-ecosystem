@@ -26,13 +26,12 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018" > /dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+      - name: Rust
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: shmupx-mobile/src-tauri
 
       # O Lite importa telas e dados do Client (shmupx-client/src): as dependências dele também.
       - name: Dependências

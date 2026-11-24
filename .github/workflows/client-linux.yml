@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/cache
-          key: client-linux-${{ hashFiles('shmupx-client/src-tauri/Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}
+          key: client-linux-${{ hashFiles('Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}
           restore-keys: client-linux-
 
       - name: Pacotes

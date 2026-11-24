@@ -1,0 +1,26 @@
+cargo-features = ["profile-rustflags"]
+
+[workspace]
+resolver = "3"
+members = [
+    "shmupx-client/src-tauri",
+    "shmupx-lab/src-tauri",
+    "shmupx-mobile/src-tauri",
+    "shmupx-mister-link",
+]
+exclude = ["shmupx-backend", "shmupx-mister"]
+
+[profile.dev]
+debug = "line-tables-only"
+
+# A captura da live trata cada quadro na CPU: sem otimização, o `npm run dev` não chega a 60 fps.
+# Otimizado + incremental quebra o link no Windows (LNK2019 "unresolved external symbol
+# anon...llvm..."): o cache incremental deixa símbolos internos entre as partes do código sem
+# correspondência.
+[profile.dev.package.shmupx-client]
+opt-level = 2
+incremental = false
+
+[profile.release]
+strip = "symbols"
+rustflags = ["-Ztune-cpu=generic", "-Zlocation-detail=none", "-Zfmt-debug=shallow"]

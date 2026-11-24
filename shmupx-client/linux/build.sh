@@ -8,7 +8,7 @@ if [ -z "${VITE_GOOGLE_DESKTOP_CLIENT_ID:-}" ]; then
     echo "erro: VITE_GOOGLE_DESKTOP_CLIENT_ID não definida (shmupx/client no OpenBao)" >&2
     exit 1
 fi
-mkdir -p /work/shmupx-client /work/shmupx-lab/validators /work/shmupx-mister-link
+mkdir -p /work/shmupx-client /work/shmupx-lab/validators /work/shmupx-lab/src-tauri /work/shmupx-mobile/src-tauri /work/shmupx-mister-link
 
 rsync -a --delete \
     --exclude node_modules --exclude target --exclude dist --exclude .venv --exclude .venv-build \
@@ -17,7 +17,13 @@ rsync -a --delete \
 rsync -a --delete --exclude .venv --exclude .venv-build --exclude build --exclude dist \
     /src/shmupx-lab/validators/ /work/shmupx-lab/validators/
 # Código do MiSTer (FTP/SSH), compartilhado com o ShmupX Lite: dependência por caminho.
-rsync -a --delete --exclude target /src/shmupx-mister-link/ /work/shmupx-mister-link/
+for d in shmupx-mister-link shmupx-lab/src-tauri shmupx-mobile/src-tauri; do
+    rsync -a --delete --exclude target --exclude target-dist --exclude gen /src/$d/ /work/$d/
+done
+cp /src/Cargo.toml /src/Cargo.lock /src/rust-toolchain.toml /work/
+cp -r /src/.cargo /work/
+export RUSTUP_HOME=/cache/rustup
+(cd /work && rustup toolchain install)
 
 # Motor de validação (PyInstaller). No Linux, o OpenCV "headless" (mesma API, sem depender de libGL).
 cd /work/shmupx-lab/validators

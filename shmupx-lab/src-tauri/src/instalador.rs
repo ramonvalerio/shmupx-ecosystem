@@ -36,7 +36,9 @@ fn arquivos_do_build(versao: &str) -> Result<(PathBuf, PathBuf), String> {
     if !versao_valida(versao) {
         return Err("versão inválida".into());
     }
-    let pasta = pasta_client()?.join("src-tauri/target/release/bundle/nsis");
+    let client = pasta_client()?;
+    let raiz = client.parent().ok_or("pasta do shmupx-client sem pasta acima")?;
+    let pasta = raiz.join("target/release/bundle/nsis");
     let exe = pasta.join(format!("ShmupX_{versao}_x64-setup.exe"));
     let sig = pasta.join(format!("ShmupX_{versao}_x64-setup.exe.sig"));
     Ok((exe, sig))

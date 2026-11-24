@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { ReleaseInstaller } from "./backend";
 
-/** Build local do Client para a versão (`shmupx-client/src-tauri/target/release/bundle/nsis`). */
+/** Build local do Client para a versão (`target/release/bundle/nsis` na raiz do ecosystem). */
 export interface LocalInstaller {
   found: boolean;
   /** Existe o `.sig` do updater ao lado do `.exe`. */

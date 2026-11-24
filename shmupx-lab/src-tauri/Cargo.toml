@@ -12,7 +12,6 @@ rust-version = "1.90"
 
 [lib]
 name = "shmupx_lab_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.7.1", features = [] }
@@ -26,7 +25,7 @@ tauri-plugin-log = "2"
 tokio = { version = "1", features = ["net", "time", "io-util", "process", "sync", "macros", "fs"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "charset", "http2", "system-proxy"] }
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.2"
