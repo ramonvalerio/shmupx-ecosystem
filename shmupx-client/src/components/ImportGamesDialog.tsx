@@ -156,18 +156,19 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
             </div>
           </div>}
           {emuFolderError && <p className="mode-error-inline emulator-folder-error" role="alert">{t(emuFolderError)}</p>}
-          {emu.status === "done" && emu.indisponivel && <p className="mode-error-inline" role="status">{t("A pasta escolhida ({folder}) não tem mais ROMs. Usando a busca automática.", { folder: emu.pasta_escolhida ?? "" })}</p>}
+          {emu.status === "done" && emu.indisponivel && <p className="mode-error-inline" role="status">{t("A pasta escolhida ({folder}) não tem mais ROMs. Usando a pasta padrão.", { folder: emu.pasta_escolhida ?? "" })}</p>}
           {emu.status === "done" && emu.found && <>
             <div className="emulator-folder-row">
               <div className="emulator-folder-path">
-                <small>{t(emu.manual ? "Pasta escolhida" : "Pasta encontrada")}</small>
+                <small>{t(emu.manual ? "Pasta escolhida" : "Pasta padrão")}</small>
                 <code title={emulatorFolderLabel(emu)}>{emulatorFolderLabel(emu)}</code>
               </div>
               <button className="secondary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Alterar pasta")}</button>
             </div>
-            {emu.manual && <button type="button" className="text-action" disabled={emuPicking} onClick={() => void resetEmulatorAuto()}>{t("Usar a busca automática")}</button>}
+            {emu.manual && <button type="button" className="text-action" disabled={emuPicking} onClick={() => void resetEmulatorAuto()}>{t("Usar a pasta padrão")}</button>}
             {emu.emulador === false && <p className="mode-error-inline" role="status">{t("O ShmupX Emulator não foi encontrado nesta instalação. Para abrir os jogos, reinstale o ShmupX Client.")}</p>}
             <p role="status"><strong>{t("{count} ROMs em {folder}.", { count: emuRoms.length, folder: emulatorFolderLabel(emu) })}</strong></p>
+            {emuRoms.length === 0 && <p className="muted">{t("Copie os ROMs (arquivos .zip) dos seus jogos para esta pasta, ou escolha outra pasta.")}</p>}
             {emuRooms.length > 0
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{emuRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum dos seus ROMs tem sala no ShmupX ainda.")}</p>}

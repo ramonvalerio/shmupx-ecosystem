@@ -136,6 +136,7 @@ pub async fn inicializar_jogo_emulador(
 ) -> Result<(), String> {
     let janela = janela.unwrap_or(false);
     let escolhida = super::emulador::pasta_escolhida(&app);
+    let padrao = super::emulador::pasta_padrao_de_roms(&app);
     let treino = treino.unwrap_or(false);
     // ShmupX Engine: partida valendo ranking abre com as travas do modo ranking; treino, sem elas.
     let motor = super::emulador::motor(&app)
@@ -155,7 +156,7 @@ pub async fn inicializar_jogo_emulador(
             mapeados => mapeados,
         }
     };
-    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), &roms, janela, motor.as_ref()))
+    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
@@ -174,20 +175,21 @@ pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {
         .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] })
 }
 
-/// ROMs deste PC para o ShmupX Emulator. Usa a pasta escolhida pelo jogador (guardada), depois
-/// `pasta` (onde a interface leu da última vez) e, por fim, a busca automática. `emulador` diz se o
-/// ShmupX Emulator está nesta instalação.
+/// ROMs deste PC para o ShmupX Emulator. Usa a pasta escolhida pelo jogador (guardada) ou a padrão
+/// (`roms` do Client), mais `pasta` (onde a interface leu da última vez) e a busca automática do
+/// Fightcade. `emulador` diz se o ShmupX Emulator está nesta instalação.
 #[tauri::command]
 pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super::emulador::BibliotecaEmulador {
     let escolhida = super::emulador::pasta_escolhida(&app);
+    let padrao = super::emulador::pasta_padrao_de_roms(&app);
     let emulador = super::emulador::motor(&app).is_some();
-    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), pasta.as_deref(), emulador))
+    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), emulador))
         .await
         .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada())
 }
 
 /// Guarda a pasta de ROMs escolhida pelo jogador e já lê os ROMs dela. Com `pasta` vazia, esquece a
-/// escolha e volta à busca automática. Se a pasta não tem ROMs, devolve o motivo e não guarda nada.
+/// escolha e volta à pasta padrão. Se a pasta não tem ROMs, devolve o motivo e não guarda nada.
 #[tauri::command]
 pub async fn emulador_definir_pasta(app: AppHandle, pasta: Option<String>) -> Result<super::emulador::BibliotecaEmulador, String> {
     let pasta = pasta.filter(|p| !p.trim().is_empty());
@@ -200,9 +202,10 @@ pub async fn emulador_definir_pasta(app: AppHandle, pasta: Option<String>) -> Re
         None => None,
     };
     super::emulador::guardar_escolhida(&app, guardar.as_deref())?;
-    log::info!("emulador: pasta de ROMs {}", guardar.as_deref().unwrap_or("(busca automática)"));
+    log::info!("emulador: pasta de ROMs {}", guardar.as_deref().unwrap_or("(padrão)"));
+    let padrao = super::emulador::pasta_padrao_de_roms(&app);
     let emulador = super::emulador::motor(&app).is_some();
-    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(guardar.as_deref(), None, emulador))
+    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(guardar.as_deref(), None, padrao.as_deref(), emulador))
         .await
         .map_err(|e| e.to_string())
 }

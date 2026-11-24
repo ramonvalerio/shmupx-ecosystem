@@ -1,7 +1,9 @@
 //! Biblioteca do emulador: a pasta de ROMs (`.zip`) do jogador. Os jogos abrem no ShmupX Emulator
 //! (ShmupX Engine, que vem com o Client); "ter o jogo" = ter o ROM, e quem cruza ROM com o catálogo
-//! é a interface. A busca automática também olha as pastas de ROMs de instalações antigas do
-//! Fightcade, onde muitos jogadores já guardam os ROMs. Só lê arquivos deste PC; nada é enviado.
+//! é a interface. Por padrão os ROMs ficam em `roms`, ao lado do Client instalado (o instalador cria
+//! a pasta vazia); o jogador pode escolher outra. A busca automática também olha as pastas de ROMs
+//! de instalações antigas do Fightcade, onde muitos jogadores já guardam os ROMs. Só lê arquivos
+//! deste PC; nada é enviado.
 
 use std::path::{Path, PathBuf};
 
@@ -15,11 +17,11 @@ pub struct BibliotecaEmulador {
     pub root: Option<String>,
     /// Nomes curtos dos ROMs (`ket`, `sonicwi2`…), sem `.zip`, em minúsculas e sem repetição.
     pub roms: Vec<String>,
-    /// A pasta usada veio da escolha do jogador ("Selecionar pasta de ROMs"), não da busca automática.
+    /// A pasta usada veio da escolha do jogador ("Selecionar pasta de ROMs"), não é a padrão.
     pub manual: bool,
     /// Pasta escolhida pelo jogador e guardada, se houver (mesmo que não esteja disponível agora).
     pub pasta_escolhida: Option<String>,
-    /// Havia uma pasta escolhida, mas ela não tem mais ROMs (disco removido?): busca automática.
+    /// Havia uma pasta escolhida, mas ela não tem mais ROMs (disco removido?): volta à padrão.
     pub indisponivel: bool,
     /// O ShmupX Emulator está nesta instalação do Client, então dá para abrir os jogos.
     pub emulador: bool,
@@ -157,18 +159,55 @@ fn pastas_de_roms(inst: &Instalacao) -> Vec<PathBuf> {
     pastas
 }
 
+/// Pastas onde os ROMs são lidos, em ordem (no `-rompath` do motor, a primeira com o ROM vale): a
+/// escolhida pelo jogador, a padrão (`roms` do Client) e as do Fightcade.
+fn pastas_para_ler(inst: &Instalacao, padrao: Option<&Path>) -> Vec<PathBuf> {
+    let mut pastas: Vec<PathBuf> = inst.roms.iter().cloned().collect();
+    if let Some(padrao) = padrao {
+        if !pastas.iter().any(|p| p == padrao) {
+            pastas.push(padrao.to_path_buf());
+        }
+    }
+    for pasta in pastas_de_roms(&Instalacao { raiz: inst.raiz.clone(), roms: None }) {
+        if !pastas.contains(&pasta) {
+            pastas.push(pasta);
+        }
+    }
+    pastas
+}
+
+/// Pasta padrão dos ROMs: `roms` ao lado do Client instalado (o instalador cria, com escrita liberada
+/// aos usuários, para o jogador copiar os ROMs). Se ela não existir nem puder ser criada (Linux, que
+/// instala em pasta do sistema), e em desenvolvimento, `roms` na pasta de dados do app.
+pub fn pasta_padrao_de_roms(app: &AppHandle) -> Option<PathBuf> {
+    if !cfg!(debug_assertions) {
+        if let Some(instalacao) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) {
+            let pasta = instalacao.join("roms");
+            if pasta.is_dir() || std::fs::create_dir_all(&pasta).is_ok() {
+                return Some(pasta);
+            }
+        }
+    }
+    let pasta = app.path().app_data_dir().ok()?.join("roms");
+    std::fs::create_dir_all(&pasta).ok()?;
+    Some(pasta)
+}
+
 /// Lê os ROMs. `escolhida`: a pasta guardada pelo jogador; `informada`: a que a interface conhece;
-/// `emulador`: o ShmupX Emulator está nesta instalação (ver [`motor`]).
-pub fn ler(escolhida: Option<&str>, informada: Option<&str>, emulador: bool) -> BibliotecaEmulador {
+/// `padrao`: a pasta padrão (ver [`pasta_padrao_de_roms`]); `emulador`: o ShmupX Emulator está
+/// nesta instalação (ver [`motor`]).
+pub fn ler(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&Path>, emulador: bool) -> BibliotecaEmulador {
     let Resolvida { inst, manual, indisponivel } = resolver(escolhida, informada);
     let pasta_escolhida = preenchido(escolhida).map(str::to_string);
-    // Para o jogador: a pasta de ROMs (a escolhida, ou a primeira com ROMs da instalação achada).
-    let root = inst.roms.clone().or_else(|| pastas_de_roms(&inst).into_iter().find(|p| tem_roms(p))).or_else(|| inst.raiz.clone());
+    // Para o jogador: a pasta escolhida; sem ela, a padrão (mesmo vazia: é onde ele põe os ROMs) ou,
+    // sem padrão, a primeira com ROMs da instalação achada.
+    let achada = || inst.roms.clone().or_else(|| pastas_de_roms(&inst).into_iter().find(|p| tem_roms(p))).or_else(|| inst.raiz.clone());
+    let root = if manual { achada() } else { padrao.map(Path::to_path_buf).or_else(achada) };
     let Some(root) = root else {
         return BibliotecaEmulador { pasta_escolhida, indisponivel, emulador, ..BibliotecaEmulador::nao_encontrada() };
     };
     let mut roms: Vec<String> = Vec::new();
-    for pasta in pastas_de_roms(&inst) {
+    for pasta in pastas_para_ler(&inst, padrao) {
         let Ok(entradas) = std::fs::read_dir(&pasta) else { continue };
         for entrada in entradas.flatten() {
             let nome = entrada.file_name().to_string_lossy().to_lowercase();
@@ -216,7 +255,7 @@ pub fn pasta_escolhida(app: &AppHandle) -> Option<String> {
     config.pasta.filter(|p| !p.trim().is_empty())
 }
 
-/// Guarda (ou, com `None`, esquece) a pasta escolhida; sem ela, volta a busca automática.
+/// Guarda (ou, com `None`, esquece) a pasta escolhida; sem ela, volta a pasta padrão.
 pub fn guardar_escolhida(app: &AppHandle, pasta: Option<&str>) -> Result<(), String> {
     let arquivo = arquivo(app)?;
     match pasta {
@@ -348,14 +387,14 @@ pub const SEM_EMULADOR: &str = "o ShmupX Emulator não foi encontrado nesta inst
 
 /// Abre o jogo no ShmupX Emulator com o primeiro ROM da lista que o jogador tem. Em tela cheia;
 /// com `janela`, em janela. Devolve o PID e o ROM aberto.
-pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, roms: &[String], janela: bool, motor: Option<&Motor>) -> Result<(u32, String), String> {
+pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&Path>, roms: &[String], janela: bool, motor: Option<&Motor>) -> Result<(u32, String), String> {
     let roms: Vec<String> = roms.iter().map(|r| r.trim().to_lowercase()).filter(|r| rom_valido(r)).collect();
     if roms.is_empty() {
         return Err("o Client ainda não sabe abrir este jogo no emulador".into());
     }
     let motor = motor.ok_or(SEM_EMULADOR)?;
     let Resolvida { inst, .. } = resolver(escolhida, informada);
-    abrir_no_motor(motor, &pastas_de_roms(&inst), &roms, janela)
+    abrir_no_motor(motor, &pastas_para_ler(&inst, padrao), &roms, janela)
 }
 
 /// Abre no ShmupX Engine: `shmupx-engine <rom> -rompath <pastas>` com o plugin de telemetria. Os
@@ -498,7 +537,7 @@ mod tests {
         std::fs::create_dir_all(&roms).unwrap();
         std::fs::write(roms.join("sonicwi2.zip"), b"").unwrap();
         assert_eq!(resolver_escolhida(&roms), Ok(Instalacao { raiz: None, roms: Some(roms.clone()) }));
-        let lida = ler(Some(&roms.to_string_lossy()), None, true);
+        let lida = ler(Some(&roms.to_string_lossy()), None, None, true);
         assert!(lida.found && lida.manual && !lida.indisponivel && lida.emulador);
         assert_eq!(lida.root.as_deref(), Some(&*roms.to_string_lossy()));
         assert!(lida.roms.contains(&"sonicwi2".to_string()));
@@ -518,9 +557,34 @@ mod tests {
     fn escolhida_que_sumiu_volta_a_busca_automatica() {
         let base = fightcade_falso("informada");
         let raiz = base.join("Fightcade");
-        let lida = ler(Some("C:\\pasta-que-nao-existe"), Some(&raiz.to_string_lossy()), false);
+        let lida = ler(Some("C:\\pasta-que-nao-existe"), Some(&raiz.to_string_lossy()), None, false);
         assert!(lida.indisponivel && !lida.manual && lida.found && !lida.emulador);
         assert!(lida.roms.contains(&"dariusg".to_string()) && lida.roms.contains(&"ket".to_string()));
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pasta_padrao_vazia_e_a_pasta_do_jogador() {
+        let base = fightcade_falso("padrao");
+        let padrao = base.join("ShmupX").join("roms");
+        std::fs::create_dir_all(&padrao).unwrap();
+        // Sem escolha: mostra a padrão (vazia), e os ROMs do Fightcade continuam valendo.
+        let lida = ler(None, Some(&base.join("Fightcade").to_string_lossy()), Some(&padrao), true);
+        assert!(lida.found && !lida.manual);
+        assert_eq!(lida.root.as_deref(), Some(&*padrao.to_string_lossy()));
+        assert!(lida.roms.contains(&"ket".to_string()));
+        // ROM copiado para a padrão entra na lista.
+        std::fs::write(padrao.join("ddp3.zip"), b"").unwrap();
+        assert!(ler(None, None, Some(&padrao), true).roms.contains(&"ddp3".to_string()));
+        // A escolhida vem antes da padrão.
+        let escolhida = base.join("MeusROMs");
+        std::fs::create_dir_all(&escolhida).unwrap();
+        std::fs::write(escolhida.join("sonicwi2.zip"), b"").unwrap();
+        let lida = ler(Some(&escolhida.to_string_lossy()), None, Some(&padrao), true);
+        assert!(lida.manual);
+        assert_eq!(lida.root.as_deref(), Some(&*escolhida.to_string_lossy()));
+        let inst = resolver(Some(&escolhida.to_string_lossy()), None).inst;
+        assert_eq!(pastas_para_ler(&inst, Some(&padrao))[..2], [escolhida.clone(), padrao.clone()]);
         let _ = std::fs::remove_dir_all(base);
     }
 
@@ -531,16 +595,16 @@ mod tests {
         assert!(!rom_valido(""));
         assert!(!rom_valido("../x"));
         assert!(!rom_valido("ket -w"));
-        assert!(abrir(None, None, &["../../x".into()], false, None).is_err());
+        assert!(abrir(None, None, None, &["../../x".into()], false, None).is_err());
         // Sem o ShmupX Emulator, nada abre (não há outro emulador).
-        assert_eq!(abrir(None, None, &["sonicwi2".into()], false, None), Err(SEM_EMULADOR.to_string()));
+        assert_eq!(abrir(None, None, None, &["sonicwi2".into()], false, None), Err(SEM_EMULADOR.to_string()));
     }
 
     /// Lê os ROMs deste PC: `cargo test -- --ignored roms_deste_pc --nocapture`.
     #[test]
     #[ignore = "depende dos ROMs deste PC"]
     fn roms_deste_pc() {
-        let b = ler(None, None, true);
+        let b = ler(None, None, None, true);
         println!("found={} root={:?} roms={} {:?}", b.found, b.root, b.roms.len(), b.roms.iter().take(12).collect::<Vec<_>>());
     }
 }

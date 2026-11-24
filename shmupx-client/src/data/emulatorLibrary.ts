@@ -44,11 +44,11 @@ export interface EmulatorScan {
   /** Pasta dos ROMs. */
   root?: string | null;
   roms: string[];
-  /** A pasta usada é a que o jogador escolheu (não a da busca automática). */
+  /** A pasta usada é a que o jogador escolheu (não a padrão, `roms` do Client). */
   manual?: boolean;
   /** Pasta escolhida pelo jogador e guardada no app, se houver. */
   pasta_escolhida?: string | null;
-  /** A pasta escolhida não tem mais ROMs (disco removido?): usando a busca automática. */
+  /** A pasta escolhida não tem mais ROMs (disco removido?): usando a padrão. */
   indisponivel?: boolean;
   /** Achou o emulador (`fcadefbneo.exe`): dá para abrir jogos, não só ler os ROMs. */
   emulador?: boolean;
@@ -76,7 +76,7 @@ export async function chooseEmulatorFolder(title: string): Promise<EmulatorScan 
   return result;
 }
 
-/** Esquece a pasta escolhida e volta à busca automática dos ROMs (atualiza a biblioteca importada). */
+/** Esquece a pasta escolhida e volta à pasta padrão dos ROMs (atualiza a biblioteca importada). */
 export async function resetEmulatorFolder(): Promise<EmulatorScan> {
   if (!isTauri()) return { found: false, roms: [] };
   const result = await invoke<EmulatorScan>("emulador_definir_pasta", { pasta: null });
