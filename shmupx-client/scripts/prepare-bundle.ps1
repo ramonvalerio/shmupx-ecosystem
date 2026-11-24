@@ -1,21 +1,26 @@
 <#
 .SYNOPSIS
   Junta em src-tauri\bundle\ o que o instalador leva além do app: motor de validação compilado,
-  scripts dos jogos aceitos e FFmpeg. O jogador não precisa instalar Python nem FFmpeg.
+  scripts dos jogos aceitos, FFmpeg e o ShmupX Emulator. O jogador não precisa instalar Python,
+  FFmpeg nem emulador.
 
 .DESCRIPTION
   validator\  shmupx-validator.exe + dependências (shmupx-lab\validators\tools\build_validator.ps1)
   games\      só os scripts de src-tauri\scripts-aceitos.json, e só se aprovados no Lab
   ffmpeg\     ffmpeg.exe (de -Ffmpeg ou do PATH) e a licença dele, se encontrada
+  engine\     ShmupX Emulator (ShmupX Engine): o pacote do último build do main que passou no
+              GitHub Actions (ramonvalerio/shmupx-engine, gh logado), ou o de -Emulador
 
-  Depois: npm run tauri build -- --config src-tauri/tauri.bundle.conf.json (ou npm run bundle).
+  Depois: npm run bundle (o tauri build com tauri.bundle.conf.json e tauri.bundle.windows.conf.json).
 
 .PARAMETER Ffmpeg
   ffmpeg.exe a distribuir. Padrão: o do PATH. Builds com libx264 são GPL: leve a licença junto.
 .PARAMETER ReusarMotor
   Não recompila o motor se shmupx-lab\validators\dist\shmupx-validator já existe.
+.PARAMETER Emulador
+  Pasta de um pacote do ShmupX Engine já baixado (com shmupx-engine.exe), no lugar do build do Actions.
 #>
-param([string]$Ffmpeg, [switch]$ReusarMotor)
+param([string]$Ffmpeg, [switch]$ReusarMotor, [string]$Emulador)
 $ErrorActionPreference = "Stop"
 $client = Split-Path $PSScriptRoot -Parent
 $validators = Resolve-Path (Join-Path $client "..\shmupx-lab\validators")
@@ -48,6 +53,22 @@ Copy-Item $Ffmpeg "$saida\ffmpeg\ffmpeg.exe"
 $licenca = Get-ChildItem (Split-Path (Split-Path $Ffmpeg)) -Filter "LICENSE*" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($licenca) { Copy-Item $licenca.FullName "$saida\ffmpeg\LICENSE.txt" }
 else { Write-Warning "licença do FFmpeg não encontrada ao lado de $Ffmpeg; inclua-a antes de distribuir" }
+
+# ShmupX Emulator: sem ele, nenhum jogo de emulador abre no Client instalado.
+$repoEmulador = "ramonvalerio/shmupx-engine"
+if ($Emulador) {
+    Copy-Item -Recurse $Emulador "$saida\engine"
+} else {
+    $build = gh run list -R $repoEmulador -b main -w build-windows.yml -s success -L 1 --json databaseId,headSha | ConvertFrom-Json | Select-Object -First 1
+    if (-not $build) { throw "não achei um build do ShmupX Engine que passou no Actions ($repoEmulador); confira o gh auth status" }
+    gh run download $build.databaseId -R $repoEmulador -n shmupx-engine-windows -D "$saida\engine"
+    if (-not $?) { throw "falha ao baixar o ShmupX Engine do build $($build.databaseId)" }
+    Write-Host "ShmupX Engine: build $($build.databaseId) (commit $($build.headSha.Substring(0, 7)))"
+}
+foreach ($item in "shmupx-engine.exe", "plugins\shmupx\init.lua", "COPYING", "VERSION.txt") {
+    if (-not (Test-Path "$saida\engine\$item")) { throw "o pacote do ShmupX Engine está incompleto: falta $item" }
+}
+Get-Content "$saida\engine\VERSION.txt" | Select-Object -First 1
 
 # Prova: o motor empacotado enxerga cada script aceito, completo.
 $lista = & "$saida\validator\shmupx-validator.exe" --list-games --games-dir "$saida\games" | ConvertFrom-Json
