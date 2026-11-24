@@ -5,3 +5,6 @@
 
 # Gerado por scripts/prepare-bundle.ps1 (motor, scripts e FFmpeg do instalador)
 /bundle/
+
+# Saída de build alternativa (ex.: CARGO_TARGET_DIR=target-dist); sem isto o Tailwind varre a pasta inteira
+/target-dist/

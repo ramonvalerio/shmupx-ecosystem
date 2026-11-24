@@ -2,3 +2,6 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
+
+# Saída de build alternativa (ex.: CARGO_TARGET_DIR=target-dist); sem isto o Tailwind varre a pasta inteira
+/target-dist/
