@@ -117,10 +117,11 @@ fn de_milissegundos(ms: i64) -> Option<DateTime<Utc>> {
     Utc.timestamp_millis_opt(ms).single()
 }
 
-/// Título do jogo com o modo ao lado (`Darius Gaiden · Ranked`), quando o modo é conhecido.
+/// Título do jogo com o modo ao lado (`Darius Gaiden · Ranked`), quando o modo é conhecido. No
+/// treino, só "Treinando" (como na lista de jogadores da sala do Client).
 fn com_modo(titulo: String, modo: Option<&str>) -> String {
     match modo {
-        Some("training") => format!("{titulo} · Training"),
+        Some("training") => "Treinando".into(),
         Some("ranked") => format!("{titulo} · Ranked"),
         Some("live") => format!("{titulo} · Live"),
         _ => titulo,
@@ -396,7 +397,7 @@ mod tests {
     #[test]
     fn modo_ao_lado_do_titulo() {
         assert_eq!(com_modo("Ketsui".into(), Some("ranked")), "Ketsui · Ranked");
-        assert_eq!(com_modo("Ketsui".into(), Some("training")), "Ketsui · Training");
+        assert_eq!(com_modo("Ketsui".into(), Some("training")), "Treinando");
         assert_eq!(com_modo("Ketsui".into(), None), "Ketsui");
         assert_eq!(com_modo("Ketsui".into(), Some("outro")), "Ketsui");
     }

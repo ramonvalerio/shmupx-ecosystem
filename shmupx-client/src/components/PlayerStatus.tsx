@@ -59,9 +59,12 @@ export default function PlayerStatus({ uid, recording, practiceGames }: {
         <span className="player-status-dot" aria-hidden="true" />
         <span className="player-status-text">
           <strong>{t(training ? "TREINANDO" : "JOGANDO")}</strong>
-          <small title={`${playing.title} · ${t(where.platform)} · ${t(KIND_LABEL[playing.kind])} · ${t(where.device)}`}>
-            {playing.title} · {t(where.platform)} · {t(KIND_LABEL[playing.kind])}
-          </small>
+          {/* No treino, só "Treinando" e a plataforma, sem o nome do jogo (como na sala). */}
+          {training
+            ? <small title={`${t(where.platform)} · ${t(where.device)}`}>{t(where.platform)}</small>
+            : <small title={`${playing.title} · ${t(where.platform)} · ${t(KIND_LABEL[playing.kind])} · ${t(where.device)}`}>
+                {playing.title} · {t(where.platform)} · {t(KIND_LABEL[playing.kind])}
+              </small>}
         </span>
         {stopButton}
         {error && <small className="player-status-error" role="alert">{t(error)}</small>}
