@@ -1,16 +1,36 @@
 import type { ComponentType, SVGProps } from "react";
-import { IconCatalog, IconCoins, IconLogout, IconMonitor, IconRelease, IconUsers, IconValidation } from "../ui/Icons";
+import { IconCalendar, IconCatalog, IconCoins, IconLogout, IconMonitor, IconPlans, IconRelease, IconUsers, IconValidation } from "../ui/Icons";
 import { getAmbiente } from "../../auth/firebase";
 
-export type LabView = "catalog" | "validation" | "releases" | "coins" | "users" | "client";
+export type LabView = "client" | "plans" | "releases" | "users" | "coins" | "events" | "catalog" | "validation";
 
-const VIEWS: { id: LabView; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
-  { id: "catalog", label: "Catálogo", icon: IconCatalog },
-  { id: "validation", label: "Validação", icon: IconValidation },
-  { id: "releases", label: "Versões", icon: IconRelease },
-  { id: "coins", label: "Coins Manager", icon: IconCoins },
-  { id: "users", label: "Users Manager", icon: IconUsers },
-  { id: "client", label: "Client Manager", icon: IconMonitor },
+type NavItem = { id: LabView; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> };
+
+/** Menu do Lab em seções: geral (Client e versões), controle (jogadores, fichas, eventos) e jogos. */
+const SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "General section",
+    items: [
+      { id: "client", label: "Client", icon: IconMonitor },
+      { id: "plans", label: "Plans", icon: IconPlans },
+      { id: "releases", label: "Versions", icon: IconRelease },
+    ],
+  },
+  {
+    title: "Control",
+    items: [
+      { id: "users", label: "Users", icon: IconUsers },
+      { id: "coins", label: "Coins", icon: IconCoins },
+      { id: "events", label: "Events", icon: IconCalendar },
+    ],
+  },
+  {
+    title: "Game section",
+    items: [
+      { id: "catalog", label: "Catálogo", icon: IconCatalog },
+      { id: "validation", label: "Validação", icon: IconValidation },
+    ],
+  },
 ];
 
 interface AppNavProps {
@@ -67,26 +87,33 @@ export default function AppNav({ view, onChangeView, accountEmail, onSignOut, on
         </button>
       )}
 
-      <ul className="flex-1 space-y-0.5 px-3">
-        {VIEWS.map(({ id, label, icon: Icon }) => {
-          const active = view === id;
-          return (
-            <li key={id}>
-              <button
-                type="button"
-                onClick={() => onChangeView(id)}
-                aria-current={active ? "page" : undefined}
-                className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400/50 focus-visible:outline-none ${
-                  active ? "bg-white/[0.06] font-medium text-zinc-100" : "text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200"
-                }`}
-              >
-                <Icon className={active ? "text-cyan-300" : ""} />
-                {label}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="flex-1 overflow-y-auto px-3">
+        {SECTIONS.map((section, index) => (
+          <section key={section.title} aria-label={section.title} className={index > 0 ? "mt-3 border-t border-white/5 pt-3" : ""}>
+            <p className="mb-1 px-3 text-[10px] font-semibold tracking-[0.14em] text-zinc-600 uppercase">{section.title}</p>
+            <ul className="space-y-0.5">
+              {section.items.map(({ id, label, icon: Icon }) => {
+                const active = view === id;
+                return (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      onClick={() => onChangeView(id)}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400/50 focus-visible:outline-none ${
+                        active ? "bg-white/[0.06] font-medium text-zinc-100" : "text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200"
+                      }`}
+                    >
+                      <Icon className={active ? "text-cyan-300" : ""} />
+                      {label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
 
       <div className="flex items-center gap-2.5 border-t border-white/5 px-4 py-3">
         <span aria-hidden className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-300 uppercase">

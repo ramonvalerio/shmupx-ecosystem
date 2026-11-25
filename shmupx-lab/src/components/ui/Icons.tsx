@@ -84,6 +84,9 @@ export const IconUsers = (p: SVGProps<SVGSVGElement>) => (
 export const IconMonitor = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="m9 9 3 3 3-3M12 6v6" /></Icon>
 );
+export const IconPlans = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="M12 2 3 7l9 5 9-5-9-5z" /><path d="m3 12 9 5 9-5" /><path d="m3 17 9 5 9-5" /></Icon>
+);
 export const IconCalendar = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Icon>
 );

@@ -7,6 +7,7 @@ import Button from "./components/ui/Button";
 import CatalogView from "./features/catalog/CatalogView";
 import CoinsView from "./features/coins/CoinsView";
 import ClientView from "./features/client/ClientView";
+import SoonView from "./components/layout/SoonView";
 import UsersView from "./features/users/UsersView";
 import { useUsers } from "./features/users/useUsers";
 import { useReports } from "./features/users/useReports";
@@ -88,6 +89,10 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
         <CatalogView games={catalog.games} loading={catalog.loading} error={catalog.error} onReload={catalog.reload} onSaved={catalog.upsert} onDeleted={catalog.remove} />
       ) : view === "client" ? (
         <ClientView />
+      ) : view === "plans" ? (
+        <SoonView title="Plans">Planos e assinaturas dos jogadores: o que cada plano inclui, preços e quem assina.</SoonView>
+      ) : view === "events" ? (
+        <SoonView title="Events">Eventos e torneios: datas, jogos, regras e premiação.</SoonView>
       ) : view === "coins" ? (
         <CoinsView users={users.users} usersLoading={users.loading} preselectedUid={coinsFor} onPreselectedUsed={clearCoinsFor} />
       ) : view === "users" ? (
