@@ -98,6 +98,9 @@ struct SubmeterRunPayload {
     vidas_perdidas: Option<i32>,
     #[serde(default)]
     continues_usados: Option<i32>,
+    /// Opcional: o jogo foi zerado (o fim do jogo). Sem ele, a run não entra na tabela 1CC.
+    #[serde(default)]
+    zerou: Option<bool>,
 }
 
 /// `POST /api/runs`: registra o resultado do validador offline na run indicada. Reenvio do mesmo
@@ -111,6 +114,7 @@ async fn submeter_run(
         score_bruto: payload.score_bruto,
         vidas_perdidas: payload.vidas_perdidas,
         continues_usados: payload.continues_usados,
+        zerou: payload.zerou,
     };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
     Ok(Json(run))

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { GAME_MODES, modesFor } from "./gameModes";
+import { playableMode, playModesFor } from "./gameModes";
 import { PLAY_ON } from "./platforms";
 
 /**
@@ -37,9 +37,9 @@ export function useRoomPlay(room: GameRoom, platforms: PlayOn[], owns: (platform
     return () => window.removeEventListener(EVENT, onChange);
   }, [room.id]);
 
-  const modes = GAME_MODES.filter((m) => modesFor(room).includes(m.id));
+  const modes = playModesFor(room);
   const options = PLAY_ON.filter((p) => platforms.includes(p.id));
-  const mode: GameMode = saved.mode && modes.some((m) => m.id === saved.mode) ? saved.mode : modes[0]?.id ?? "highscore";
+  const mode: GameMode = playableMode(room, saved.mode);
   const platform: PlayOn | null = saved.platform && platforms.includes(saved.platform) && owns(saved.platform)
     ? saved.platform
     : options.find((p) => owns(p.id))?.id ?? null;

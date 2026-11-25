@@ -653,3 +653,7 @@
 .room-player-kind { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid; border-radius: 3px; font-size: 10px; line-height: 14px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
 .room-player-kind.is-ranked { border-color: color-mix(in srgb, var(--cyan) 60%, transparent); color: var(--cyan); }
 .room-player-kind.is-live { border-color: #fd485199; color: #ff6b76; }
+/* Modo ainda não liberado (Caravan): desabilitado, com a etiqueta Coming soon. */
+.room-chip-soon { margin-left: 6px; color: #f2c14e; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+.play-mode-option:disabled { opacity: .55; cursor: default; }
+.play-mode-option .coming-soon-tag { margin-left: 8px; vertical-align: 2px; }

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@client/i18n";
-import { GAME_MODES, misterEntryMatches, modesFor } from "@client/data/gameModes";
+import { GAME_MODES, misterEntryMatches, modesFor, playableMode, playModesFor } from "@client/data/gameModes";
 import { romsFor } from "@client/data/emulatorLibrary";
 import { misterMatches, useMisterLibrary } from "@client/data/misterLibrary";
 import { misterAuth, readMisterPlayer, type MisterMenuGame } from "@client/data/misterPlayer";
@@ -40,7 +40,10 @@ export function modeFor(room: GameRoom, wanted: GameMode): GameMode {
   const modes = modesFor(room);
   return modes.includes(wanted) ? wanted : modes[0] ?? "highscore";
 }
+/** Tabelas do ranking da sala (Hi-Score, 1CC, Caravan). */
 export const roomModes = (room: GameRoom) => GAME_MODES.filter((m) => modesFor(room).includes(m.id));
+/** Modos para jogar: Hi-Score e Caravan (em breve); o 1CC sai da run de Hi-Score. */
+export const roomPlayModes = playModesFor;
 
 export type Session =
   | { where: "mister"; room: GameRoom; host: string; password?: string; kind: Kind; label: string }
@@ -208,7 +211,7 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
       setError({ roomId: room.id, message: t("{game} não abre em {platform}. Escolha outra plataforma acima ou entre na sala.", { game: room.title, platform: t(PLATFORM_LABEL[preset.platform]) }) });
       return false;
     }
-    return start(room, preset.kind, modeFor(room, preset.mode), preset.platform);
+    return start(room, preset.kind, playableMode(room, preset.mode), preset.platform);
   }, [start, t]);
 
   const stop = useCallback(async () => {

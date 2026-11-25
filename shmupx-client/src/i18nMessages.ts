@@ -343,7 +343,7 @@ const TUTORIAL_ENGLISH: Record<string, string> = {
   "Escolha um jogo": "Pick a game",
   "Toque num jogo colorido: são os que você tem. Os detalhes e a ficha para jogar aparecem ao lado.": "Tap a game in color: those are the ones you have. The details and the coin to play show up on the side.",
   "Escolha o modo de pontuação": "Choose your score mode",
-  "Hi-Score: pontuação máxima, com quantos créditos quiser. 1CC: zerar com 1 crédito. Caravan: pontuação em tempo limitado. Toque num modo ou em Próximo.": "Hi-Score: highest score, with as many credits as you want. 1CC: clear the game on 1 credit. Caravan: score in a limited time. Tap a mode or Next.",
+  "Hi-Score: pontuação máxima; se zerar com 1 crédito, a run entra também no ranking 1CC. Caravan (em breve): pontuação em tempo limitado. Toque num modo ou em Próximo.": "Hi-Score: highest score; if you clear the game on 1 credit, the run also goes into the 1CC ranking. Caravan (coming soon): score in limited time. Tap a mode or Next.", "Pontuação máxima. Se zerar com 1 crédito, entra também no ranking 1CC.": "Highest score. Clear it on 1 credit and it also goes into the 1CC ranking.",
   "Insira a ficha": "Insert a coin",
   "Toque na ficha para jogar.": "Tap the coin to play.",
   "Como você quer jogar?": "How do you want to play?",

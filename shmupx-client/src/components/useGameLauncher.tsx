@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { GAME_MODES, misterEntryMatches, modesFor, setPendingRunMode } from "../data/gameModes";
+import { misterEntryMatches, playableMode, playModesFor, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { readEmulatorControls } from "../data/emulatorControls";
@@ -114,14 +114,16 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       return;
     }
     const owned = list.find((id) => playable.owns(room, id));
-    setChoosing({ kind, platforms: list, mode: modesFor(room)[0], platform: owned ?? list[0] });
+    setChoosing({ kind, platforms: list, mode: playableMode(room, undefined), platform: owned ?? list[0] });
   }
 
   /**
    * Abre direto, com o modo e a plataforma já escolhidos no cabeçalho da sala (sem a janela).
    * Live: a sala põe a live no ar (o MiSTer fica de fora, porque a live captura a janela no PC).
    */
-  function playNow(kind: PlayKind, platform: PlayOn, chosen: GameMode) {
+  function playNow(kind: PlayKind, platform: PlayOn, wanted: GameMode) {
+    // Só Hi-Score (e Caravan quando sair): o 1CC sai da run de Hi-Score.
+    const chosen = playableMode(room, wanted);
     setError(null);
     setNotice(null);
     if (blockedByOpenGame(kind)) return;
@@ -367,9 +369,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
           <div className="controller-dialog-body play-dialog-body">
             <h3 className="play-dialog-label">{t("Modo de jogo")}</h3>
             <div className="play-mode-options" role="radiogroup" aria-label={t("Modo de jogo")}>
-              {GAME_MODES.filter((m) => modesFor(room).includes(m.id)).map((m) => (
-                <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" onClick={() => setChoosing({ ...choosing, mode: m.id })}>
-                  <strong>{m.label}</strong><small>{t(m.detail)}</small>
+              {playModesFor(room).map((m) => (
+                <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" disabled={m.soon} onClick={() => setChoosing({ ...choosing, mode: m.id })}>
+                  <strong>{m.label}{m.soon && <span className="coming-soon-tag">{t("Coming soon")}</span>}</strong><small>{t(m.detail)}</small>
                 </button>
               ))}
             </div>

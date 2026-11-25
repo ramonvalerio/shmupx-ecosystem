@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::firestore::valor::{
-    data, inteiro, ler_booleano, ler_data, ler_inteiro, ler_lista_de_textos, ler_mapa, ler_texto, mapa, texto,
+    booleano, data, inteiro, ler_booleano, ler_data, ler_inteiro, ler_lista_de_textos, ler_mapa, ler_texto, mapa, texto,
 };
 use crate::firestore::{Campos, Firestore};
 
@@ -47,6 +47,9 @@ pub struct Resultado {
     pub score_bruto: i64,
     pub vidas_perdidas: Option<i32>,
     pub continues_usados: Option<i32>,
+    /// `true` quando o jogador zerou o jogo (o fim do jogo, não só o game over). Com 0 continues, a
+    /// run de Hi-Score entra também na tabela 1CC.
+    pub zerou: Option<bool>,
 }
 
 /// Como a partida foi jogada. Ranking: mesmo jogo e mesma versão, venha de PC, emulador,
@@ -346,6 +349,9 @@ async fn submeter_na_transacao(
     if let Some(continues) = resultado.continues_usados {
         campos_resultado.insert("continuesUsed".into(), inteiro(continues.into()));
     }
+    if let Some(zerou) = resultado.zerou {
+        campos_resultado.insert("cleared".into(), booleano(zerou));
+    }
     let escrita = atualizar(
         fs,
         &caminho,
@@ -361,6 +367,7 @@ fn ler_resultado(campos: &Campos) -> Option<Resultado> {
         score_bruto: ler_inteiro(campos, "score")?,
         vidas_perdidas: ler_inteiro(campos, "livesLost").and_then(|v| v.try_into().ok()),
         continues_usados: ler_inteiro(campos, "continuesUsed").and_then(|v| v.try_into().ok()),
+        zerou: ler_booleano(campos, "cleared"),
     })
 }
 
@@ -441,7 +448,7 @@ mod tests {
         assert_eq!(ler_inteiro(&carteira, "version"), Some(2));
         fs.desfazer(&leitura).await;
 
-        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0) };
+        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0), zerou: None };
 
         // Outro jogador não enxerga nem submete a run.
         assert!(submeter(&fs, "uid-intruso", &run.run_id, &jogo, resultado.clone()).await.is_err());
@@ -500,7 +507,7 @@ mod tests {
         let uid = format!("uid-{}", Uuid::new_v4());
         let tx = fs.iniciar_transacao().await.unwrap();
         fs.confirmar(&tx, vec![criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(600))]))]).await.unwrap();
-        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0) };
+        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0), zerou: None };
 
         // Fluxo normal: encerrar (idempotente), depois enviar.
         let run = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();

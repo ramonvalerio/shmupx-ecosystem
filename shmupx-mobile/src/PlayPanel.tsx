@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useI18n } from "@client/i18n";
 import { readMisterPlayer } from "@client/data/misterPlayer";
+import { playableMode } from "@client/data/gameModes";
 import type { GameMode, GameRoom } from "@client/types/room";
 import type { Kind, Platform, PlayPreset } from "./prefs";
-import { PLATFORM_LABEL, PLATFORM_MARK, SessionBar, modeFor, platformsFor, roomModes, useMisterCompatible, usePlay } from "./play";
+import { PLATFORM_LABEL, PLATFORM_MARK, SessionBar, platformsFor, roomPlayModes, useMisterCompatible, usePlay } from "./play";
 import { useBackLayer } from "./back";
 
 export { useMisterCompatible } from "./play";
@@ -17,7 +18,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
   const play = usePlay();
   const misterOk = useMisterCompatible(room);
   const platforms = platformsFor(room, misterOk);
-  const modes = roomModes(room);
+  const modes = roomPlayModes(room);
   const player = readMisterPlayer();
   const [sheet, setSheet] = useState<{ kind: Kind; mode: GameMode; platform: Platform | null } | null>(null);
   useBackLayer(sheet !== null, () => setSheet(null));
@@ -27,7 +28,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
     const usable = (p: Platform) => play.availability(room, p, kind).ok;
     // A da pré-configuração, se a sala tem; senão uma que dá para usar agora.
     const preferred = platforms.includes(preset.platform) ? preset.platform : platforms.find(usable) ?? platforms[0] ?? null;
-    setSheet({ kind, mode: modeFor(room, preset.mode), platform: preferred });
+    setSheet({ kind, mode: playableMode(room, preset.mode), platform: preferred });
   }
 
   async function confirm() {
@@ -75,8 +76,8 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
               <h3 className="lite-sheet-label">{t("Modo de jogo")}</h3>
               <div className="lite-mode-chips" role="radiogroup" aria-label={t("Modo de jogo")}>
                 {modes.map((m) => (
-                  <button key={m.id} type="button" role="radio" aria-checked={sheet.mode === m.id} className="lite-chip" onClick={() => setSheet({ ...sheet, mode: m.id })}>
-                    <strong>{m.label}</strong><small>{t(m.detail)}</small>
+                  <button key={m.id} type="button" role="radio" aria-checked={sheet.mode === m.id} className="lite-chip" disabled={m.soon} onClick={() => setSheet({ ...sheet, mode: m.id })}>
+                    <strong>{m.label}{m.soon && <> · {t("Coming soon")}</>}</strong><small>{t(m.detail)}</small>
                   </button>
                 ))}
               </div>

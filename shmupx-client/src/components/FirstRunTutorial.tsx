@@ -98,7 +98,7 @@ function stepInfo(id: StepId, importing: boolean): StepInfo {
     case "pick-game": return { code: "2.1", phase: 2, index: 1, target: "game-owned", hand: true, block: true,
       title: "Escolha um jogo", text: "Toque num jogo colorido: são os que você tem. Os detalhes e a ficha para jogar aparecem ao lado." };
     case "pick-mode": return { code: "2.2", phase: 2, index: 2, target: "play-modes", hand: true, block: true, next: true,
-      title: "Escolha o modo de pontuação", text: "Hi-Score: pontuação máxima, com quantos créditos quiser. 1CC: zerar com 1 crédito. Caravan: pontuação em tempo limitado. Toque num modo ou em Próximo." };
+      title: "Escolha o modo de pontuação", text: "Hi-Score: pontuação máxima; se zerar com 1 crédito, a run entra também no ranking 1CC. Caravan (em breve): pontuação em tempo limitado. Toque num modo ou em Próximo." };
     case "insert-coin": return { code: "2.3", phase: 2, index: 3, target: "play-coin", hand: true, block: true,
       title: "Insira a ficha", text: "Toque na ficha para jogar." };
     case "choose-mode": return { code: "2.4", phase: 2, index: 4, target: "play-mode-choices", hand: true, block: true, point: ".play-mode-choice.is-training",

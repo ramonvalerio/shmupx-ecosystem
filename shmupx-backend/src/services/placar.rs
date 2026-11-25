@@ -24,6 +24,8 @@ pub struct Partida {
     pub score: i64,
     pub continues: i32,
     pub vidas_perdidas: Option<i32>,
+    /// O jogador zerou o jogo (`result.cleared`).
+    pub zerou: bool,
     pub modo: Option<String>,
     pub versao: Option<String>,
     pub origem: Option<String>,
@@ -79,6 +81,16 @@ pub fn modo_combina(filtro: Option<&str>, modo: Option<&str>) -> bool {
     }
 }
 
+/// A partida entra na tabela do filtro. 1CC não se escolhe ao jogar: a tabela 1CC tem as runs de
+/// Hi-Score em que o jogador zerou com 1 crédito (0 continues), além das antigas marcadas `1cc`.
+/// Elas continuam também na tabela Hi-Score.
+pub fn entra_na_tabela(filtro: Option<&str>, p: &Partida) -> bool {
+    match filtro {
+        Some("1cc") => p.modo.as_deref() == Some("1cc") || (modo_combina(Some("highscore"), p.modo.as_deref()) && p.zerou && p.continues == 0),
+        _ => modo_combina(filtro, p.modo.as_deref()),
+    }
+}
+
 /// Média e desvio padrão amostral dos placares de cada jogo (como `AVG`/`STDDEV` do SQL).
 fn estatisticas(partidas: &[Partida]) -> HashMap<&str, (Option<f64>, Option<f64>)> {
     let mut por_jogo: HashMap<&str, Vec<f64>> = HashMap::new();
@@ -112,7 +124,7 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
     let stats = estatisticas(partidas);
     let mut melhores: HashMap<&str, (&Partida, usize)> = HashMap::new();
     for p in partidas.iter().filter(|p| {
-        p.jogo == jogo && modo_combina(modo, p.modo.as_deref()) && versao.is_none_or(|v| p.versao.as_deref() == Some(v))
+        p.jogo == jogo && entra_na_tabela(modo, p) && versao.is_none_or(|v| p.versao.as_deref() == Some(v))
     }) {
         let atual = melhores.entry(p.jogador.as_str()).or_insert((p, 0));
         atual.1 += 1;
@@ -207,6 +219,7 @@ mod tests {
             score,
             continues: 0,
             vidas_perdidas: None,
+            zerou: false,
             modo: None,
             versao: None,
             origem: Some("pc".into()),
@@ -239,6 +252,20 @@ mod tests {
         let partidas = [partida("ana", "j", 500), partida("bia", "j", 500), partida("caio", "j", 100)];
         let posicoes: Vec<usize> = ranking_do_jogo(&partidas, "j", None, None).iter().map(|e| e.posicao).collect();
         assert_eq!(posicoes, vec![1, 1, 3]);
+    }
+
+    #[test]
+    fn hi_score_zerado_com_1_credito_entra_tambem_no_1cc() {
+        let mut zerou = partida("ana", "j", 900);
+        zerou.zerou = true;
+        let mut zerou_com_continue = partida("bia", "j", 800);
+        zerou_com_continue.zerou = true;
+        zerou_com_continue.continues = 1;
+        let sem_zerar = partida("caio", "j", 950);
+        let partidas = [zerou, zerou_com_continue, sem_zerar];
+        let ids = |modo| ranking_do_jogo(&partidas, "j", modo, None).into_iter().map(|e| e.jogador_id).collect::<Vec<_>>();
+        assert_eq!(ids(Some("1cc")), vec!["ana"]);
+        assert_eq!(ids(Some("highscore")), vec!["caio", "ana", "bia"]);
     }
 
     #[test]
