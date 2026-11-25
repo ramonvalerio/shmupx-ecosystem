@@ -28,8 +28,68 @@ const CORE_NOME: &str = "MegaDriveRA_20260815.rbf";
 #[derive(Deserialize)]
 struct Manifesto {
     version: String,
+    #[serde(default)]
+    commit: String,
     url: String,
     sha256: String,
+}
+
+impl Manifesto {
+    /// O que o pacote grava em `shmupx/versao` (`0.2.0-abc1234`): compara com o instalado.
+    fn identidade(&self) -> String {
+        if self.commit.is_empty() { self.version.clone() } else { format!("{}-{}", self.version, self.commit) }
+    }
+}
+
+/// Para o serviço do agente antes de trocar o binário (um executável em uso não pode ser
+/// sobrescrito no Linux); o `instalar.sh` liga de novo no fim.
+const PARAR_SERVICO: &str = "killall shmupx-mister 2>/dev/null; sleep 1; true";
+
+/// Baixa o pacote publicado e confere o SHA-256.
+async fn pacote_publicado() -> Result<(Manifesto, Vec<u8>), String> {
+    let manifesto: Manifesto = serde_json::from_slice(&baixar(MANIFESTO).await?).map_err(|e| format!("pacote do MiSTer inválido: {e}"))?;
+    let pacote = baixar(&manifesto.url).await?;
+    let hash: String = Sha256::digest(&pacote).iter().map(|b| format!("{b:02x}")).collect();
+    if !hash.eq_ignore_ascii_case(&manifesto.sha256) {
+        return Err("o pacote do MiSTer baixado não confere (SHA-256); tente de novo".into());
+    }
+    Ok((manifesto, pacote))
+}
+
+/// O MiSTer precisa do agente publicado? `instalado`: conteúdo de `shmupx/versao` (vazio nas
+/// instalações anteriores à 0.2.0, que não gravavam a versão).
+fn precisa_atualizar(instalado: &str, publicado: &str) -> bool {
+    instalado.trim() != publicado.trim()
+}
+
+/// Atualiza o agente do ShmupX num MiSTer já conectado quando há versão nova publicada. Só com o
+/// MiSTer no menu (não corta uma partida) e só onde o ShmupX já está instalado. Mantém o
+/// `shmupx.ini` (jogadores e tokens), o `jogos.txt` e os perfis. Devolve a versão instalada, ou
+/// `None` se não precisou (ou não era a hora).
+pub async fn atualizar_agente(host: &str, usuario: &str, senha: &str) -> Result<Option<String>, String> {
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
+    let (instalado, _) = ssh.executar(&format!("test -x {PASTA}/shmupx-mister"), None).await?;
+    if instalado != 0 {
+        return Ok(None);
+    }
+    let (_, versao) = ssh.executar(&format!("cat {PASTA}/versao 2>/dev/null"), None).await?;
+    let manifesto: Manifesto = serde_json::from_slice(&baixar(MANIFESTO).await?).map_err(|e| format!("pacote do MiSTer inválido: {e}"))?;
+    if !precisa_atualizar(&versao, &manifesto.identidade()) {
+        return Ok(None);
+    }
+    let (_, core) = ssh.executar("cat /tmp/CORENAME 2>/dev/null", None).await?;
+    if !core.trim().eq_ignore_ascii_case("MENU") {
+        return Ok(None);
+    }
+    let (manifesto, pacote) = pacote_publicado().await?;
+    ssh.exigir(&format!("cp {PASTA}/jogos.txt /tmp/shmupx-jogos.txt 2>/dev/null; {PARAR_SERVICO}"), None, "parar o serviço do ShmupX").await?;
+    ssh.exigir(&format!("tar -xf - -C {PASTA}"), Some(&pacote), "copiar o ShmupX").await?;
+    let comando = format!(
+        "cd {PASTA} && {{ [ -f /tmp/shmupx-jogos.txt ] && cp /tmp/shmupx-jogos.txt jogos.txt; true; }} && sed -i 's/\\r$//' *.sh Scripts/*.sh && mkdir -p perfis && \
+         for p in perfis-novos/*.json; do [ -e \"perfis/$(basename \"$p\")\" ] || cp \"$p\" perfis/; done; ./instalar.sh"
+    );
+    ssh.exigir(&comando, None, "o instalador").await?;
+    Ok(Some(manifesto.identidade()))
 }
 
 struct Cliente;
@@ -115,14 +175,10 @@ pub async fn instalar(host: &str, usuario: &str, senha: &str, username: &str, to
     let ssh = Ssh::conectar(host, usuario, senha).await?;
 
     etapa("Baixando o ShmupX para o MiSTer…");
-    let manifesto: Manifesto = serde_json::from_slice(&baixar(MANIFESTO).await?).map_err(|e| format!("pacote do MiSTer inválido: {e}"))?;
-    let pacote = baixar(&manifesto.url).await?;
-    let hash: String = Sha256::digest(&pacote).iter().map(|b| format!("{b:02x}")).collect();
-    if !hash.eq_ignore_ascii_case(&manifesto.sha256) {
-        return Err("o pacote do MiSTer baixado não confere (SHA-256); tente de novo".into());
-    }
+    let (manifesto, pacote) = pacote_publicado().await?;
 
     etapa("Copiando o ShmupX para o MiSTer…");
+    ssh.exigir(PARAR_SERVICO, None, "parar o serviço do ShmupX").await?;
     ssh.exigir(&format!("mkdir -p {PASTA} && tar -xf - -C {PASTA}"), Some(&pacote), "copiar o ShmupX").await?;
 
     let (_, cores) = ssh.executar(&format!("ls {PASTA}/cores/MegaDriveRA_*.rbf 2>/dev/null"), None).await?;
@@ -232,6 +288,17 @@ pub async fn eh_mister(host: &str, usuario: &str, senha: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atualiza_quando_a_versao_instalada_e_outra() {
+        let publicado = Manifesto { version: "0.2.0".into(), commit: "abc1234".into(), url: String::new(), sha256: String::new() };
+        assert_eq!(publicado.identidade(), "0.2.0-abc1234");
+        assert!(precisa_atualizar("", &publicado.identidade()), "instalação antiga, sem arquivo de versão");
+        assert!(precisa_atualizar("0.1.0-0000000\n", &publicado.identidade()));
+        assert!(!precisa_atualizar("0.2.0-abc1234\n", &publicado.identidade()));
+        let sem_commit = Manifesto { commit: String::new(), ..publicado };
+        assert_eq!(sem_commit.identidade(), "0.2.0");
+    }
 
     #[test]
     fn jogos_do_menu_ficam_com_o_jogador_e_o_modo() {

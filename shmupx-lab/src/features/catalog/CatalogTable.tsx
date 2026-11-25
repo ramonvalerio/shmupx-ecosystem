@@ -127,7 +127,7 @@ export default function CatalogTable({ games, loading, filtered, selectedId, val
               <td className={`${CELL} text-zinc-400`}>{playOnLabels(playOnOf(game)) || "—"}</td>
               <td className={`${CELL} font-mono text-xs text-zinc-400`}>{game.steam_app_id || "—"}</td>
               <td className={`${CELL} text-right text-zinc-400 tabular-nums`}>{Math.round(game.max_duration_segundos / 60)} min</td>
-              <td className={CELL}>{validation ? <RankedValidationBadge validation={validation.get(game.id)} /> : <span className="text-zinc-600">—</span>}</td>
+              <td className={CELL}>{validation ? <RankedValidationBadge validation={validation.get(game.id)} mister={game.ranked_mister} /> : <span className="text-zinc-600">—</span>}</td>
               <td className={`${CELL} text-zinc-400 tabular-nums`}>{formatDateTime(game.created_at)}</td>
               <td className={`${CELL} text-zinc-400 tabular-nums`}>{formatDateTime(game.updated_at)}</td>
               <td className={CELL}>

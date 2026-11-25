@@ -39,13 +39,15 @@ interface Draft {
   platforms: string[];
   modes: string[];
   coverUrl: string;
+  /** Ranked no MiSTer: o agente lê o placar da memória lá (hoje só o Earthion, core Mega Drive). */
+  rankedMister: boolean;
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function toDraft(game: CatalogGame | null): Draft {
   if (!game) {
-    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "" };
+    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "", rankedMister: false };
   }
   return {
     id: game.id,
@@ -61,6 +63,7 @@ function toDraft(game: CatalogGame | null): Draft {
     platforms: playOnOf(game),
     modes: game.modes,
     coverUrl: game.cover_url ?? "",
+    rankedMister: game.ranked_mister ?? false,
   };
 }
 
@@ -89,6 +92,39 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="mb-3 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{title}</h3>
       {children}
     </section>
+  );
+}
+
+/**
+ * Ranked pela leitura de memória, por plataforma. Emulador: fixo, marcado quando o ShmupX Emulator já
+ * tem o mapa de memória do jogo (programação interna, `jogos-pela-memoria.json`). MiSTer: o admin liga
+ * quando o agente do MiSTer lê o placar do jogo; desligado, o jogo no MiSTer é só Training.
+ */
+function RankedMemoryFlags({ id, ranked, draft, onRankedMister }: { id: string; ranked: GameEditorProps["ranked"]; draft: Draft; onRankedMister: (on: boolean) => void }) {
+  const roms = ranked.byGame?.get(id)?.roms ?? [];
+  const onMister = draft.platforms.includes("mister");
+  return (
+    <div className="space-y-2">
+      <span className="block text-xs font-medium text-zinc-400">Ranked pela leitura de memória</span>
+      <Switch
+        checked={roms.length > 0}
+        onChange={() => undefined}
+        disabled
+        label="Emulador (ShmupX Emulator)"
+        description={roms.length > 0
+          ? `Fixo: o ShmupX Emulator já lê o placar da memória deste jogo (ROM ${roms.join(", ")}). Vem da programação do Client.`
+          : "O ShmupX Emulator ainda não tem o mapa de memória deste jogo. Liga sozinho quando a leitura for programada no Client."}
+      />
+      <Switch
+        checked={draft.rankedMister && onMister}
+        onChange={onRankedMister}
+        disabled={!onMister}
+        label="MiSTer"
+        description={onMister
+          ? "Ligue só se o agente do MiSTer lê o placar deste jogo (hoje só o Earthion, no core de Mega Drive). Desligado, no MiSTer o jogo é só Training."
+          : "Marque MiSTer nas plataformas para liberar."}
+      />
+    </div>
   );
 }
 
@@ -192,6 +228,7 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
         platforms: PLAY_ON.map((p) => p.value).filter((value) => draft.platforms.includes(value)),
         modes: draft.modes,
         cover_url: draft.coverUrl || undefined,
+        ranked_mister: draft.rankedMister && draft.platforms.includes("mister"),
       });
       onSaved(saved);
     } catch (e) {
@@ -365,6 +402,7 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
                 </Field>
               </div>
               <RankedValidationField id={draft.id.trim()} ranked={ranked} />
+              <RankedMemoryFlags id={draft.id.trim()} ranked={ranked} draft={draft} onRankedMister={(rankedMister) => patch({ rankedMister })} />
               <Switch
                 checked={draft.published}
                 onChange={(published) => patch({ published })}

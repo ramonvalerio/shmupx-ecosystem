@@ -8,6 +8,7 @@
 
 mod config;
 mod envio;
+mod presenca;
 mod espelho;
 mod genesis;
 mod memoria;
@@ -272,6 +273,10 @@ mod hardware {
     /// Espera um core de Mega Drive com espelho, lê o placar enquanto o jogo roda e grava a
     /// partida em `<pasta>/partidas/` quando o core para (volta ao menu ou troca de core).
     pub fn servico(base: u64, pasta: &Path) -> Result<(), String> {
+        // Jogo aberto na conta (aberto/fechado ao backend): vale para todo jogo do menu ShmupX,
+        // inclusive os de arcade sem leitura de placar, por isso roda antes do espelho.
+        let vigia = pasta.to_path_buf();
+        std::thread::spawn(move || crate::presenca::vigiar(vigia));
         let mut espelho = abrir(base)?;
         let mut ultimo_estado = String::new();
         let mut core_anterior = String::new();

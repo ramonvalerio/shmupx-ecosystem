@@ -7,6 +7,7 @@ pub mod denuncias;
 pub mod distribuicoes;
 pub mod email;
 pub mod gameplays;
+pub mod jogo_aberto;
 pub mod mister;
 pub mod notificacoes;
 pub mod perfil;

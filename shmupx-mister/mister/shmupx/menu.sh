@@ -12,8 +12,11 @@
 #
 # Cada item leva jogador e modo no nome do core, que o MiSTer grava em /tmp/CORENAME
 # (cortado em 31 caracteres, por isso os códigos de modo são curtos: hs 1cc spr cls):
-#   .mgl: <setname same_dir="1">SX_<id>_<modo></setname>  (o serviço vê o core em /tmp/RBFNAME)
+#   .mgl: <setname same_dir="1"><código>_<id>_<modo></setname>  (código = nome do jogo, só letras e
+#         dígitos, até 10; o serviço vê o core em /tmp/RBFNAME)
 #   .mra: <setname>dariusg_<id>_<modo></setname>
+# O código de cada jogo (o setname do .mra, ou o do .mgl) vai para codigos.txt (<código>|<nome>):
+# com ele o serviço sabe qual jogo abriu e avisa o ShmupX (jogo aberto na conta).
 # Rodado pelo instalador, pelo serviço (quando alguém começa a jogar) e ao abrir
 # Scripts > shmupx, então basta editar o shmupx.ini ou o jogos.txt.
 set -eu
@@ -32,6 +35,21 @@ classic|cls|_Caravan/_Classic (5 min)'
 usuarios=$("$PASTA/shmupx-mister" --pasta "$PASTA" usuarios 2>/dev/null || true)
 [ -n "$usuarios" ] || usuarios="jogador JOGADOR"
 jogos=$(grep -v '^[[:space:]]*#' "$JOGOS" 2>/dev/null | grep '|' || true)
+
+# Código do jogo no nome do core: .mra usa o setname do arquivo; .mgl, o nome do jogo (letras e
+# dígitos, até 10, para caber com jogador e modo nos 31 caracteres do CORENAME).
+codigo_do_jogo() {
+  case "$1" in
+    *.mgl) printf '%s' "${1%.*}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9' | cut -c1-10 ;;
+    *.mra) sed -n 's|.*<setname>\([^<]*\)</setname>.*|\1|p' "$2" | head -n 1 ;;
+  esac
+}
+echo "$jogos" | while IFS='|' read -r arquivo _modos _origem; do
+  [ -n "$arquivo" ] && [ -f "$MODELOS/$arquivo" ] || continue
+  jogo_codigo=$(codigo_do_jogo "$arquivo" "$MODELOS/$arquivo")
+  [ -n "$jogo_codigo" ] && printf '%s|%s\n' "$jogo_codigo" "${arquivo%.*}"
+done > "$PASTA/codigos.txt.novo" || true
+mv "$PASTA/codigos.txt.novo" "$PASTA/codigos.txt"
 
 # Monta ao lado e troca no fim: o menu nunca fica pela metade.
 NOVO="$SD/_ShmupX.novo"
@@ -58,7 +76,8 @@ echo "$usuarios" | while read -r id nome; do
       destino="$jogador/$caminho/$arquivo"
       case "$arquivo" in
         *.mgl)
-          sed "s|<rbf>|<setname same_dir=\"1\">SX_${id}_${codigo}</setname>\n    <rbf>|" "$modelo" > "$destino"
+          jogo_codigo=$(codigo_do_jogo "$arquivo" "$modelo")
+          sed "s|<rbf>|<setname same_dir=\"1\">${jogo_codigo:-sx}_${id}_${codigo}</setname>\n    <rbf>|" "$modelo" > "$destino"
           ;;
         *.mra)
           sed "s|<setname>\([^<]*\)</setname>|<setname>\1_${id}_${codigo}</setname>|" "$modelo" > "$destino"

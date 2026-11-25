@@ -30,6 +30,8 @@ def adicionar(tar, destino, conteudo, executavel):
 
 with tarfile.open(f"target/pacote/{nome}", "w", format=tarfile.GNU_FORMAT) as tar:
     adicionar(tar, "shmupx-mister", open(f"target/{ALVO}/release/shmupx-mister", "rb").read(), True)
+    # Versão instalada: o Client compara com o latest.json e atualiza o MiSTer sozinho.
+    adicionar(tar, "versao", f"{versao}-{commit}\n".encode(), False)
     base = "mister/shmupx"
     for pasta, _, arquivos in os.walk(base):
         for arquivo in sorted(arquivos):

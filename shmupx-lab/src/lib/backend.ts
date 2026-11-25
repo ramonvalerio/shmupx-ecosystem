@@ -19,6 +19,8 @@ export interface CatalogGame {
   modes: string[];
   /** Imagem do card no Client (WebP 16:9 em www.shmupx.com/catalog/covers/). */
   cover_url?: string;
+  /** Ranked no MiSTer liberado: o agente do MiSTer lê o placar da memória do jogo. Exige MiSTer em `platforms`. */
+  ranked_mister?: boolean;
   /** Data de cadastro (ISO 8601), definida pelo backend. */
   created_at?: string;
   /** Última alteração, inclusive no RobotX (ISO 8601), definida pelo backend. */

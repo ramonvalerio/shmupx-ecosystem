@@ -62,6 +62,10 @@ pub struct JogoEntrada {
     /// Imagem do card (16:9, WebP), enviada pelo Lab. Ausente = cartão tipográfico.
     #[serde(default)]
     pub cover_url: Option<String>,
+    /// Ranked no MiSTer: o agente lê o placar da memória do jogo no MiSTer (hoje só o Earthion, no
+    /// core de Mega Drive). Desligado, o jogo no MiSTer é só Training. Exige MiSTer em `platforms`.
+    #[serde(default)]
+    pub ranked_mister: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, PartialEq)]
@@ -85,6 +89,8 @@ pub struct Jogo {
     pub modes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    /// Ranked no MiSTer liberado (leitura de placar pela memória no agente do MiSTer).
+    pub ranked_mister: bool,
     /// Quando o jogo foi cadastrado (RFC 3339, do Firestore). Só na visão do admin.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -144,6 +150,9 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
             modes.push(modo);
         }
     }
+    if entrada.ranked_mister && !platforms.iter().any(|p| p == "mister") {
+        return Err(AppError::bad_request("Ranked no MiSTer exige MiSTer nas plataformas do jogo"));
+    }
     let cover_url = entrada.cover_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
     if let Some(url) = &cover_url {
         let nome = url.strip_prefix(PREFIXO_CAPA).unwrap_or("");
@@ -167,7 +176,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
 
 /// Campos do catálogo que a gravação controla. Os opcionais ausentes na entrada estão na máscara
 /// mas não nos valores, o que os apaga do documento.
-const MASCARA: [&str; 13] = [
+const MASCARA: [&str; 14] = [
     "title",
     "steamAppId",
     "maxDurationSeconds",
@@ -181,6 +190,7 @@ const MASCARA: [&str; 13] = [
     "platforms",
     "modes",
     "coverUrl",
+    "rankedMister",
 ];
 
 /// Cria ou atualiza `games/{id}`. Só toca os campos do catálogo, preservando o que outras
@@ -219,6 +229,7 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
     inserir("steamAppId", inteiro(entrada.steam_app_id));
     inserir("maxDurationSeconds", inteiro(entrada.max_duration_segundos));
     inserir("published", booleano(entrada.published));
+    inserir("rankedMister", booleano(entrada.ranked_mister));
     inserir("updatedAt", data(Utc::now()));
     for (nome, valor) in [
         ("developer", &entrada.developer),
@@ -268,6 +279,7 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
         platforms: entrada.platforms,
         modes: entrada.modes,
         cover_url: entrada.cover_url,
+        ranked_mister: entrada.ranked_mister,
     })
 }
 
@@ -321,6 +333,10 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
             if antes.modes != depois.modes {
                 mudancas.push(item("modos", "rules", Some(format!("{}: modos competitivos agora são {}", depois.title, nomes_dos_modos(&depois.modes)))));
             }
+            if antes.ranked_mister != depois.ranked_mister {
+                let texto = if depois.ranked_mister { "Ranked no MiSTer liberado" } else { "no MiSTer agora só Training" };
+                mudancas.push(item("ranked-mister", "rules", Some(format!("{}: {texto}", depois.title))));
+            }
             if dados_do_jogo(antes) != dados_do_jogo(depois) || antes.platforms != depois.platforms {
                 mudancas.push(item("dados", "fixes", Some(format!("{}: informações do jogo atualizadas", depois.title))));
             }
@@ -358,6 +374,7 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         platforms: ler_lista_de_textos(campos, "platforms"),
         modes: ler_lista_de_textos(campos, "modes"),
         cover_url: ler_texto(campos, "coverUrl"),
+        ranked_mister: ler_booleano(campos, "rankedMister").unwrap_or(false),
         created_at: None,
         updated_at: None,
         id,

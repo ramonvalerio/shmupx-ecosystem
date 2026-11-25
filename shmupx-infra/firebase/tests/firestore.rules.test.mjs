@@ -221,6 +221,9 @@ test("remote launch: only the owner reads and writes small, known fields", async
   await assertFails(setDoc(doc(db("bob"), "remoteLaunch/alice"), { playing }, { mergeFields: ["playing"] }));
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, device: "tv" } }, { mergeFields: ["playing"] }));
   await assertFails(setDoc(doc(db("alice"), "remoteLaunch/alice"), { playing: { ...playing, extra: true } }, { mergeFields: ["playing"] }));
+  // Jogo marcado pelo agente do MiSTer (servidor): o Client continua gravando o resto do documento.
+  await environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), "remoteLaunch/alice"), { playing: { ...playing, device: "mister", kind: "ranked" } }));
+  await assertSucceeds(setDoc(doc(db("alice"), "remoteLaunch/alice"), { desktop: { seenAt: 1, owned: {} } }, { mergeFields: ["desktop"] }));
 });
 
 test("chat safety: each player keeps their own block list", async () => {

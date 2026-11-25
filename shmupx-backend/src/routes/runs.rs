@@ -12,7 +12,7 @@ use crate::middleware::firebase::FirebaseUser;
 use crate::middleware::jogador::{exigir_jogador, Origem};
 use crate::routes::notificacoes::versao_do_client;
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
-use crate::services::{usuarios, versoes};
+use crate::services::{jogo_aberto, usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
@@ -25,6 +25,7 @@ where
         .route("/api/runs/start", post(iniciar_run))
         .route("/api/runs/end", post(encerrar_run))
         .route("/api/runs", post(submeter_run))
+        .route("/api/mister/playing", post(jogo_aberto_no_mister))
         .route_layer(middleware::from_fn(exigir_jogador))
         .layer(Extension(firestore))
 }
@@ -60,6 +61,16 @@ async fn iniciar_run(
     let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem };
     let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
     Ok((StatusCode::CREATED, Json(run)))
+}
+
+/// `POST /api/mister/playing` (token do MiSTer): o agente avisa que um jogo abriu (e renova a cada
+/// minuto) ou que o MiSTer voltou ao menu. Marca ou libera o jogo aberto da conta.
+async fn jogo_aberto_no_mister(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Json(aviso): Json<jogo_aberto::AvisoMister>,
+) -> Result<Json<Option<jogo_aberto::JogoAberto>>, AppError> {
+    Ok(Json(jogo_aberto::avisar(&firestore, &usuario.uid, aviso).await?))
 }
 
 #[derive(Debug, Deserialize)]

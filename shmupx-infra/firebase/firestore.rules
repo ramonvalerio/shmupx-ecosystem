@@ -106,7 +106,7 @@ service cloud.firestore {
           && data.playing.title is string && data.playing.title.size() <= 160
           && data.playing.platform in ['steam', 'emulator', 'mister']
           && data.playing.kind in ['training', 'ranked', 'live']
-          && data.playing.device in ['pc', 'lite']
+          && data.playing.device in ['pc', 'lite', 'mister']
           && data.playing.startedAt is int && data.playing.beatAt is int));
     }
 

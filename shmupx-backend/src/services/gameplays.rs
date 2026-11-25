@@ -120,6 +120,10 @@ async fn iniciar_na_transacao(
         .await?
         .filter(|jogo| ler_booleano(jogo, "published") == Some(true))
         .ok_or_else(|| AppError::not_found("jogo não encontrado"))?;
+    // No MiSTer, Ranked só nos jogos com leitura de placar pela memória (flag do Lab).
+    if detalhes.origem == "mister" && ler_booleano(&jogo, "rankedMister") != Some(true) {
+        return Err(AppError::bad_request("Ranked no MiSTer não está liberado para este jogo: jogue em Training"));
+    }
     // Jogo com modos no catálogo só aceita partidas desses modos.
     let modos_do_jogo = ler_lista_de_textos(&jogo, "modes");
     if let Some(modo) = &detalhes.modo {
@@ -521,6 +525,27 @@ mod tests {
         let sem_aviso = gameplay_antiga(&fs, &uid, &jogo, "recording", 30).await;
         assert!(submeter(&fs, &uid, &sem_aviso, &jogo, resultado).await.is_err());
         assert_eq!(status_de(&fs, &sem_aviso).await.as_deref(), Some("expired"));
+    }
+
+    #[tokio::test]
+    #[ignore = "exige o emulador do Firestore"]
+    async fn mister_so_abre_ranked_com_a_flag_no_emulador() {
+        // SAFETY: ver o teste acima.
+        unsafe { std::env::set_var("FIREBASE_PROJECT_ID", "demo-shmupx") };
+        let fs = Firestore::do_ambiente().unwrap();
+        let (sem, com) = (format!("jogo-{}", Uuid::new_v4()), format!("jogo-{}", Uuid::new_v4()));
+        let tx = fs.iniciar_transacao().await.unwrap();
+        fs.confirmar(&tx, vec![
+            criar(&fs, &format!("games/{sem}"), campos(&[("published", json!({ "booleanValue": true }))])),
+            criar(&fs, &format!("games/{com}"), campos(&[("published", json!({ "booleanValue": true })), ("rankedMister", json!({ "booleanValue": true }))])),
+        ]).await.unwrap();
+        let uid = format!("uid-{}", Uuid::new_v4());
+        let mister = Detalhes { origem: "mister", ..Detalhes::default() };
+        let erro = iniciar(&fs, &uid, &sem, &mister).await.unwrap_err();
+        assert!(format!("{erro:?}").contains("Ranked no MiSTer"));
+        assert!(iniciar(&fs, &uid, &com, &mister).await.is_ok());
+        // No PC a flag do MiSTer não muda nada.
+        assert!(iniciar(&fs, &uid, &sem, &Detalhes { origem: "pc", ..Detalhes::default() }).await.is_ok());
     }
 
     #[tokio::test]
