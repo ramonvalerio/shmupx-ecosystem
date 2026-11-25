@@ -16,15 +16,22 @@ export const PLAY_MODES: { id: GameMode; label: string; detail: string; soon?: b
   { id: "caravan", label: "Caravan", detail: "Pontuação em tempo limitado.", soon: true },
 ];
 
-/** Modos da sala para jogar: Hi-Score sempre (o 1CC sai dele) e Caravan quando o Lab marcou. */
-export function playModesFor(room: GameRoom): typeof PLAY_MODES {
+/**
+ * Modos da sala para jogar: sempre os dois. Hi-Score vale para todo jogo (o 1CC sai dele); Caravan
+ * só no jogo que o Lab marcou com Caravan (`supported`). Fora dele, o Caravan aparece desabilitado;
+ * no jogo com Caravan, desabilitado com "Em breve" até o modo sair.
+ */
+export function playModesFor(room: GameRoom): (typeof PLAY_MODES[number] & { supported: boolean; disabled: boolean })[] {
   const modes = modesFor(room);
-  return PLAY_MODES.filter((m) => m.id === "highscore" || modes.includes(m.id));
+  return PLAY_MODES.map((m) => {
+    const supported = m.id === "highscore" || modes.includes(m.id);
+    return { ...m, supported, disabled: !supported || Boolean(m.soon) };
+  });
 }
 
 /** Modo da partida: o escolhido quando a sala tem ele e já está liberado; senão Hi-Score. */
 export function playableMode(room: GameRoom, wanted: GameMode | undefined): GameMode {
-  return playModesFor(room).some((m) => m.id === wanted && !m.soon) ? wanted! : "highscore";
+  return playModesFor(room).some((m) => m.id === wanted && !m.disabled) ? wanted! : "highscore";
 }
 
 /** Modos do jogo (os do Lab; sem nenhum marcado, todos): as tabelas do ranking. */

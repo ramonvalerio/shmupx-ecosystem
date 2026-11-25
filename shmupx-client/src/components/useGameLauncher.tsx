@@ -381,8 +381,8 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
             <h3 className="play-dialog-label">{t("Modo de jogo")}</h3>
             <div className="play-mode-options" role="radiogroup" aria-label={t("Modo de jogo")}>
               {playModesFor(room).map((m) => (
-                <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" disabled={m.soon} onClick={() => setChoosing({ ...choosing, mode: m.id })}>
-                  <strong>{m.label}{m.soon && <span className="coming-soon-tag">{t("Em breve")}</span>}</strong><small>{t(m.detail)}</small>
+                <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" disabled={m.disabled} onClick={() => setChoosing({ ...choosing, mode: m.id })}>
+                  <strong>{m.label}{m.supported && m.soon && <span className="coming-soon-tag">{t("Em breve")}</span>}</strong><small>{m.supported ? t(m.detail) : t("Este jogo não tem o modo {mode}.", { mode: m.label })}</small>
                 </button>
               ))}
             </div>
