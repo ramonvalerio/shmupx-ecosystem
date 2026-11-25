@@ -5,14 +5,13 @@ import MisterConnect from "./MisterConnect";
 import type { GameRoom } from "../types/room";
 import { saveSteamLibrary, scanSteam, type SteamGame } from "../data/steamLibrary";
 import { chooseEmulatorFolder, emulatorFolderLabel, publish as saveEmulatorLibrary, resetEmulatorFolder, romsFor, scanEmulator, type EmulatorScan } from "../data/emulatorLibrary";
-import { misterMatches, readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "../data/misterLibrary";
 import { usePlatformOwnership } from "../data/platforms";
 import type { PlayOn } from "../types/room";
 
 const SOURCES = [
   { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
   { id: "emulator", title: "Emulador", icon: "E", detail: "ROMs do ShmupX Emulator", body: "Leia os ROMs deste computador para marcar na coleção os jogos que você tem. Eles abrem no ShmupX Emulator.", available: true },
-  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Jogos do MiSTer na rede", body: "Informe o IP do MiSTer (Menu › Sistema mostra o endereço) para ler os jogos de arcade e os ROMs dele e marcar na coleção os que têm sala no ShmupX.", available: true },
+  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Jogos do MiSTer na rede", body: "Informe o IP do MiSTer (Menu › Sistema mostra o endereço). Os jogos de arcade, Mega Drive e Neo Geo dele que têm sala no ShmupX ficam marcados na coleção, e as partidas valem para o ranking.", available: true },
   { id: "local", title: "Jogos locais", icon: "▣", detail: "Jogos instalados no computador", body: "Escolha os jogos instalados no computador que deseja incluir na coleção.", available: false },
 ] as const;
 
@@ -43,7 +42,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     catch (error) { setRowError(error instanceof Error ? error.message : String(error)); }
     finally { setBusyId(null); }
   }
-  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setEmuFolderError(null); setMister((current) => ({ ...current, status: "idle" })); setImported(null); } else onClose(); }
+  function back() { if (sourceId) { setSourceId(null); setScan({ status: "idle" }); setEmu({ status: "idle" }); setEmuFolderError(null); setImported(null); } else onClose(); }
   /** Mostra o resultado da leitura e, se achou ROMs, já importa, sem pedir confirmação. */
   function importEmulator(result: EmulatorScan) {
     setEmu({ status: "done", ...result });
@@ -80,17 +79,6 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
     catch (error) { setEmuFolderError(error instanceof Error ? error.message : String(error)); }
     finally { setEmuPicking(false); }
   }
-  const [mister, setMister] = useState<{ status: "idle" | "scanning" | "done" | "error"; host: string; password: string; mras?: string[]; roms?: string[]; error?: string; menuAdded?: string[]; menuError?: string }>(() => ({ status: "idle", host: readMisterLibrary()?.host ?? "", password: "" }));
-  async function readMister() {
-    setMister((current) => ({ ...current, status: "scanning", error: undefined }));
-    try {
-      const result = await scanMister(mister.host, mister.password);
-      setMister((current) => ({ ...current, status: "done", host: result.host, mras: result.mras, roms: result.roms, menuAdded: undefined, menuError: undefined }));
-    } catch (error) {
-      setMister((current) => ({ ...current, status: "error", error: error instanceof Error ? error.message : String(error) }));
-    }
-  }
-  const misterRooms = mister.status === "done" ? rooms.filter((room) => misterMatches(room, { mras: mister.mras ?? [], roms: mister.roms ?? [] })) : [];
   const emuRoms = emu.roms ?? [];
   const emuRooms = rooms.filter((room) => romsFor(room).some((rom) => emuRoms.includes(rom)));
   const dialogRef = useDialogFocus(true, back);
@@ -179,35 +167,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "mister" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">M</span><h3>{t("MiSTer FPGA")}</h3></div>
           <p className="muted">{t(source.body)}</p>
-          <form className="mister-connect-form" onSubmit={(event) => { event.preventDefault(); void readMister(); }}>
-            <label className="settings-field">{t("IP do MiSTer")}<input value={mister.host} onChange={(event) => setMister((current) => ({ ...current, host: event.target.value }))} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" required /></label>
-            <label className="settings-field">{t("Senha do FTP (vazio = padrão)")}<input type="password" value={mister.password} onChange={(event) => setMister((current) => ({ ...current, password: event.target.value }))} autoComplete="off" /></label>
-            <button type="submit" className="primary-action" data-tutorial={mister.status === "done" ? undefined : "import-run"} disabled={mister.status === "scanning" || !mister.host.trim()}>{t(mister.status === "scanning" ? "Lendo os jogos do MiSTer…" : "Ler jogos do MiSTer")}</button>
-          </form>
-          {mister.status === "error" && <p className="mode-error" role="alert">{t(mister.error ?? "Não foi possível ler o MiSTer.")}</p>}
-          {mister.status === "done" && <>
-            <p role="status"><strong>{t("{mras} jogos de arcade e {roms} ROMs no MiSTer {host}.", { mras: (mister.mras ?? []).length, roms: (mister.roms ?? []).length, host: mister.host })}</strong></p>
-            {misterRooms.length > 0
-              ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{misterRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
-              : <p className="muted">{t("Nenhum jogo do MiSTer tem sala no ShmupX ainda.")}</p>}
-            {imported === null
-              ? <button className="primary-action" data-tutorial="import-run" onClick={() => {
-                  saveMisterLibrary({ host: mister.host, mras: mister.mras ?? [], roms: mister.roms ?? [], importedAt: Date.now() });
-                  setImported(misterRooms.length);
-                  // Os jogos do Lab marcados com MiSTer que ele tem entram no menu ShmupX do MiSTer.
-                  syncMisterMenu(mister.host, mister.password, rooms, { mras: mister.mras ?? [] })
-                    .then((added) => setMister((current) => ({ ...current, menuAdded: added })))
-                    .catch((error) => setMister((current) => ({ ...current, menuError: error instanceof Error ? error.message : String(error) })));
-                }}>{t("Importar biblioteca")}</button>
-              : <p className="success-text" role="status">{t("Biblioteca importada. A coleção agora mostra os jogos que você tem.")}</p>}
-            {mister.menuAdded && <p className="muted" role="status">{mister.menuAdded.length > 0
-              ? t("Menu ShmupX do MiSTer atualizado: {games}.", { games: mister.menuAdded.join(", ") })
-              : t("O menu ShmupX do MiSTer já tem todos os jogos do ShmupX que ele tem.")}</p>}
-            {mister.menuError && <p className="mode-error" role="alert">{t("Não foi possível atualizar o menu ShmupX do MiSTer: {reason}", { reason: mister.menuError })}</p>}
-          </>}
-          <div className="import-platform-heading"><h3>{t("Partidas do MiSTer no ranking")}</h3></div>
-          <p className="muted">{t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC. Receba no seu e-mail o token e cole a linha no shmupx.ini do MiSTer.")}</p>
-          <MisterConnect host={mister.host || undefined} password={mister.password} />
+          <MisterConnect rooms={rooms} tutorial />
         </>}
 
         {source && !source.available && <><div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">{source.icon}</span><h3>{t(source.title)}</h3></div><p className="muted">{t(source.body)}</p><div className="integration-notice" role="status"><strong>{t("Em breve")}</strong><p>{t("A leitura desta biblioteca ainda não está disponível nesta versão.")}</p></div></>}

@@ -127,7 +127,7 @@ export default function App() {
     if (library && Date.now() - library.importedAt < 6 * 60 * 60_000) return;
     scanMister(host, player?.password)
       .then((result) => {
-        saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, importedAt: Date.now() });
+        saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, consoles: result.consoles, importedAt: Date.now() });
         return syncMisterMenu(result.host, player?.password, rooms, result);
       })
       .catch((error) => console.warn("MiSTer: falha ao atualizar a biblioteca:", error));

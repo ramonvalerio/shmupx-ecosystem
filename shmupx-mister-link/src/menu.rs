@@ -1,6 +1,7 @@
 //! Jogos do Lab no menu ShmupX do MiSTer. Ao sincronizar a biblioteca do MiSTer, os jogos do
-//! catálogo marcados com MiSTer que o aparelho tem (o `.mra` em `_Arcade`) entram no
-//! `shmupx/jogos.txt`, e o menu é refeito pelos scripts do próprio MiSTer (`modelos.sh` e `menu.sh`).
+//! catálogo marcados com MiSTer que o aparelho tem (o `.mra` em `_Arcade`, ou o arquivo de Mega
+//! Drive/Neo Geo em `games/`, que vira `.mgl`) entram no `shmupx/jogos.txt`, e o menu é refeito
+//! pelos scripts do próprio MiSTer (`modelos.sh` e `menu.sh`).
 //! Só acrescenta: o que já está na lista (inclusive à mão) não é tocado.
 
 use serde::Deserialize;
@@ -9,14 +10,45 @@ use crate::ssh::Ssh;
 
 const PASTA: &str = "/media/fat/shmupx";
 
-/// Um jogo do catálogo para o menu: título no menu, o `.mra` do MiSTer e os modos do Lab.
+/// Um jogo do catálogo para o menu: título no menu, de onde ele vem no MiSTer (o `.mra` de arcade
+/// ou o arquivo de console) e os modos do Lab.
 #[derive(Debug, Clone, Deserialize)]
 pub struct JogoParaMenu {
     pub titulo: String,
-    /// Nome do `.mra` em `/media/fat/_Arcade`, sem a extensão.
+    /// Nome do `.mra` em `/media/fat/_Arcade`, sem a extensão (jogo de arcade).
+    #[serde(default)]
     pub mra: String,
+    /// Jogo de console: `<pasta>/<arquivo>` em `/media/fat/games` (`MegaDrive/Earthion (World).md`,
+    /// `NeoGeo/sonicwi2.neo`), como a leitura da biblioteca devolve. Vira um `.mgl`.
+    #[serde(default)]
+    pub console: Option<String>,
     /// Modos do catálogo: `highscore`, `1cc`, `caravan` (vazio = todos).
     pub modos: Vec<String>,
+}
+
+/// Core do `.mgl` pela pasta do console: Mega Drive no core com leitura de placar
+/// (`@megadrive-ra`, ver `modelos.sh`), Neo Geo no oficial.
+fn core_do_console(pasta: &str) -> Option<&'static str> {
+    match pasta.to_ascii_lowercase().as_str() {
+        "megadrive" | "genesis" => Some("@megadrive-ra"),
+        "neogeo" => Some("_Console/NeoGeo"),
+        _ => None,
+    }
+}
+
+/// Origem `.mgl` do `jogos.txt` (`<core>;<delay>;<index>;<busca>`) para um arquivo de console. A
+/// busca é o nome exato do arquivo (o `modelos.sh` procura com `find -iname`), com os caracteres de
+/// padrão escapados. `None` se a pasta não é de um console conhecido ou o nome quebraria a linha.
+fn origem_mgl(console: &str) -> Option<String> {
+    let console = console.trim();
+    let pasta = console.split('/').next()?;
+    let arquivo = console.rsplit('/').next()?;
+    if arquivo.is_empty() || arquivo == console || console.contains(['|', ';', '\n', '\r', '\\']) {
+        return None;
+    }
+    let core = core_do_console(pasta)?;
+    let busca: String = arquivo.chars().flat_map(|c| if matches!(c, '*' | '?' | '[' | ']') { vec!['\\', c] } else { vec![c] }).collect();
+    Some(format!("{core};1;1;{busca}"))
 }
 
 /// Nome seguro para arquivo no cartão: sem barras, `|`, quebras de linha nem caracteres que o
@@ -54,16 +86,28 @@ fn linhas_novas(atual: &str, jogos: &[JogoParaMenu]) -> Vec<(String, String)> {
     let mut novas = Vec::new();
     for jogo in jogos {
         let titulo = nome_de_arquivo(&jogo.titulo);
-        let mra = format!("{}.mra", jogo.mra.trim().trim_end_matches(".mra"));
-        if titulo.is_empty() || mra.contains(['|', '\n', '/', '\\']) {
+        if titulo.is_empty() {
             continue;
         }
-        if nomes.contains(&titulo.to_lowercase()) || origens.contains(&mra.to_lowercase()) {
+        // Arcade (`.mra`) quando há; senão, console (`.mgl`).
+        let mra = jogo.mra.trim().trim_end_matches(".mra");
+        let (extensao, origem) = if !mra.is_empty() {
+            let mra = format!("{mra}.mra");
+            if mra.contains(['|', '\n', '/', '\\']) {
+                continue;
+            }
+            ("mra", mra)
+        } else if let Some(origem) = jogo.console.as_deref().and_then(origem_mgl) {
+            ("mgl", origem)
+        } else {
+            continue;
+        };
+        if nomes.contains(&titulo.to_lowercase()) || origens.contains(&origem.to_lowercase()) {
             continue;
         }
         nomes.push(titulo.to_lowercase());
-        origens.push(mra.to_lowercase());
-        novas.push((titulo.clone(), format!("{titulo}.mra|{}|{mra}", modos_do_menu(&jogo.modos))));
+        origens.push(origem.to_lowercase());
+        novas.push((titulo.clone(), format!("{titulo}.{extensao}|{}|{origem}", modos_do_menu(&jogo.modos))));
     }
     novas
 }
@@ -107,7 +151,39 @@ mod tests {
     use super::*;
 
     fn jogo(titulo: &str, mra: &str, modos: &[&str]) -> JogoParaMenu {
-        JogoParaMenu { titulo: titulo.into(), mra: mra.into(), modos: modos.iter().map(|m| m.to_string()).collect() }
+        JogoParaMenu { titulo: titulo.into(), mra: mra.into(), console: None, modos: modos.iter().map(|m| m.to_string()).collect() }
+    }
+
+    fn console(titulo: &str, arquivo: &str, modos: &[&str]) -> JogoParaMenu {
+        JogoParaMenu { titulo: titulo.into(), mra: String::new(), console: Some(arquivo.into()), modos: modos.iter().map(|m| m.to_string()).collect() }
+    }
+
+    #[test]
+    fn console_vira_mgl_com_o_core_certo() {
+        let novas = linhas_novas("", &[
+            console("Earthion", "MegaDrive/Earthion (World).md", &["highscore"]),
+            console("Aero Fighters 2", "NeoGeo/Shmups/sonicwi2.neo", &[]),
+            console("Gley Lancer", "Genesis/Gley Lancer [T+Eng].bin", &["1cc"]),
+        ]);
+        assert_eq!(novas[0].1, "Earthion.mgl|hiscore|@megadrive-ra;1;1;Earthion (World).md");
+        assert_eq!(novas[1].1, "Aero Fighters 2.mgl|hiscore 1cc sprint classic|_Console/NeoGeo;1;1;sonicwi2.neo");
+        assert_eq!(novas[2].1, "Gley Lancer.mgl|1cc|@megadrive-ra;1;1;Gley Lancer \\[T+Eng\\].bin");
+    }
+
+    #[test]
+    fn console_ja_no_menu_ou_desconhecido_nao_entra() {
+        // Earthion já está no jogos.txt (pelo nome); SNES não tem core no menu; `;` quebraria a origem.
+        assert!(linhas_novas(ATUAL, &[console("Earthion", "MegaDrive/Earthion.md", &[])]).is_empty());
+        assert!(linhas_novas("", &[console("X", "SNES/x.sfc", &[])]).is_empty());
+        assert!(linhas_novas("", &[console("Y", "MegaDrive/a;b.md", &[])]).is_empty());
+        assert!(linhas_novas("", &[console("Z", "earthion.md", &[])]).is_empty(), "sem pasta do console");
+    }
+
+    #[test]
+    fn arcade_tem_preferencia_sobre_console() {
+        let mut j = console("Darius", "MegaDrive/darius.md", &[]);
+        j.mra = "Darius (World)".into();
+        assert_eq!(linhas_novas("", &[j])[0].1, "Darius.mra|hiscore 1cc sprint classic|Darius (World).mra");
     }
 
     const ATUAL: &str = "# comentário\nEarthion.mgl|hiscore|@megadrive-ra;1;1;*earthion*\nDarius Gaiden.mra|hiscore 1cc sprint|Darius Gaiden.mra\n";

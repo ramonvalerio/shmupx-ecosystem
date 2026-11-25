@@ -1,7 +1,8 @@
 //! MiSTer FPGA pela rede, por FTP (o MiSTer vem com o ProFTPD; padrão `root` / `1`):
-//! - Biblioteca: os jogos de arcade (`.mra` em `/media/fat/_*`, um nível de subpastas) e os ROMs
-//!   de MAME (`games/mame` e `games/hbmame`). Só lista nomes; quem cruza com o catálogo é a
-//!   interface.
+//! - Biblioteca: os jogos de arcade (`.mra` em `/media/fat/_*`, um nível de subpastas), os ROMs
+//!   de MAME (`games/mame` e `games/hbmame`) e os jogos de Mega Drive/Genesis e Neo Geo
+//!   (`games/MegaDrive`, `games/Genesis`, `games/NeoGeo`). Só lista nomes; quem cruza com o
+//!   catálogo é a interface.
 //! - Conexão com a conta: grava `token.<username> = sxm_...` no `/media/fat/shmupx/shmupx.ini`
 //!   (o mesmo arquivo do agente `shmupx-mister`), com cópia de segurança antes. É a única escrita.
 
@@ -19,6 +20,25 @@ pub struct BibliotecaMister {
     pub mras: Vec<String>,
     /// ROMs de MAME (`ket`, `dariusg`…), sem `.zip`, em minúsculas.
     pub roms: Vec<String>,
+    /// Jogos de console em `games/`, como `<pasta>/<arquivo>` (`MegaDrive/Earthion (World).md`,
+    /// `NeoGeo/sonicwi2.neo`). Só as pastas e extensões que o menu ShmupX sabe abrir por `.mgl`.
+    pub consoles: Vec<String>,
+}
+
+/// Pastas de console em `games/` e as extensões que o menu ShmupX abre por `.mgl` (ver
+/// `modelos.sh`). Neo Geo só `.neo`: romset em pasta ou `.zip` não abre por `.mgl`.
+const CONSOLES: &[(&str, &[&str])] = &[
+    ("MegaDrive", &["md", "bin", "gen", "smd", "zip"]),
+    ("Genesis", &["md", "bin", "gen", "smd", "zip"]),
+    ("NeoGeo", &["neo"]),
+];
+
+/// O arquivo é de um jogo da pasta de console (pela extensão)?
+fn arquivo_de_console(nome: &str, extensoes: &[&str]) -> bool {
+    !nome.starts_with('.')
+        && nome
+            .rsplit_once('.')
+            .is_some_and(|(base, ext)| !base.is_empty() && extensoes.iter().any(|e| e.eq_ignore_ascii_case(ext)))
 }
 
 const TEMPO: Duration = Duration::from_secs(8);
@@ -304,10 +324,33 @@ pub fn ler(host: &str, usuario: Option<&str>, senha: Option<&str>) -> Result<Bib
             }
         }
     }
+    // Consoles: a pasta do sistema e um nível de subpastas (`NeoGeo/Shmups/…`).
+    let mut consoles: Vec<String> = Vec::new();
+    for (sistema, extensoes) in CONSOLES {
+        let base = format!("{RAIZ}/games/{sistema}");
+        let nomes = ftp.listar(&base)?;
+        let mut guardar = |relativo: String| {
+            if !consoles.contains(&relativo) {
+                consoles.push(relativo);
+            }
+        };
+        for nome in &nomes {
+            if arquivo_de_console(nome, extensoes) {
+                guardar(format!("{sistema}/{nome}"));
+            } else if !nome.contains('.') {
+                for dentro in ftp.listar(&format!("{base}/{nome}"))? {
+                    if arquivo_de_console(&dentro, extensoes) {
+                        guardar(format!("{sistema}/{nome}/{dentro}"));
+                    }
+                }
+            }
+        }
+    }
     let _ = ftp.comando("QUIT", &[221]);
     mras.sort();
     roms.sort();
-    Ok(BibliotecaMister { host: host.to_string(), mras, roms })
+    consoles.sort();
+    Ok(BibliotecaMister { host: host.to_string(), mras, roms, consoles })
 }
 
 #[cfg(test)]
@@ -345,6 +388,19 @@ mod tests {
         assert!(!pasta_de_jogos("_x.rbf"));
     }
 
+    #[test]
+    fn arquivos_de_console_pela_extensao() {
+        let md = CONSOLES[0].1;
+        assert!(arquivo_de_console("Earthion (World).md", md));
+        assert!(arquivo_de_console("Earthion.ZIP", md));
+        assert!(!arquivo_de_console("._Earthion.md", md), "lixo do macOS");
+        assert!(!arquivo_de_console("Shmups", md));
+        assert!(!arquivo_de_console("leiame.txt", md));
+        let neo = CONSOLES[2].1;
+        assert!(arquivo_de_console("sonicwi2.neo", neo));
+        assert!(!arquivo_de_console("sonicwi2.zip", neo), "romset zip não abre por .mgl");
+    }
+
     /// Lê o MiSTer da rede: `MISTER=192.168.0.23 cargo test -- --ignored mister_da_rede --nocapture`.
     #[test]
     #[ignore = "depende de um MiSTer na rede"]
@@ -352,5 +408,6 @@ mod tests {
         let host = std::env::var("MISTER").unwrap_or_else(|_| "192.168.0.23".into());
         let b = ler(&host, None, None).unwrap();
         println!("mras={} roms={} darius={:?}", b.mras.len(), b.roms.len(), b.mras.iter().filter(|m| m.contains("Darius")).collect::<Vec<_>>());
+        println!("consoles={:?}", b.consoles);
     }
 }

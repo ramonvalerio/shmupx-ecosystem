@@ -194,7 +194,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
           {onReplayTutorial && <SettingsCard title={t("Tutorial")} detail={t("Mostra de novo o passo a passo para importar os seus jogos e começar a jogar.")}><button className="secondary-action" onClick={onReplayTutorial}>{t("Rever tutorial")}</button></SettingsCard>}
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
-        {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect /></SettingsCard></>}
+        {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect rooms={rooms} /></SettingsCard></>}
         {group === "integrations" && <YouTubeCard />}
         {group === "emulator" && <EmulatorSettingsCard />}
         {group === "controller" && <><SettingsCard title="Controles do emulador" detail="Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator."><CabinetControlMapper /></SettingsCard></>}

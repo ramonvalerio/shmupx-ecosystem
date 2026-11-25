@@ -40,7 +40,7 @@ export default function MisterSettings({ rooms, theme, onTheme, onBack }: { room
     try {
       saveAccess();
       const result = await scanMister(target.trim());
-      saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, importedAt: Date.now() });
+      saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, consoles: result.consoles, importedAt: Date.now() });
       setNotice(null);
       // Os jogos do Lab marcados com MiSTer que ele tem entram no menu ShmupX do MiSTer.
       syncMisterMenu(result.host, password || undefined, rooms, result)
