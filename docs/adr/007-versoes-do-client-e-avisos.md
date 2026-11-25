@@ -21,7 +21,7 @@ Uma versão nova do ShmupX Client pode mudar o que o jogador vive: novidades e c
 
 ### Avisos
 - **No Client:** sininho no topo com o contador de não lidas, lista ao clicar e tela de detalhe ao clicar numa notificação (`notifications/{id}`; o lido fica em `players/{uid}.readNotifications`). Uma faixa no topo avisa versão disponível ou obrigatória.
-- **Por e-mail (Amazon SES):** para os jogadores com e-mail verificado e aviso ligado (`players/{uid}.emailUpdates`, ligado por padrão, desligável no próprio aviso). Um e-mail por destinatário, sem expor os outros. Configuração só no servidor (`EMAIL_FROM` e a role da AWS em `AWS_SECRETS_ROLE_ARN`, sem chave guardada); sem ela, só o aviso no Client, e o Lab mostra o motivo.
+- **Por e-mail (Amazon SES):** para os jogadores com e-mail verificado e aviso ligado (`players/{uid}.emailUpdates`, ligado por padrão, desligável no próprio aviso ou pelo link "Não quero mais receber" do rodapé do e-mail, que funciona sem o Client: `GET/POST /api/email/unsubscribe?u={uid}&t={players/{uid}.unsubscribeToken}`, com cabeçalhos `List-Unsubscribe` de um clique). Um e-mail por destinatário, sem expor os outros. Configuração só no servidor (`EMAIL_FROM` e a role da AWS em `AWS_SECRETS_ROLE_ARN`, sem chave guardada); sem ela, só o aviso no Client, e o Lab mostra o motivo.
 - O jogador entra na lista de destinatários quando o Client consulta as notificações (o backend só conhece o e-mail pelo token de quem está logado).
 
 ### Obrigatoriedade

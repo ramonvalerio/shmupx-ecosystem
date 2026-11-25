@@ -5,7 +5,8 @@
 //! - `players/{uid}`: e-mail (do token do Firebase, verificado), preferência de aviso por e-mail
 //!   (`emailUpdates`, ligada por padrão, desligável pelo jogador), versão do Client e as
 //!   notificações já lidas (`readNotifications`). Criado/atualizado quando o Client consulta as
-//!   notificações; é a lista de destinatários dos e-mails.
+//!   notificações; é a lista de destinatários dos e-mails. `unsubscribeToken` assina o link
+//!   "parar de receber" do rodapé dos e-mails, que funciona sem o Client.
 //! - `players/{uid}/inbox/{id}`: avisos só daquele jogador. Todo e-mail enviado a um jogador
 //!   específico (ex.: token do MiSTer) grava aqui o aviso correspondente, para aparecer também no
 //!   sininho. Os e-mails de versão já têm o aviso geral em `notifications/release-*`.
@@ -73,6 +74,10 @@ pub async fn registrar_jogador(fs: &Firestore, usuario: &FirebaseUser, versao_cl
     if existente.as_ref().and_then(|c| ler_booleano(c, "emailUpdates")).is_none() {
         campos.insert("emailUpdates".into(), booleano(true));
         mascara.push("emailUpdates");
+    }
+    if existente.as_ref().and_then(|c| ler_texto(c, CAMPO_TOKEN)).is_none() {
+        campos.insert(CAMPO_TOKEN.into(), texto(&novo_token()));
+        mascara.push(CAMPO_TOKEN);
     }
     fs.gravar(&caminho, campos.clone(), &mascara).await?;
     let mut atual = existente.unwrap_or_default();
@@ -218,18 +223,66 @@ pub async fn esconder_versao(fs: &Firestore, versao: &str) -> Result<(), AppErro
     fs.gravar(&format!("notifications/release-{versao}"), campos, &["hidden"]).await
 }
 
-/// E-mails que aceitam avisos: verificados e com a preferência ligada.
-pub async fn destinatarios(fs: &Firestore) -> Result<Vec<String>, AppError> {
-    let mut emails: Vec<String> = fs
-        .listar("players")
-        .await?
-        .into_iter()
-        .filter(|(_, c)| ler_booleano(c, "emailVerified").unwrap_or(false) && ler_booleano(c, "emailUpdates").unwrap_or(true))
-        .filter_map(|(_, c)| ler_texto(&c, "email"))
-        .collect();
-    emails.sort();
-    emails.dedup();
-    Ok(emails)
+/// Quem recebe os avisos por e-mail, com o token do link "parar de receber" do rodapé.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Destinatario {
+    pub uid: String,
+    pub email: String,
+    pub token: String,
+}
+
+/// Token aleatório do link de descadastro (`players/{uid}.unsubscribeToken`): o link do e-mail
+/// desliga os avisos sem login e sem o Client instalado.
+const CAMPO_TOKEN: &str = "unsubscribeToken";
+
+fn novo_token() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+/// E-mails que aceitam avisos: verificados e com a preferência ligada. Jogadores registrados
+/// antes do token ganham um agora.
+pub async fn destinatarios(fs: &Firestore) -> Result<Vec<Destinatario>, AppError> {
+    let mut lista = Vec::new();
+    for (uid, c) in fs.listar("players").await? {
+        if !(ler_booleano(&c, "emailVerified").unwrap_or(false) && ler_booleano(&c, "emailUpdates").unwrap_or(true)) {
+            continue;
+        }
+        let Some(email) = ler_texto(&c, "email") else { continue };
+        let token = match ler_texto(&c, CAMPO_TOKEN) {
+            Some(t) => t,
+            None => {
+                let t = novo_token();
+                let mut campos = Campos::new();
+                campos.insert(CAMPO_TOKEN.into(), texto(&t));
+                fs.gravar(&format!("players/{uid}"), campos, &[CAMPO_TOKEN]).await?;
+                t
+            }
+        };
+        lista.push(Destinatario { uid, email, token });
+    }
+    lista.sort_by(|a, b| a.email.cmp(&b.email));
+    lista.dedup_by(|a, b| a.email == b.email);
+    Ok(lista)
+}
+
+/// Comparação sem atalho, para o tempo de resposta não revelar o token.
+fn tokens_iguais(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// Link do rodapé: desliga os avisos por e-mail do jogador. `false` quando o link não confere.
+pub async fn descadastrar(fs: &Firestore, uid: &str, token: &str) -> Result<bool, AppError> {
+    let uid_valido = !uid.is_empty() && uid.len() <= 128 && uid.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
+    if !uid_valido || token.is_empty() {
+        return Ok(false);
+    }
+    let Some(jogador) = fs.ler_documento(&format!("players/{uid}")).await? else { return Ok(false) };
+    let Some(guardado) = ler_texto(&jogador, CAMPO_TOKEN) else { return Ok(false) };
+    if !tokens_iguais(&guardado, token) {
+        return Ok(false);
+    }
+    definir_preferencia_email(fs, uid, false).await?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -276,7 +329,9 @@ mod tests {
         // Versão única por execução, sempre acima das de execuções anteriores no mesmo emulador.
         let maior = versoes::listar(&fs).await.unwrap().iter().filter_map(|v| ler_versao(&v.version)).max().unwrap_or((0, 0, 0));
         let versao = format!("{}.0.0", maior.0 + 1);
-        let usuario = FirebaseUser { uid: format!("uid-{}", uuid::Uuid::new_v4()), email: Some("jogador@example.com".into()), email_verified: true };
+        // E-mail único por execução: a lista de destinatários junta e-mails repetidos.
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let usuario = FirebaseUser { uid: format!("uid-{id}"), email: Some(format!("jogador-{id}@example.com")), email_verified: true };
 
         let entrada = VersaoEntrada { title: "Teste".into(), fixes: vec!["Correção".into()], mandatory: true, ..Default::default() };
         let rascunho = versoes::salvar_rascunho(&fs, &versao, entrada).await.unwrap();
@@ -290,7 +345,9 @@ mod tests {
         assert_eq!(ler_booleano(&jogador, "emailUpdates"), Some(true));
         let lista = listar(&fs, &usuario.uid, &jogador).await.unwrap();
         assert!(lista.items.iter().any(|n| n.id == id && !n.read));
-        assert!(destinatarios(&fs).await.unwrap().contains(&"jogador@example.com".to_string()));
+        let token = ler_texto(&jogador, CAMPO_TOKEN).expect("token de descadastro criado no registro");
+        assert!(destinatarios(&fs).await.unwrap().iter().any(|d| d.uid == usuario.uid && d.token == token));
+        assert!(!descadastrar(&fs, &usuario.uid, "errado").await.unwrap(), "token errado não descadastra");
 
         marcar_lidas(&fs, &usuario.uid, std::slice::from_ref(&id)).await.unwrap();
         let jogador = registrar_jogador(&fs, &usuario, Some("0.1.0")).await.unwrap();
@@ -317,6 +374,10 @@ mod tests {
         registrar_jogador(&fs, &usuario, None).await.unwrap();
         let caminho = format!("players/{}", usuario.uid);
         assert_eq!(ler_booleano(&fs.ler_documento(&caminho).await.unwrap().unwrap(), "emailUpdates"), Some(false));
+        // O link do e-mail também desliga, sem login.
+        definir_preferencia_email(&fs, &usuario.uid, true).await.unwrap();
+        assert!(descadastrar(&fs, &usuario.uid, &token).await.unwrap());
+        assert!(!destinatarios(&fs).await.unwrap().iter().any(|d| d.uid == usuario.uid));
 
         // Cancelar só vale para agendadas ainda não liberadas.
         let futura = format!("{}.0.0", maior.0 + 2);
@@ -325,6 +386,16 @@ mod tests {
         assert_eq!(versoes::agendar_com(&fs, &futura, Antecedencia::Dias7, Default::default()).await.unwrap().status, "scheduled");
         assert!(versoes::cancelar(&fs, &versao).await.is_err(), "já liberada");
         assert_eq!(versoes::cancelar(&fs, &futura).await.unwrap().status, "cancelled");
+    }
+
+    #[test]
+    fn tokens_de_descadastro() {
+        let t = novo_token();
+        assert_eq!(t.len(), 32);
+        assert_ne!(t, novo_token());
+        assert!(tokens_iguais(&t, &t.clone()));
+        assert!(!tokens_iguais(&t, &t[..31]));
+        assert!(!tokens_iguais("a".repeat(32).as_str(), "b".repeat(32).as_str()));
     }
 
     #[test]

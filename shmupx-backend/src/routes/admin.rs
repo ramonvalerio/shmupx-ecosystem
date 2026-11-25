@@ -15,7 +15,7 @@ use crate::services::eventos::{self, Evento, EventoEntrada};
 use crate::services::planos::{self, Plano, PlanoEntrada};
 use crate::services::distribuicoes::{self, Distribuicao, DistribuicaoEntrada};
 use crate::services::usuarios::{self, Moderacao, ModeracaoEntrada, UsuarioAdmin};
-use crate::services::email::{mensagem_da_versao, Ses};
+use crate::services::email::Ses;
 use crate::services::notificacoes;
 use crate::services::robotx::{self, ConhecimentoEntrada, ItemRobotx};
 use crate::services::versoes::{self, Instalador, Mudanca, OpcoesAgendamento, Versao, VersaoEntrada};
@@ -277,8 +277,7 @@ async fn agendar_versao(
             Err(e) => (format!("failed: {e:?}"), 0),
             Ok(lista) if lista.is_empty() => ("sent".to_string(), 0),
             Ok(lista) => {
-                let (assunto, html, texto) = mensagem_da_versao(&versao_enviada);
-                match email.enviar(&lista, &assunto, &html, &texto).await {
+                match email.enviar_aviso_de_versao(&lista, &versao_enviada).await {
                     Ok(n) => ("sent".to_string(), n as i64),
                     Err(e) => (format!("failed: {e}"), 0),
                 }
