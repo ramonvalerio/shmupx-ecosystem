@@ -52,6 +52,7 @@ export default function YouTubeNoChannelDialog({ busy, onRetry, onClose }: { bus
         </footer>
       </div>
     </div>,
-    document.body,
+    // Dentro do .client-shell, onde estão as cores do tema; no body o fundo ficava transparente.
+    document.querySelector(".client-shell") ?? document.body,
   );
 }

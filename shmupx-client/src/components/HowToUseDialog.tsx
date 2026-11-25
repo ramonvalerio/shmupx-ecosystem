@@ -31,6 +31,8 @@ export default function HowToUseDialog({ onPick, onClose }: { onPick: (topic: Tu
         </footer>
       </div>
     </div>,
-    document.body,
+    // Dentro do .client-shell, onde estão as cores do tema (--surface-raised etc.); no body o
+    // fundo do modal ficava transparente.
+    document.querySelector(".client-shell") ?? document.body,
   );
 }
