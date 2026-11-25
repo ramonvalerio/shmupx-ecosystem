@@ -98,6 +98,17 @@ async fn servidor() {
         eprintln!("aviso: nenhum cliente OAuth para o YouTube (GOOGLE_YOUTUBE_* ou GOOGLE_DESKTOP_*); START LIVE indisponível");
     }
 
+    // Distribuições de fichas agendadas (Coins Manager): conferidas junto com as requisições, já que o
+    // Cloud Run só dá CPU enquanto atende. Ver services/distribuicoes.rs.
+    let agenda = firestore.clone();
+    let conferir_agendadas = axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
+        let fs = agenda.clone();
+        async move {
+            services::distribuicoes::acordar(fs).await;
+            next.run(req).await
+        }
+    });
+
     let mut app = Router::new()
         .merge(routes::health::router())
         .merge(routes::auth::router(google))
@@ -132,7 +143,7 @@ Falha ao conectar no Postgres (DATABASE_URL configurada, mas a conexão falhou):
         );
     }
 
-    let app = app.layer(cors).layer(TraceLayer::new_for_http());
+    let app = app.layer(conferir_agendadas).layer(cors).layer(TraceLayer::new_for_http());
 
     // O Cloud Run informa a porta em PORT; localmente o padrão continua 3000.
     let porta = env::var("PORT").unwrap_or_else(|_| "3000".to_string());

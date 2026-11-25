@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, Timestamp, where } from "firebase/firestore";
 import { db } from "../auth/firebase";
 import type { ChatMessage } from "../types/room";
 import { censor } from "./profanity";
+import { useHiddenChatAuthors, useMyModeration } from "./useModeration";
+
+/** Aviso do chat para quem foi mutado no Users Manager do Lab. */
+export const MUTED_MESSAGE = "Você está sem permissão para enviar mensagens no chat.";
 
 /** Mensagens mais recentes mantidas na tela. */
 const HISTORY = 100;
@@ -63,8 +67,21 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
     );
   }, [roomId, since]);
 
+  // Moderação (Lab): quem perdeu a visibilidade no chat some para os outros; mutado não envia.
+  const hidden = useHiddenChatAuthors();
+  const { muted, banned, disabled } = useMyModeration(author.uid);
+  const silenced = muted || banned || disabled;
+  const visible = useMemo(
+    () => (hidden.size ? messages.filter((m) => !m.authorId || m.authorId === author.uid || !hidden.has(m.authorId)) : messages),
+    [messages, hidden, author.uid],
+  );
+
   const send = useCallback(
     async (text: string) => {
+      if (silenced) {
+        setError(MUTED_MESSAGE);
+        throw new Error(MUTED_MESSAGE);
+      }
       // Palavrões viram `*` antes de gravar: todo mundo recebe a mensagem já limpa.
       const trimmed = censor(text.trim().slice(0, MAX_MESSAGE_LENGTH)).text;
       if (!trimmed) return;
@@ -82,8 +99,8 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         throw failure;
       }
     },
-    [roomId, author.uid, author.displayName],
+    [roomId, author.uid, author.displayName, silenced],
   );
 
-  return { messages, status, error, send };
+  return { messages: visible, status, error: silenced ? MUTED_MESSAGE : error, send };
 }

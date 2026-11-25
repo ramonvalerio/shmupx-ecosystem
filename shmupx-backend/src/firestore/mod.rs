@@ -240,6 +240,17 @@ impl Firestore {
     /// Consulta (`:runQuery`) fora de transação, com uma `structuredQuery` da API REST. Devolve os
     /// documentos encontrados como `(id, campos)`; o teto de documentos vem na própria consulta.
     pub async fn consultar(&self, consulta: Value) -> Result<Vec<(String, Campos)>, AppError> {
+        Ok(self
+            .consultar_caminhos(consulta)
+            .await?
+            .into_iter()
+            .map(|(caminho, campos)| (caminho.rsplit('/').next().unwrap_or_default().to_string(), campos))
+            .collect())
+    }
+
+    /// Como [`Self::consultar`], mas com o caminho relativo de cada documento (`rooms/x/presence/uid`):
+    /// serve às consultas de grupo de coleções (`allDescendants`), em que o id sozinho não basta.
+    pub async fn consultar_caminhos(&self, consulta: Value) -> Result<Vec<(String, Campos)>, AppError> {
         #[derive(Deserialize)]
         struct Documento {
             name: String,
@@ -252,10 +263,11 @@ impl Firestore {
         }
         let itens: Vec<Item> =
             self.post(&format!("{}:runQuery", self.raiz), &json!({ "structuredQuery": consulta })).await?;
+        let prefixo = format!("{}/", self.raiz);
         Ok(itens
             .into_iter()
             .filter_map(|item| item.document)
-            .map(|d| (d.name.rsplit('/').next().unwrap_or_default().to_string(), d.fields))
+            .map(|d| (d.name.strip_prefix(&prefixo).unwrap_or(&d.name).to_string(), d.fields))
             .collect())
     }
 

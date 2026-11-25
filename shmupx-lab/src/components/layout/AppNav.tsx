@@ -1,13 +1,15 @@
 import type { ComponentType, SVGProps } from "react";
-import { IconCatalog, IconLogout, IconRelease, IconValidation } from "../ui/Icons";
+import { IconCatalog, IconCoins, IconLogout, IconRelease, IconUsers, IconValidation } from "../ui/Icons";
 import { getAmbiente } from "../../auth/firebase";
 
-export type LabView = "catalog" | "validation" | "releases";
+export type LabView = "catalog" | "validation" | "releases" | "coins" | "users";
 
 const VIEWS: { id: LabView; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
   { id: "catalog", label: "Catálogo", icon: IconCatalog },
   { id: "validation", label: "Validação", icon: IconValidation },
   { id: "releases", label: "Versões", icon: IconRelease },
+  { id: "coins", label: "Coins Manager", icon: IconCoins },
+  { id: "users", label: "Users Manager", icon: IconUsers },
 ];
 
 interface AppNavProps {

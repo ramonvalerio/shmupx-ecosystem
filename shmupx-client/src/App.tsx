@@ -6,6 +6,9 @@ import ClientShell from "./components/ClientShell";
 import RoomView, { type RoomViewProps } from "./components/RoomView";
 import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
+import AccountBlockedScreen from "./components/AccountBlockedScreen";
+import { useMyModeration } from "./data/useModeration";
+import { auth as firebaseAuth } from "./auth/firebase";
 import { useRoomChat } from "./data/useRoomChat";
 import { useRoomPresence } from "./data/useRoomPresence";
 import { roomJoinedAt } from "./data/roomSession";
@@ -68,6 +71,7 @@ export default function App() {
 
   // Runs "Não enviada" guardadas (vídeo no disco): aparecem no ranking local para analisar de novo.
   const signedUid = auth.state.status === "signed-in" ? auth.state.profile.uid : null;
+  const moderation = useMyModeration(signedUid);
   // Jogar no PC pelo celular (ShmupX Lite): este Client recebe os pedidos da conta.
   const remote = useRemoteLaunchHost(signedUid, { rooms, recordingRoomId, practiceGames });
   const remoteRef = useRef(remote);
@@ -188,6 +192,8 @@ export default function App() {
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
   if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} onCancel={auth.cancelSignIn} />;
+  // Banida ou desativada no Users Manager do Lab: só o aviso, no lugar do Client.
+  if (moderation.banned || moderation.disabled) return <AccountBlockedScreen banned={moderation.banned} email={firebaseAuth.currentUser?.email} onSignOut={auth.signOut} />;
   const profileName = auth.state.profile.displayName;
   const profileUid = auth.state.profile.uid;
 

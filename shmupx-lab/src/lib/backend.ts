@@ -197,6 +197,108 @@ export function scheduleRelease(version: string, lead: ReleaseLead, options: Sch
   });
 }
 
+/** Motivo de uma distribuição de fichas (o backend aceita só estes). */
+export type CoinGrantReason =
+  | "event_prize"
+  | "season_reward"
+  | "compensation"
+  | "support_refund"
+  | "promotion"
+  | "welcome_bonus"
+  | "bug_report"
+  | "community"
+  | "content_creator"
+  | "other";
+
+/** Distribuição de fichas do Coins Manager, como o backend devolve em `/api/admin/coins/grants`. */
+export interface CoinGrant {
+  id: string;
+  target: "all" | "user";
+  uid?: string;
+  user_label?: string;
+  amount: number;
+  reason: CoinGrantReason;
+  note?: string;
+  scheduled_at: string;
+  /** `scheduled` vira `done` sozinho quando chega a hora (o backend credita no próximo acesso). */
+  status: "scheduled" | "running" | "done" | "cancelled" | "failed";
+  created_by: string;
+  created_at: string;
+  executed_at?: string;
+  recipients: number;
+  error?: string;
+}
+
+export interface CoinGrantInput {
+  target: "all" | "user";
+  uid?: string;
+  amount: number;
+  reason: CoinGrantReason;
+  note?: string;
+  /** Ausente = agora. */
+  scheduled_at?: string;
+}
+
+/** Lista as distribuições; o backend credita antes as que já venceram. */
+export function listCoinGrants(): Promise<CoinGrant[]> {
+  return adminRequest<CoinGrant[]>("/api/admin/coins/grants");
+}
+
+/** Cria a distribuição. Sem `scheduled_at`, credita na hora. */
+export function createCoinGrant(input: CoinGrantInput): Promise<CoinGrant> {
+  return adminRequest<CoinGrant>("/api/admin/coins/grants", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function cancelCoinGrant(id: string): Promise<CoinGrant> {
+  return adminRequest<CoinGrant>(`/api/admin/coins/grants/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+
+/** Roda de novo uma distribuição que falhou; quem já recebeu não recebe outra vez. */
+export function retryCoinGrant(id: string): Promise<CoinGrant> {
+  return adminRequest<CoinGrant>(`/api/admin/coins/grants/${encodeURIComponent(id)}/retry`, { method: "POST" });
+}
+
+export interface UserModeration {
+  banned: boolean;
+  muted: boolean;
+  disabled: boolean;
+  chat_hidden: boolean;
+  note?: string;
+  updated_at?: string;
+  updated_by?: string;
+}
+
+export type UserStatus = "live" | "playing" | "online" | "away" | "offline";
+
+/** Jogador cadastrado, como o backend devolve em `/api/admin/users`. */
+export interface AdminUser {
+  uid: string;
+  display_name?: string;
+  handle?: string;
+  email?: string;
+  created_at?: string;
+  last_seen_at?: string;
+  client_version?: string;
+  /** Ausente: ainda sem carteira (ganha as fichas iniciais na primeira run). */
+  balance?: number;
+  status: UserStatus;
+  /** Jogo aberto ou sala em que está. */
+  activity?: string;
+  is_admin: boolean;
+  moderation: UserModeration;
+}
+
+export type UserModerationInput = Partial<Pick<UserModeration, "banned" | "muted" | "disabled" | "chat_hidden" | "note">>;
+
+export function listUsers(): Promise<AdminUser[]> {
+  return adminRequest<AdminUser[]>("/api/admin/users");
+}
+
+/** Só os campos enviados mudam. */
+export function moderateUser(uid: string, input: UserModerationInput): Promise<UserModeration> {
+  return adminRequest<UserModeration>(`/api/admin/users/${encodeURIComponent(uid)}/moderation`, { method: "PUT", body: JSON.stringify(input) });
+}
+
 /** Cancela um agendamento ainda não liberado e esconde o aviso no Client. */
 export function cancelRelease(version: string): Promise<ClientRelease> {
   return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/cancel`, { method: "POST" });

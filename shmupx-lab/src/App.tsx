@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import AppNav, { type LabView } from "./components/layout/AppNav";
 import GameSidebar, { type SidebarGame } from "./components/layout/GameSidebar";
 import EnvironmentScreen from "./components/layout/EnvironmentScreen";
 import LoginScreen from "./components/layout/LoginScreen";
 import Button from "./components/ui/Button";
 import CatalogView from "./features/catalog/CatalogView";
+import CoinsView from "./features/coins/CoinsView";
+import UsersView from "./features/users/UsersView";
+import { useUsers } from "./features/users/useUsers";
 import { useAdminCatalog } from "./features/catalog/useAdminCatalog";
 import ReleasesView from "./features/releases/ReleasesView";
 import { useReleases } from "./features/releases/useReleases";
@@ -52,6 +55,10 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
   // os scripts aprovados) abre.
   const validation = useValidationEnvironment(signedIn && (view === "validation" || view === "releases"));
   const releases = useReleases(signedIn && view === "releases", validation.environment?.scripts);
+  // Jogadores: no Users Manager e no Coins Manager (escolher quem recebe as fichas).
+  const users = useUsers(signedIn && (view === "users" || view === "coins"));
+  const [coinsFor, setCoinsFor] = useState<string | null>(null);
+  const clearCoinsFor = useCallback(() => setCoinsFor(null), []);
 
   const games = useMemo<SidebarGame[]>(() => {
     const scripts = validation.environment?.scripts ?? [];
@@ -76,6 +83,21 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
 
       {view === "catalog" ? (
         <CatalogView games={catalog.games} loading={catalog.loading} error={catalog.error} onReload={catalog.reload} onSaved={catalog.upsert} onDeleted={catalog.remove} />
+      ) : view === "coins" ? (
+        <CoinsView users={users.users} usersLoading={users.loading} preselectedUid={coinsFor} onPreselectedUsed={clearCoinsFor} />
+      ) : view === "users" ? (
+        <UsersView
+          users={users.users}
+          loading={users.loading}
+          error={users.error}
+          updatedAt={users.updatedAt}
+          onReload={() => void users.reload()}
+          onModerated={users.setModeration}
+          onSendCoins={(uid) => {
+            setCoinsFor(uid);
+            setView("coins");
+          }}
+        />
       ) : view === "releases" ? (
         <ReleasesView
           releases={releases.releases}

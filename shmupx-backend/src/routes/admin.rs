@@ -10,6 +10,8 @@ use crate::error::AppError;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
 use crate::services::catalogo::{self, Jogo, JogoEntrada};
+use crate::services::distribuicoes::{self, Distribuicao, DistribuicaoEntrada};
+use crate::services::usuarios::{self, Moderacao, ModeracaoEntrada, UsuarioAdmin};
 use crate::services::email::{mensagem_da_versao, Ses};
 use crate::services::notificacoes;
 use crate::services::robotx::{self, ConhecimentoEntrada, ItemRobotx};
@@ -33,6 +35,11 @@ where
         .route("/api/admin/releases/{version}/installer", put(definir_instalador))
         .route("/api/admin/releases/{version}/schedule", post(agendar_versao))
         .route("/api/admin/releases/{version}/cancel", post(cancelar_versao))
+        .route("/api/admin/coins/grants", get(listar_distribuicoes).post(criar_distribuicao))
+        .route("/api/admin/coins/grants/{id}/cancel", post(cancelar_distribuicao))
+        .route("/api/admin/coins/grants/{id}/retry", post(repetir_distribuicao))
+        .route("/api/admin/users", get(listar_usuarios))
+        .route("/api/admin/users/{uid}/moderation", put(moderar_usuario))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
         .layer(Extension(firestore))
         .layer(Extension(email))
@@ -273,6 +280,81 @@ async fn agendar_versao(
         }
     });
     Ok(Json(versoes::obter(&firestore, &agendada.version).await?))
+}
+
+fn quem(usuario: &FirebaseUser) -> String {
+    usuario.email.clone().unwrap_or_else(|| usuario.uid.clone())
+}
+
+/// `GET /api/admin/coins/grants`: distribuições de fichas. Antes, credita as que já venceram.
+async fn listar_distribuicoes(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Vec<Distribuicao>>, AppError> {
+    exigir_admin(&usuario)?;
+    if let Err(e) = distribuicoes::processar_vencidas(&firestore).await {
+        eprintln!("fichas: falha ao conferir as agendadas ao listar: {e:?}");
+    }
+    Ok(Json(distribuicoes::listar(&firestore).await?))
+}
+
+/// `POST /api/admin/coins/grants`: nova distribuição, para agora (credita na hora) ou agendada.
+async fn criar_distribuicao(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Json(entrada): Json<DistribuicaoEntrada>,
+) -> Result<Json<Distribuicao>, AppError> {
+    exigir_admin(&usuario)?;
+    let criada = distribuicoes::criar(&firestore, entrada, &quem(&usuario)).await?;
+    println!(
+        "fichas: {} criou a distribuição {} ({} x {} fichas, {}, para {})",
+        quem(&usuario), criada.id, criada.target, criada.amount, criada.reason, criada.scheduled_at
+    );
+    Ok(Json(criada))
+}
+
+/// `POST /api/admin/coins/grants/{id}/cancel`: cancela uma distribuição ainda agendada.
+async fn cancelar_distribuicao(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<Distribuicao>, AppError> {
+    exigir_admin(&usuario)?;
+    let cancelada = distribuicoes::cancelar(&firestore, &id).await?;
+    println!("fichas: {} cancelou a distribuição {id}", quem(&usuario));
+    Ok(Json(cancelada))
+}
+
+/// `POST /api/admin/coins/grants/{id}/retry`: roda de novo uma distribuição que falhou.
+async fn repetir_distribuicao(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<Distribuicao>, AppError> {
+    exigir_admin(&usuario)?;
+    println!("fichas: {} repetiu a distribuição {id}", quem(&usuario));
+    Ok(Json(distribuicoes::repetir(&firestore, &id).await?))
+}
+
+/// `GET /api/admin/users`: todos os jogadores, com situação (online, ausente...) e moderação.
+async fn listar_usuarios(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Vec<UsuarioAdmin>>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(usuarios::listar(&firestore).await?))
+}
+
+/// `PUT /api/admin/users/{uid}/moderation`: banir, mutar, desativar o acesso ou tirar do chat
+/// (só os campos enviados mudam).
+async fn moderar_usuario(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(uid): Path<String>,
+    Json(entrada): Json<ModeracaoEntrada>,
+) -> Result<Json<Moderacao>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(usuarios::moderar(&firestore, &uid, entrada, &usuario).await?))
 }
 
 /// `POST /api/admin/releases/{version}/cancel`: cancela um agendamento ainda não liberado e

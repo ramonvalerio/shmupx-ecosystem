@@ -137,6 +137,32 @@ test("room chat: players read and post in published rooms only, as themselves", 
   await assertFails(setDoc(doc(db("bob"), "rooms/earthion/messages/m9"), message({ authorId: "bob", authorName: "Bob" })));
 });
 
+test("moderation (Lab Users Manager): muted can't post, banned/disabled can't post or show presence", async () => {
+  const message = (id) => setDoc(doc(db("alice"), `rooms/earthion/messages/${id}`), { authorId: "alice", authorName: "Alice", text: "oi", createdAt: serverTimestamp() });
+  const presence = () => setDoc(doc(db("alice"), "rooms/earthion/presence/alice"), { name: "Alice", state: "online", lastSeen: serverTimestamp() });
+  const moderate = (flags) => environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), "moderation/alice"), flags));
+  // Documento sem bandeiras: liberado.
+  await moderate({ banned: false, muted: false, disabled: false, chatHidden: true });
+  await assertSucceeds(message("ok"));
+  await assertSucceeds(presence());
+  await moderate({ muted: true });
+  await assertFails(message("muted"));
+  await assertSucceeds(presence());
+  for (const flag of ["banned", "disabled"]) {
+    await moderate({ [flag]: true });
+    await assertFails(message(flag));
+    await assertFails(presence());
+  }
+  // O jogador lê só a própria moderação; ninguém grava pelo app.
+  await assertSucceeds(getDoc(doc(db("alice"), "moderation/alice")));
+  await assertFails(getDoc(doc(db("bob"), "moderation/alice")));
+  await assertFails(setDoc(doc(db("alice"), "moderation/alice"), { banned: false }));
+  // Lista de quem some do chat: todo jogador logado lê.
+  await assertSucceeds(getDoc(doc(db("bob"), "chatModeration/hidden")));
+  await assertFails(getDoc(doc(db(), "chatModeration/hidden")));
+  await assertFails(setDoc(doc(db("bob"), "chatModeration/hidden"), { uids: [] }));
+});
+
 test("room presence: each player writes only their own entry, with profile name and server time", async () => {
   const presence = (extra = {}) => ({ name: "Alice", state: "online", lastSeen: serverTimestamp(), ...extra });
   const alice = db("alice");

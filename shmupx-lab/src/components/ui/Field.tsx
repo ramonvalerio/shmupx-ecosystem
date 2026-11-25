@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { ComponentProps, ReactNode, SelectHTMLAttributes } from "react";
 
 /** Aparência comum dos controles de formulário. */
 const CONTROL =
@@ -22,7 +22,7 @@ export function Field({ label, hint, className = "", children }: FieldProps) {
   );
 }
 
-export function TextInput({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+export function TextInput({ className = "", ...rest }: ComponentProps<"input">) {
   return <input className={`${CONTROL} ${className}`} {...rest} />;
 }
 

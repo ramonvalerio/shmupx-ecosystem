@@ -75,6 +75,15 @@ export const IconYoutube = (p: SVGProps<SVGSVGElement>) => (
 export const IconTrash = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /></Icon>
 );
+export const IconCoins = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><circle cx="9" cy="9" r="6" /><path d="M18.1 10.4A6 6 0 1 1 10.4 18.1" /><path d="M9 6.5v5M7 9h4" /></Icon>
+);
+export const IconUsers = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></Icon>
+);
+export const IconCalendar = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Icon>
+);
 export const IconAlert = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /></Icon>
 );

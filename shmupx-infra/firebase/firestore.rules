@@ -20,6 +20,9 @@ service cloud.firestore {
     //   adds liveVideoId and liveViewers; playingGameId + playingTitle = the game open on the
     //   account, shown in the room's player list) every
     //   30 s and deletes it on leaving the room; entries older than 75 s show as offline.
+    // moderation/{uid}: Users Manager do Lab (banned, muted, disabled, chatHidden). Server-only
+    //   write; the player reads their own. Banned/disabled can't post or show presence; muted can't post.
+    // chatModeration/hidden: uids whose messages the Client hides (no chat visibility or banned).
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
@@ -36,6 +39,13 @@ service cloud.firestore {
     function publishedGame(id) {
       return get(/databases/$(database)/documents/games/$(id)).data.published == true;
     }
+    // Moderação do Users Manager (Lab). Sem documento = conta liberada.
+    function moderationFlag(flag) {
+      let path = /databases/$(database)/documents/moderation/$(request.auth.uid);
+      return exists(path) && get(path).data.get(flag, false) == true;
+    }
+    function notBlocked() { return !moderationFlag('banned') && !moderationFlag('disabled'); }
+    function mayChat() { return notBlocked() && !moderationFlag('muted'); }
     function validMessage(data) {
       return data.keys().hasAll(['authorId', 'authorName', 'text', 'createdAt'])
         && data.keys().hasOnly(['authorId', 'authorName', 'text', 'createdAt'])
@@ -133,13 +143,21 @@ service cloud.firestore {
     }
     match /rooms/{gameId}/messages/{messageId} {
       allow read: if signedIn() && publishedGame(gameId);
-      allow create: if signedIn() && publishedGame(gameId) && validMessage(request.resource.data);
+      allow create: if signedIn() && publishedGame(gameId) && validMessage(request.resource.data) && mayChat();
       allow update, delete: if false;
     }
     match /rooms/{gameId}/presence/{uid} {
       allow read: if signedIn() && publishedGame(gameId);
-      allow create, update: if owns(uid) && publishedGame(gameId) && validPresence(request.resource.data);
+      allow create, update: if owns(uid) && publishedGame(gameId) && validPresence(request.resource.data) && notBlocked();
       allow delete: if owns(uid);
+    }
+    match /moderation/{uid} {
+      allow read: if owns(uid);
+      allow write: if false;
+    }
+    match /chatModeration/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
     match /remoteLaunch/{uid} {
       allow read, delete: if owns(uid);

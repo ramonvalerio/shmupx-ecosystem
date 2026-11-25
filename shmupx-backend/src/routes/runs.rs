@@ -12,7 +12,7 @@ use crate::middleware::firebase::FirebaseUser;
 use crate::middleware::jogador::{exigir_jogador, Origem};
 use crate::routes::notificacoes::versao_do_client;
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
-use crate::services::versoes;
+use crate::services::{usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
@@ -49,6 +49,10 @@ async fn iniciar_run(
     headers: HeaderMap,
     Json(payload): Json<IniciarRunPayload>,
 ) -> Result<(StatusCode, Json<RunIniciada>), AppError> {
+    // Conta banida ou desativada no Users Manager do Lab não gasta ficha nem grava run.
+    if let Some(motivo) = usuarios::bloqueio(&firestore, &usuario.uid).await? {
+        return Err(AppError::forbidden(motivo));
+    }
     // A versão obrigatória vale para o Client de PC; o MiSTer não manda versão de Client.
     if origem == "pc" {
         versoes::exigir_versao_em_dia(&firestore, versao_do_client(&headers).as_deref()).await?;
