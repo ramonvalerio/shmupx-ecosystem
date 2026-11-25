@@ -198,9 +198,9 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
   const [configuring, setConfiguring] = useState(false);
   const windowActive = useWindowActive();
   const live = controls && windowActive;
-  const { mapping } = useControlMapping();
+  const { merged } = useControlMapping();
   const { held } = useEngineCapture(live);
-  const { pressed, lever } = useCabinetPanel(mapping, held, LEVER, live);
+  const { pressed, lever } = useCabinetPanel(merged, held, LEVER, live);
   const press = (id: ControlId) => (pressed.has(id) ? "is-pressed" : "");
   const video = useGameVideo(room, withVideo);
   const [videoFailed, setVideoFailed] = useState(false);

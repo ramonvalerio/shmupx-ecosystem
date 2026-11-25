@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { pressedControls, type ControlId, type ControlMapping } from "../data/emulatorControls";
+import { pressedControls, type ControlId, type MergedMapping } from "../data/emulatorControls";
 
 /**
  * Painel do gabinete ao vivo: a alavanca e os botões acompanham o controle ou o teclado do jogador.
@@ -30,10 +30,10 @@ const STICK_SWITCH = 0.5;
  * mapeamento usa o padrão do MAME, que inclui a alavanca do controle; tudo no teclado ou no
  * direcional digital, nenhum (aí vale só o que o motor avisa).
  */
-function stickDevice(mapping: ControlMapping): StickDevice | null {
-  const axis = DIRECTIONS.map((id) => mapping[id]).find((item) => item && AXIS_SWITCH.test(item.code));
+function stickDevice(mapping: MergedMapping): StickDevice | null {
+  const axis = DIRECTIONS.flatMap((id) => mapping[id] ?? []).find((item) => AXIS_SWITCH.test(item.code));
   if (axis) return { name: axis.deviceName ?? null };
-  return DIRECTIONS.some((id) => !mapping[id]) ? { name: null } : null;
+  return DIRECTIONS.some((id) => !mapping[id]?.length) ? { name: null } : null;
 }
 
 /**
@@ -175,7 +175,7 @@ function useLever(target: Stick, device: StickDevice | null, geometry: LeverGeom
  * Controles acionados agora (botões afundam, setas acendem) e a alavanca animada. `held`: os códigos
  * do MAME apertados (motor de captura). Com `enabled` falso, o painel fica parado em repouso.
  */
-export function useCabinetPanel(mapping: ControlMapping, held: ReadonlySet<string>, geometry: LeverGeometry, enabled = true) {
+export function useCabinetPanel(mapping: MergedMapping, held: ReadonlySet<string>, geometry: LeverGeometry, enabled = true) {
   // Com o analógico lido pelo WebView, ele manda na alavanca e nas setas: os apertos de eixo que o
   // motor avisa ficam de fora (chegam um pouco depois e fariam a bola pular para o fim).
   const [stick, setStick] = useState<{ live: boolean; dirs: string }>({ live: false, dirs: "" });

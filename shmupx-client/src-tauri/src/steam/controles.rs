@@ -9,7 +9,7 @@
 //! Ao abrir um jogo, o mapeamento vira o arquivo de controles do MAME (`ctrlr/shmupx.cfg`, opção
 //! `-ctrlr`), que vale para todos os jogos.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
@@ -71,9 +71,14 @@ fn xml(texto: &str) -> String {
     texto.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
-/// Arquivo de controles do MAME para o mapeamento. Controle mapeado: só o código escolhido. Não
+/// Arquivo de controles do MAME para o mapeamento. Controle mapeado: os códigos escolhidos, um por
+/// aparelho (teclado e cada controle têm o seu mapeamento, todos valendo juntos, com `OR`). Não
 /// mapeado: o padrão do MAME, sem os códigos que o jogador deu a outro controle (senão um aperto
 /// acionaria os dois). Sem mapeamento, `None`: valem os padrões.
+///
+/// Cada controle fica preso ao seu número (`mapdevice`). Dois controles mapeados cada um sozinho
+/// chegam os dois como `JOYCODE_1`: o segundo ganha o próximo número livre, e os códigos dele são
+/// reescritos com esse número.
 pub fn arquivo_ctrlr(mapeamento: &[ControleMapeado]) -> Option<String> {
     let validos: Vec<&ControleMapeado> = mapeamento
         .iter()
@@ -82,21 +87,42 @@ pub fn arquivo_ctrlr(mapeamento: &[ControleMapeado]) -> Option<String> {
     if validos.is_empty() {
         return None;
     }
-    let usados: BTreeSet<&str> = validos.iter().map(|m| m.code.as_str()).collect();
     let mut aparelhos: BTreeMap<u32, String> = BTreeMap::new();
-    for m in &validos {
-        if let (Some(n), Some(device)) = (indice_do_controle(&m.code), m.device.as_deref()) {
-            aparelhos.entry(n).or_insert_with(|| id_do_aparelho(device));
-        }
-    }
+    let mut indice_de: HashMap<String, u32> = HashMap::new();
+    let codigos: Vec<(&str, String)> = validos
+        .iter()
+        .map(|m| {
+            let (Some(n), Some(device)) = (indice_do_controle(&m.code), m.device.as_deref()) else {
+                return (m.control.as_str(), m.code.clone());
+            };
+            let id = id_do_aparelho(device);
+            let k = *indice_de.entry(id.clone()).or_insert_with(|| {
+                let mut k = n;
+                while aparelhos.contains_key(&k) {
+                    k += 1;
+                }
+                aparelhos.insert(k, id);
+                k
+            });
+            let resto = m.code.splitn(3, '_').nth(2).unwrap_or_default();
+            (m.control.as_str(), if k == n { m.code.clone() } else { format!("JOYCODE_{k}_{resto}") })
+        })
+        .collect();
+    let usados: BTreeSet<&str> = codigos.iter().map(|(_, c)| c.as_str()).collect();
     let mut saida = String::from("<?xml version=\"1.0\"?>\n<!-- ShmupX Client: Configurações › Controle -->\n<mameconfig version=\"10\">\n    <system name=\"default\">\n        <input>\n");
     for (n, device) in &aparelhos {
         saida.push_str(&format!("            <mapdevice device=\"{}\" controller=\"JOYCODE_{n}\" />\n", xml(device)));
     }
     for (id, porta, padrao) in CONTROLES {
-        let sequencia: Vec<&str> = match validos.iter().rev().find(|m| m.control == id) {
-            Some(m) => vec![m.code.as_str()],
-            None => {
+        let mut deste: Vec<&str> = Vec::new();
+        for (control, code) in &codigos {
+            if *control == id && !deste.contains(&code.as_str()) {
+                deste.push(code.as_str());
+            }
+        }
+        let sequencia: Vec<&str> = match deste.is_empty() {
+            false => deste,
+            true => {
                 let livre: Vec<&str> = padrao.iter().copied().filter(|c| !usados.contains(c)).collect();
                 if livre.len() == padrao.len() {
                     continue; // o padrão não conflita: fica o do MAME
@@ -264,6 +290,24 @@ mod tests {
         assert!(xml.contains("<port type=\"P1_BUTTON3\">\n                <newseq type=\"standard\">KEYCODE_SPACE</newseq>"));
         let xml = arquivo_ctrlr(&[m("start", "KEYCODE_5", None)]).unwrap();
         assert!(xml.contains("<port type=\"COIN1\">\n                <newseq type=\"standard\">JOYCODE_1_SELECT</newseq>"));
+    }
+
+    #[test]
+    fn cada_controle_com_o_seu_mapeamento() {
+        // Teclado e dois controles, cada um mapeado sozinho (os dois chegaram como JOYCODE_1).
+        let xml = arquivo_ctrlr(&[
+            m("button1", "KEYCODE_Z", None),
+            m("button1", "JOYCODE_1_BUTTON3", Some("Arcade product_aaa")),
+            m("button1", "JOYCODE_1_BUTTON1", Some("Pad product_bbb")),
+            m("button2", "JOYCODE_1_BUTTON4", Some("Pad product_bbb")),
+        ])
+        .unwrap();
+        assert!(xml.contains(r#"<mapdevice device="product_aaa" controller="JOYCODE_1" />"#));
+        assert!(xml.contains(r#"<mapdevice device="product_bbb" controller="JOYCODE_2" />"#));
+        assert!(xml.contains("<port type=\"P1_BUTTON1\">
+                <newseq type=\"standard\">KEYCODE_Z OR JOYCODE_1_BUTTON3 OR JOYCODE_2_BUTTON1</newseq>"));
+        assert!(xml.contains("<port type=\"P1_BUTTON2\">
+                <newseq type=\"standard\">JOYCODE_2_BUTTON4</newseq>"));
     }
 
     #[test]

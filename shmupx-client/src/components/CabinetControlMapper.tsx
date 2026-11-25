@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { CONTROLS, describeInput, useControlMapping, type ControlId, type MappedControl } from "../data/emulatorControls";
 import { useEngineCapture, type CaptureEvent } from "../data/engineCapture";
 import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
-import { acceptsInput, useConnectedControllers, useControllerChoice, type ControllerChoice } from "../data/connectedControllers";
+import { acceptsInput, sameController, useConnectedControllers, useControllerChoice, type ControllerChoice } from "../data/connectedControllers";
 
 /**
  * Posição de cada controle no painel (coordenadas do SVG). O gabinete segue o desenho do
@@ -34,14 +34,19 @@ const LEVER: LeverGeometry = { base: { x: 186, y: 486 }, ball: { x: 185, y: 482 
  */
 export default function CabinetControlMapper() {
   const { t } = useI18n();
-  const { mapping, assign, reset, saved } = useControlMapping();
+  const { profiles, merged, assign, reset, saved } = useControlMapping();
   const [waiting, setWaiting] = useState<ControlId | null>(null);
   const [flash, setFlash] = useState<{ control: ControlId; text: string } | null>(null);
   const [hover, setHover] = useState<ControlId | null>(null);
   const waitingRef = useRef<ControlId | null>(null);
   waitingRef.current = waiting;
   const { choice, choose } = useControllerChoice();
-  const { controllers, seen } = useConnectedControllers(Object.values(mapping).map((item) => item?.deviceName));
+  const { controllers, seen } = useConnectedControllers(Object.keys(profiles).filter((key) => key.startsWith("pad:")).map((key) => key.slice(4)));
+  // Mapeamentos mostrados: o do aparelho escolhido; em "Qualquer controle ou teclado", todos.
+  const shownKeys = choice.kind === "all" ? Object.keys(profiles)
+    : choice.kind === "keyboard" ? ["keyboard"]
+    : Object.keys(profiles).filter((key) => key.startsWith("pad:") && sameController(choice.name, key.slice(4)));
+  const shown = (id: ControlId) => shownKeys.flatMap((key) => (profiles[key]?.[id] ? [profiles[key][id]!] : []));
 
   // Motor em modo captura enquanto a tela está aberta (o mesmo do gabinete da Coleção). Esperando
   // um aperto, ele vira o controle escolhido.
@@ -88,8 +93,10 @@ export default function CabinetControlMapper() {
   };
   const labelOf = (id: ControlId) => t(CONTROLS.find((c) => c.id === id)!.label);
   const bindingOf = (id: ControlId) => {
-    const item = mapping[id];
-    return item ? describeInput(item, t) : t("Padrão ({key})", { key: t(CONTROLS.find((c) => c.id === id)!.fallback) });
+    const items = shown(id);
+    if (!items.length) return t("Padrão ({key})", { key: t(CONTROLS.find((c) => c.id === id)!.fallback) });
+    // Vários aparelhos (em "Qualquer controle"): cada um com o seu, separados por " · ".
+    return items.map((item) => describeInput(item, t)).join(" · ");
   };
 
   const screenLines: string[] =
@@ -99,9 +106,9 @@ export default function CabinetControlMapper() {
     : flash ? [t("GRAVADO!"), labelOf(flash.control).toUpperCase()]
     : [t("CLIQUE NUM BOTÃO"), t("DO PAINEL")];
 
-  const { pressed, lever } = useCabinetPanel(mapping, held, LEVER);
+  const { pressed, lever } = useCabinetPanel(merged, held, LEVER);
 
-  const spotClass = (id: ControlId) => `mapper-spot ${pressed.has(id) ? "is-pressed" : ""} ${waiting === id ? "is-waiting" : ""} ${flash?.control === id ? "is-saved" : ""} ${hover === id ? "is-hover" : ""} ${mapping[id] ? "is-mapped" : ""}`;
+  const spotClass = (id: ControlId) => `mapper-spot ${pressed.has(id) ? "is-pressed" : ""} ${waiting === id ? "is-waiting" : ""} ${flash?.control === id ? "is-saved" : ""} ${hover === id ? "is-hover" : ""} ${shown(id).length ? "is-mapped" : ""}`;
   const spotProps = (id: ControlId) => ({
     className: spotClass(id),
     role: "button",
@@ -221,7 +228,7 @@ export default function CabinetControlMapper() {
             <li key={control.id}>
               <button
                 type="button"
-                className={`cabinet-mapper-row ${waiting === control.id ? "is-waiting" : ""} ${hover === control.id ? "is-hover" : ""} ${mapping[control.id] ? "is-mapped" : ""}`}
+                className={`cabinet-mapper-row ${waiting === control.id ? "is-waiting" : ""} ${hover === control.id ? "is-hover" : ""} ${shown(control.id).length ? "is-mapped" : ""}`}
                 disabled={engine !== "ready"}
                 onClick={() => pick(control.id)}
                 onMouseEnter={() => setHover(control.id)}
@@ -234,7 +241,7 @@ export default function CabinetControlMapper() {
           ))}
         </ul>
         <div className="cabinet-mapper-actions">
-          <button type="button" className="secondary-action" disabled={Object.keys(mapping).length === 0} onClick={() => { setWaiting(null); reset(); }}>{t("Restaurar controles padrão")}</button>
+          <button type="button" className="secondary-action" disabled={shownKeys.length === 0} onClick={() => { setWaiting(null); reset(choice.kind === "all" ? undefined : shownKeys); }}>{t(choice.kind === "all" ? "Restaurar controles padrão" : "Restaurar o padrão deste controle")}</button>
           {!saved && <span className="muted">{t("Não foi possível salvar neste dispositivo.")}</span>}
         </div>
       </div>
