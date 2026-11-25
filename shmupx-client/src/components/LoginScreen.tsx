@@ -2,9 +2,11 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
+import type { Auth } from "../auth/useAuth";
+import AccountAccess from "./AccountAccess";
 
-// Layout do design "Acesso do Piloto" (Superdesign). O login real é só Google: sem campos de nome/senha.
-export default function LoginScreen({ busy, error, onSignIn, onCancel }: { busy: boolean; error?: string; onSignIn: () => void; onCancel?: () => void }) {
+// Layout do design "Acesso do Piloto" (Superdesign). Entra com e-mail e senha ou com o Google.
+export default function LoginScreen({ auth }: { auth: Auth }) {
   const { t } = useI18n();
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => { if (isTauri()) getVersion().then(setVersion).catch(() => {}); }, []);
@@ -28,13 +30,7 @@ export default function LoginScreen({ busy, error, onSignIn, onCancel }: { busy:
             <div className="entrance-card-head"><span><i />{t("ACESSO DO PILOTO")}</span><span className="muted">// 01</span></div>
             <h1 id="login-title">{t("Bem-vindo, piloto.")}</h1>
             <p className="entrance-sub">{t("Sua próxima jornada começa aqui.")}</p>
-            <p className="entrance-note">{t("Use sua conta Google. A permissão para publicar no YouTube será pedida separadamente, ao conectar seu canal.")}</p>
-            <button type="button" className="entrance-cta" disabled={busy} onClick={onSignIn}>{busy ? t("Aguardando o Google…") : t("Entrar com Google")}<span aria-hidden="true">→</span></button>
-            {busy && isTauri() && <p className="entrance-note" role="status">
-              {t("Escolha sua conta Google no navegador que abriu. Ao terminar, o ShmupX volta sozinho para a frente.")}
-              {onCancel && <> <button type="button" className="text-action" onClick={onCancel}>{t("Cancelar")}</button></>}
-            </p>}
-            {error && <p className="mode-error" role="alert">{t(error)}</p>}
+            <AccountAccess auth={auth} primaryClass="entrance-cta" secondaryClass="entrance-secondary" />
             <div className="entrance-card-foot">{t("CADA RUN CONTA. QUEBRE SEU RECORDE.")}</div>
           </div>
         </section>

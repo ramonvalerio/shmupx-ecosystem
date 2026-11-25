@@ -28,7 +28,7 @@ export default function App() {
   useBackLayer(settings, () => setSettings(false));
 
   if (auth.state.status === "loading") return <main className="lite-screen lite-center" aria-busy="true"><img src="/img/logo.png" alt="ShmupX" className="lite-logo" /></main>;
-  if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} />;
+  if (auth.state.status !== "signed-in") return <LoginScreen auth={auth} />;
 
   const profile = auth.state.profile;
   const room = rooms.find((candidate) => candidate.id === roomId);

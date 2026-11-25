@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { PageHeading } from "./ClientPages";
 import type { GameRoom } from "../types/room";
 import type { SessionRun } from "../types/submission";
-import { updateDisplayName, type PlayerProfile } from "../auth/firebase";
+import { hasGoogle, updateDisplayName, type PlayerProfile } from "../auth/firebase";
 
 export const RUN_LABELS: Record<SessionRun["status"], string> = {
   recording: "Gravando",
@@ -73,7 +73,7 @@ export function ProfilePage({ profile, onProfile, onSubscription }: { profile: P
     catch { setMessage("Não foi possível salvar o perfil. Verifique a conexão e tente novamente."); }
     finally { setSaving(false); }
   }
-  return <div className="client-page"><PageHeading title={t("Meu perfil")} detail={t("Sua conta ShmupX, conectada pelo Google.")} /><div className="profile-layout"><article className="dashboard-panel profile-summary"><span className="profile-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span><h2>{profile.displayName}</h2><span className="sample-chip">{t("CONTA GOOGLE")}</span><p className="muted">{t("Fichas, gameplays e rankings ainda não estão ligados a esta conta.")}</p></article><article className="dashboard-panel settings-content"><h2>{t("Informações do jogador")}</h2><form onSubmit={saveProfile}><label className="settings-field">{t("Nome de exibição")}<input required maxLength={32} value={name} onChange={(event) => setName(event.target.value)} autoComplete="nickname" /></label><button className="primary-action" type="submit" disabled={saving}>{t("Salvar perfil")}</button><p className="muted" role="status">{t(message)}</p></form><hr /><h3>{t("Assinatura")}</h3><p className="muted">{t("Consulte a prévia de assinatura do cliente.")}</p><button className="secondary-action" onClick={onSubscription}>{t("Ver assinatura")}</button></article></div></div>;
+  return <div className="client-page"><PageHeading title={t("Meu perfil")} detail={t(hasGoogle() ? "Sua conta ShmupX, conectada pelo Google." : "Sua conta ShmupX.")} /><div className="profile-layout"><article className="dashboard-panel profile-summary"><span className="profile-avatar" aria-hidden="true"><img className="avatar-img" src="/img/avatar-default.png" alt="" /></span><h2>{profile.displayName}</h2><span className="sample-chip">{t(hasGoogle() ? "CONTA GOOGLE" : "CONTA SHMUPX")}</span><p className="muted">{t("Fichas, gameplays e rankings ainda não estão ligados a esta conta.")}</p></article><article className="dashboard-panel settings-content"><h2>{t("Informações do jogador")}</h2><form onSubmit={saveProfile}><label className="settings-field">{t("Nome de exibição")}<input required maxLength={32} value={name} onChange={(event) => setName(event.target.value)} autoComplete="nickname" /></label><button className="primary-action" type="submit" disabled={saving}>{t("Salvar perfil")}</button><p className="muted" role="status">{t(message)}</p></form><hr /><h3>{t("Assinatura")}</h3><p className="muted">{t("Consulte a prévia de assinatura do cliente.")}</p><button className="secondary-action" onClick={onSubscription}>{t("Ver assinatura")}</button></article></div></div>;
 }
 
 export function SubscriptionPage({ onEvents }: { onEvents: () => void }) {

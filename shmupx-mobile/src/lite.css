@@ -328,3 +328,20 @@ img { max-width: 100%; }
 .chat-message.is-blocked { padding-left: 40px; }
 .chat-blocked { margin: 0; font-size: 13px; color: var(--note); }
 .chat-link-button { padding: 4px 0; border: 0; background: none; color: var(--cyan); font-size: 13px; text-decoration: underline; }
+
+/* Acesso à conta (AccountAccess, compartilhado com o Client): e-mail e senha, Google, confirmação */
+.lite-login { overflow-y: auto; justify-content: safe center; }
+.lite-auth { width: min(320px, 100%); display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.lite-auth .auth-form, .lite-auth .auth-google { display: flex; flex-direction: column; gap: 12px; }
+.lite-auth .auth-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
+.lite-auth .auth-field input { padding: 11px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--input); color: var(--text); font-size: 16px; font-family: inherit; }
+.lite-auth .auth-title { margin: 0; color: var(--text); font-size: 18px; font-weight: 600; }
+.lite-auth .auth-note, .lite-auth .auth-info { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.lite-auth .auth-info { color: var(--cyan); }
+.lite-auth .auth-error { margin: 0; color: var(--error); font-size: 13px; line-height: 1.5; }
+.lite-auth .lite-primary, .lite-auth .lite-secondary { width: 100%; margin: 0; min-height: 48px; color: var(--text); }
+.lite-auth .lite-primary { color: var(--on-cyan); }
+.lite-auth .auth-links { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lite-auth .text-action { padding: 6px 0; border: 0; background: transparent; color: var(--cyan); font-size: 14px; }
+.lite-auth .auth-divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.lite-auth .auth-divider::before, .lite-auth .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--stroke); }

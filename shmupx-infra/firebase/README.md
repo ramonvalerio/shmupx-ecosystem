@@ -100,7 +100,11 @@ O backend Rust ainda usa PostgreSQL/Supabase; o cliente tem autenticação e cat
 
 O aplicativo Web **ShmupX Client** foi registrado no projeto em 2026-10-26. Sua configuração pública, obtida pela CLI, está em `apps/shmupx-client.json`. Essa configuração identifica o projeto; não contém senha de jogador, chave privada de conta de serviço ou segredo OAuth. A segurança depende de Authentication, Rules e validação no backend.
 
-O método escolhido pelo usuário é **Google**, considerando que as gameplays serão publicadas no canal YouTube do próprio jogador. A habilitação do provedor foi orientada no console; ainda falta o teste de login real. E-mail/senha não é requisito do fluxo inicial.
+O método escolhido pelo usuário é **Google**, considerando que as gameplays serão publicadas no canal YouTube do próprio jogador. A habilitação do provedor foi orientada no console; ainda falta o teste de login real. Desde 2026-11-25 também há cadastro por **e-mail e senha** (Client e Lite), com "Esqueci minha senha" pelos e-mails padrão do Firebase. Regras:
+
+- O cadastro por senha só vale depois de confirmar o e-mail pelo link enviado: o app segura na tela "Confirme seu e-mail", o backend recusa (403) token com `sign_in_provider = password` e `email_verified = false`, e as Rules (`signedIn()`) negam o mesmo token.
+- Uma conta por e-mail (padrão do Authentication). Se um e-mail do Gmail cadastrado com senha entrar pelo Google, o Firebase associa o Google à mesma conta (mesmo UID). Para outros domínios, quando o Firebase responde `account-exists-with-different-credential`, o app pede a senha uma vez e liga o Google com `linkWithCredential`.
+- O provedor **E-mail/senha** precisa estar ativo em Authentication › Sign-in method (sem ele o cadastro responde `operation-not-allowed`).
 
 O registro Web permite usar os SDKs JavaScript no React, mas não implementa por si só o login desktop. No Tauri, a autenticação Google deve abrir o navegador do sistema e retornar por um fluxo de autorização protegido; não usar formulário de senha nem OAuth dentro da WebView embutida. Nenhum segredo OAuth deve ser distribuído dentro do cliente.
 

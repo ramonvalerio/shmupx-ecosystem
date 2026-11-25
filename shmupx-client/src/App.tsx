@@ -212,7 +212,7 @@ export default function App() {
   const expiredRoom = rooms.find((room) => room.id === expiredRoomId) ?? null;
 
   if (auth.state.status === "loading") return <main className="client-shell login-screen" aria-busy="true" />;
-  if (auth.state.status === "signed-out") return <LoginScreen busy={auth.state.busy ?? false} error={auth.state.error} onSignIn={auth.signIn} onCancel={auth.cancelSignIn} />;
+  if (auth.state.status !== "signed-in") return <LoginScreen auth={auth} />;
   // Banida ou desativada no Users Manager do Lab: só o aviso, no lugar do Client.
   if (moderation.banned || moderation.disabled) return <AccountBlockedScreen banned={moderation.banned} email={firebaseAuth.currentUser?.email} onSignOut={auth.signOut} />;
   const profileName = auth.state.profile.displayName;

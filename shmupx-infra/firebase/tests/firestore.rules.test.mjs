@@ -52,6 +52,16 @@ test("anonymous access is denied, including rankings and public profiles", async
     await assertFails(getDoc(doc(db(), path)));
 });
 
+test("email/password sign-ups need a confirmed email; Google sign-ins don't", async () => {
+  const as = (token) => environment.authenticatedContext("carol", token).firestore();
+  const unconfirmed = as({ email: "carol@example.com", email_verified: false, firebase: { sign_in_provider: "password" } });
+  await assertFails(getDoc(doc(unconfirmed, "users/carol")));
+  await assertFails(setDoc(doc(unconfirmed, "users/carol"), profile()));
+  const confirmed = as({ email: "carol@example.com", email_verified: true, firebase: { sign_in_provider: "password" } });
+  await assertSucceeds(setDoc(doc(confirmed, "users/carol"), profile()));
+  const google = as({ email: "carol@example.com", email_verified: false, firebase: { sign_in_provider: "google.com" } });
+  await assertSucceeds(getDoc(doc(google, "users/carol")));
+});
 test("private profiles are only readable by their owner", async () => {
   await assertSucceeds(getDoc(doc(db("alice"), "users/alice")));
   await assertFails(getDoc(doc(db("bob"), "users/alice")));

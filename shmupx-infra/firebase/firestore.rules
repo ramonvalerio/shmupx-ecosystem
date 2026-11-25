@@ -27,7 +27,13 @@ service cloud.firestore {
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
-    function signedIn() { return request.auth != null; }
+    // Email/password sign-ups count only after the player opens the confirmation link (same rule
+    // as the backend and the Client). Google and custom tokens already carry a proven identity.
+    function signedIn() {
+      return request.auth != null
+        && (request.auth.token.get('firebase', {}).get('sign_in_provider', '') != 'password'
+            || request.auth.token.get('email_verified', false) == true);
+    }
     function owns(uid) { return signedIn() && request.auth.uid == uid; }
     function validUser(data) {
       return data.keys().hasAll(['displayName', 'locale', 'createdAt', 'updatedAt'])

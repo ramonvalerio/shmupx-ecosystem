@@ -55,6 +55,24 @@ struct Claims {
     email: Option<String>,
     #[serde(default)]
     email_verified: bool,
+    #[serde(default)]
+    firebase: ClaimFirebase,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ClaimFirebase {
+    #[serde(default)]
+    sign_in_provider: String,
+}
+
+/// Cadastro por e-mail e senha só vale depois de o jogador abrir o link de confirmação: até lá o
+/// e-mail não é comprovadamente dele. Google e os demais provedores já entregam o e-mail comprovado
+/// (ou não dependem dele). A mesma regra vale no app (`needsEmailVerification`) e nas Rules.
+fn conferir_email_confirmado(sign_in_provider: &str, email_verified: bool) -> Result<(), AppError> {
+    if sign_in_provider == "password" && !email_verified {
+        return Err(AppError::forbidden("confirme o seu e-mail pelo link enviado para continuar"));
+    }
+    Ok(())
 }
 
 /// Middleware: exige `Authorization: Bearer <ID token do Firebase>` e injeta `FirebaseUser`.
@@ -206,6 +224,9 @@ fn validar_token_do_emulador(token: &str, project_id: &str, agora: u64) -> Resul
     if !valido {
         return Err(invalido());
     }
+    let provedor = corpo.pointer("/firebase/sign_in_provider").and_then(|v| v.as_str()).unwrap_or_default();
+    let verificado = corpo.get("email_verified").and_then(|v| v.as_bool()).unwrap_or(false);
+    conferir_email_confirmado(provedor, verificado)?;
     Ok(FirebaseUser {
         uid: texto("sub"),
         email: corpo.get("email").and_then(|v| v.as_str()).map(str::to_string),
@@ -250,6 +271,7 @@ fn validar_com_chave(
     if claims.sub.is_empty() || claims.sub.len() > 128 || claims.auth_time > agora + 60 {
         return Err(AppError::unauthorized("token inválido ou expirado"));
     }
+    conferir_email_confirmado(&claims.firebase.sign_in_provider, claims.email_verified)?;
 
     Ok(FirebaseUser { uid: claims.sub, email: claims.email, email_verified: claims.email_verified })
 }
@@ -324,6 +346,21 @@ mod tests {
         sem_sub["sub"] = serde_json::json!("");
         assert!(validar_token_do_emulador(&token_do_emulador("none", sem_sub), "demo-shmupx", 2_000).is_err());
         assert!(validar_token_do_emulador("lixo", "demo-shmupx", 2_000).is_err());
+    }
+
+    #[test]
+    fn cadastro_por_senha_sem_email_confirmado_e_recusado() {
+        let token = |provedor: &str, verificado: bool| {
+            token_do_emulador("none", serde_json::json!({
+                "aud": "demo-shmupx", "iss": "https://securetoken.google.com/demo-shmupx", "iat": 1_000, "exp": 4_600,
+                "sub": "uid", "email": "eu@example.com", "email_verified": verificado,
+                "firebase": { "sign_in_provider": provedor }
+            }))
+        };
+        assert!(validar_token_do_emulador(&token("password", false), "demo-shmupx", 2_000).is_err());
+        assert!(validar_token_do_emulador(&token("password", true), "demo-shmupx", 2_000).is_ok());
+        assert!(validar_token_do_emulador(&token("google.com", false), "demo-shmupx", 2_000).is_ok(), "só o cadastro por senha");
+        assert!(validar_token_do_emulador(&token("custom", false), "demo-shmupx", 2_000).is_ok());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
-import { updateDisplayName, type PlayerProfile } from "../auth/firebase";
+import { hasGoogle, updateDisplayName, type PlayerProfile } from "../auth/firebase";
 import { DEFAULT_AVATAR, useMyPublicProfile, type MyPublicProfile } from "../data/publicProfile";
 import AvatarEditor from "./AvatarEditor";
 
@@ -96,7 +96,7 @@ export default function ProfileSettings({ profile, onProfile }: { profile: Playe
       <div>
         <strong>{profile.displayName}</strong>
         <small className="muted">{me ? `@${me.handle}` : t("Carregando…")}</small>
-        <span className="sample-chip">{t("CONTA GOOGLE")}</span>
+        <span className="sample-chip">{t(hasGoogle() ? "CONTA GOOGLE" : "CONTA SHMUPX")}</span>
       </div>
     </section>
     {mine.error && <p className="mode-error-inline" role="alert">{t(mine.error)}</p>}
