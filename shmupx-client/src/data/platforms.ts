@@ -1,5 +1,5 @@
-import { clearSteamLibrary, saveSteamLibrary, scanSteam, useSteamLibrary } from "./steamLibrary";
-import { publish as saveEmulatorLibrary, readEmulatorLibrary, romsFor, scanEmulator, useEmulatorLibrary } from "./emulatorLibrary";
+import { clearSteamLibrary, saveSteamLibrary, scanSteam, steamDisconnected, useSteamLibrary } from "./steamLibrary";
+import { emulatorOff, publish as saveEmulatorLibrary, readEmulatorLibrary, romsFor, scanEmulator, useEmulatorLibrary } from "./emulatorLibrary";
 import { useMisterLibrary } from "./misterLibrary";
 import type { GameRoom, PlayOn } from "../types/room";
 
@@ -42,11 +42,14 @@ export function usePlatformOwnership() {
   const tags = (room: GameRoom): PlatformTag[] =>
     PLAY_ON.filter((p) => room.platforms.includes(p.id) || owns(room, p.id)).map((p) => ({ ...p, owned: owns(room, p.id) }));
   const anyLibrary = Boolean(steam.library || emulator.library || mister.library);
-  /** Biblioteca importada da plataforma, com atualizar (ler de novo) e desconectar (esquecer). */
+  /**
+   * Biblioteca importada da plataforma, com atualizar (ler de novo) e desconectar (esquecer). `off`:
+   * o jogador desconectou, e a importação automática a cada login está parada até ele importar de novo.
+   */
   const library = (id: PlayOn) =>
-    id === "steam" ? { connected: Boolean(steam.library), refresh: () => steam.refresh(), disconnect: clearSteamLibrary }
-    : id === "emulator" ? { connected: Boolean(emulator.library), refresh: () => emulator.refresh(), disconnect: emulator.disconnect }
-    : { connected: Boolean(mister.library), refresh: () => mister.refresh(), disconnect: mister.disconnect };
+    id === "steam" ? { connected: Boolean(steam.library), off: !steam.library && steamDisconnected(), refresh: () => steam.refresh(), disconnect: clearSteamLibrary }
+    : id === "emulator" ? { connected: Boolean(emulator.library), off: !emulator.library && emulatorOff(), refresh: () => emulator.refresh(), disconnect: emulator.disconnect }
+    : { connected: Boolean(mister.library), off: false, refresh: () => mister.refresh(), disconnect: mister.disconnect };
   return { owns, tags, anyLibrary, library };
 }
 

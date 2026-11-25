@@ -40,9 +40,14 @@ export function saveSteamLibrary(appIds: number[], total = appIds.length) {
   return value;
 }
 
+/** O jogador desconectou a Steam (a importação automática está parada até ele importar de novo). */
+export function steamDisconnected(): boolean {
+  try { return localStorage.getItem(OFF_KEY) !== null; } catch { return false; }
+}
+
 /**
  * Desconecta a Steam: esquece a biblioteca importada (a coleção volta a "fora da biblioteca") e
- * para a importação automática ao abrir o Client, até o jogador importar de novo.
+ * para a importação automática a cada login, até o jogador importar de novo.
  */
 export function clearSteamLibrary() {
   try { localStorage.removeItem(KEY); localStorage.setItem(OFF_KEY, "1"); } catch { /* nada a limpar */ }
@@ -56,11 +61,11 @@ export async function scanSteam(): Promise<{ found: boolean; games: SteamGame[] 
 }
 
 /**
- * Ao abrir o Client: lê a Steam deste PC e importa os jogos instalados, sem o jogador pedir (a
- * coleção já abre com eles em cor). Não faz nada se a Steam não está no PC ou foi desconectada.
+ * A cada login: lê a Steam deste PC e importa os jogos instalados, sem o jogador pedir (a coleção
+ * já abre com eles em cor). `null`: sem Steam no PC; `"off"`: desconectada pelo jogador (não lê).
  */
-export async function autoImportSteam(): Promise<number | null> {
-  try { if (localStorage.getItem(OFF_KEY)) return null; } catch { /* segue */ }
+export async function autoImportSteam(): Promise<number | null | "off"> {
+  if (steamDisconnected()) return "off";
   const result = await scanSteam();
   if (!result.found) return null;
   return saveSteamLibrary(result.games.filter((g) => g.installed).map((g) => g.app_id), result.games.length).appIds.length;

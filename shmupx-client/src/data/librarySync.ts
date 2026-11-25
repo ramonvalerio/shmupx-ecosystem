@@ -16,10 +16,10 @@ export interface LibrarySyncState {
   running: boolean;
   /** Quando terminou a última atualização. */
   finishedAt: number | null;
-  /** Jogos instalados na Steam; `null` = sem Steam neste PC ou desconectada. */
-  steam: number | null;
-  /** ROMs deste PC; `null` = emulador desconectado ou sem ROMs. */
-  emulator: number | null;
+  /** Jogos instalados na Steam; `null` = sem Steam neste PC; `"off"` = o jogador desconectou. */
+  steam: number | null | "off";
+  /** ROMs deste PC; `null` = sem ROMs; `"off"` = o jogador desconectou o emulador. */
+  emulator: number | null | "off";
   /** Jogos do MiSTer (arcade e console); `null` = sem MiSTer conhecido; `"offline"` = não respondeu. */
   mister: number | null | "offline";
 }

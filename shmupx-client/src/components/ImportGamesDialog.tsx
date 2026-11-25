@@ -116,7 +116,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
             <button className="import-source-option" onClick={() => setSourceId(item.id)}>
               <span className="platform-mark" aria-hidden="true">{item.icon}</span>
               <span><strong>{t(item.title)}</strong><small>{count ? t("✓ Conectada · {owned} de {total} jogos do ShmupX", { owned: count.owned, total: count.total }) : t(item.detail)}</small></span>
-              {!lib?.connected && <span className={`import-availability ${item.available ? "is-available" : ""}`}>{t(item.available ? "Disponível" : "Em breve")}</span>}
+              {!lib?.connected && <span className={`import-availability ${item.available && !lib?.off ? "is-available" : ""}`} title={lib?.off ? t("Você desconectou: o ShmupX não importa sozinho até você importar de novo.") : undefined}>{t(lib?.off ? "Desconectado" : item.available ? "Disponível" : "Em breve")}</span>}
             </button>
             {id && lib?.connected && <div className="import-source-actions">
               <button type="button" className="secondary-action" disabled={busyId !== null} onClick={() => void refreshLibrary(id)} title={t("Lê de novo e importa os jogos instalados depois da última vez")}>{t(busyId === id ? "Atualizando…" : "Atualizar")}</button>
