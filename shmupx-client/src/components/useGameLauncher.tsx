@@ -14,7 +14,7 @@ import { PLAY_ON, installCheck, usePlatformOwnership } from "../data/platforms";
 import { checkMister, logFailure } from "../data/launchFailure";
 import { LaunchProblemDialog, type LaunchProblemKind } from "./LaunchProblemDialog";
 import { useDialogFocus } from "./useDialogFocus";
-import { blocksLaunch, getAccountPlaying, playingWhere, RANKED_MISTER_OFF, setClientMisterGame } from "../data/playing";
+import { blocksLaunch, getAccountPlaying, playingWhere, RANKED_MISTER_OFF, setClientMisterGame, useClientMisterGame } from "../data/playing";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
@@ -47,6 +47,17 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   /** Jogo aberto no MiSTer por aqui (o PARAR JOGO volta o MiSTer ao menu). */
   const [misterGame, setMisterGame] = useState<{ host: string; password?: string; practice: boolean } | null>(null);
   const [isStopping, setIsStopping] = useState(false);
+  // O jogo do MiSTer saiu da conta por fora deste PARAR JOGO (STOP do topo, ou o agente avisou que
+  // o MiSTer voltou ao menu): a sala volta ao estado de antes, como no PARAR JOGO.
+  const clientMister = useClientMisterGame();
+  useEffect(() => {
+    if (!misterGame || clientMister?.gameId === room.id) return;
+    setNotice(misterGame.practice
+      ? t("Treino encerrado: o MiSTer voltou ao menu.")
+      : t("O MiSTer voltou ao menu: o agente registrou a partida com o placar."));
+    setMisterGame(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientMister]);
   /** Janela do Play: modo de jogo e plataforma, escolhidos antes de abrir. */
   const [choosing, setChoosing] = useState<{ kind: PlayKind; platforms: PlayOn[]; mode: GameMode; platform: PlayOn } | null>(null);
   const chooseDialogRef = useDialogFocus(choosing !== null, () => setChoosing(null));
