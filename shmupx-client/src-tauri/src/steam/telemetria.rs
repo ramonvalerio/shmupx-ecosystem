@@ -61,6 +61,8 @@ pub struct Telemetria {
     pub vidas: Option<i64>,
     pub nave: Option<String>,
     pub fim: Option<Fim>,
+    /// O jogador zerou o jogo (evento `cleared` do motor, pelo `cleared` do mapa do jogo).
+    pub zerou: bool,
     /// O motor fechou (fim da saída padrão).
     pub encerrado: bool,
 }
@@ -84,6 +86,8 @@ struct Evento {
     label: Option<String>,
     #[serde(default)]
     speed: Option<f64>,
+    #[serde(default)]
+    cleared: Option<bool>,
 }
 
 impl Telemetria {
@@ -112,7 +116,11 @@ impl Telemetria {
                 (Some("ship"), _) => self.nave = evento.label.or(evento.value.map(|v| v.to_string())),
                 _ => {}
             },
-            "gameover" if self.run_comecou => self.fim = Some(Fim::GameOver { velocidade: evento.speed.unwrap_or(0.0) }),
+            "cleared" if self.run_comecou => self.zerou = true,
+            "gameover" if self.run_comecou => {
+                self.zerou |= evento.cleared.unwrap_or(false);
+                self.fim = Some(Fim::GameOver { velocidade: evento.speed.unwrap_or(0.0) });
+            }
             "abort" if self.run_comecou => self.fim = Some(Fim::Abandono { velocidade: evento.speed.unwrap_or(0.0) }),
             _ => {}
         }
@@ -126,6 +134,8 @@ pub struct ResultadoMemoria {
     pub vidas_perdidas: i32,
     pub game_over: bool,
     pub nave: Option<String>,
+    /// Zerou o jogo: com 0 continues (o Ranked não tem continue), a run entra também na tabela 1CC.
+    pub zerou: bool,
 }
 
 /// Decide a run pela telemetria. `Ok(None)`: este jogo/processo não vale pela memória (outro jogo,
@@ -158,7 +168,7 @@ pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
         (Some(inicio), Some(fim)) => (inicio - fim).max(0) as i32,
         _ => 0,
     };
-    Ok(Some(ResultadoMemoria { placar, vidas_perdidas, game_over, nave: t.nave.clone() }))
+    Ok(Some(ResultadoMemoria { placar, vidas_perdidas, game_over, nave: t.nave.clone(), zerou: t.zerou }))
 }
 
 fn registro() -> &'static Mutex<HashMap<u32, Telemetria>> {
@@ -234,8 +244,27 @@ mod tests {
         ]);
         assert_eq!(
             resultado(&t),
-            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()) }))
+            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), zerou: false }))
         );
+    }
+
+    #[test]
+    fn run_zerada_marca_zerou() {
+        let t = run(&[
+            INICIO,
+            r#"SHMUPX {"ev":"run_start","frame":1328}"#,
+            r#"SHMUPX {"ev":"field","name":"score","value":0,"frame":1328}"#,
+            r#"SHMUPX {"ev":"field","name":"score","value":4500000,"frame":88000}"#,
+            r#"SHMUPX {"ev":"cleared","frame":88000}"#,
+            r#"SHMUPX {"ev":"gameover","frame":90000,"speed":100.0,"cleared":true}"#,
+        ]);
+        let r = resultado(&t).unwrap().unwrap();
+        assert!(r.zerou);
+        assert_eq!(r.placar, 4500000);
+        // Sem o evento cleared, o gameover sozinho com "cleared": true também marca.
+        let t = run(&[INICIO, r#"SHMUPX {"ev":"run_start","frame":1}"#, r#"SHMUPX {"ev":"field","name":"score","value":10,"frame":2}"#,
+            r#"SHMUPX {"ev":"gameover","frame":3,"speed":100.0,"cleared":true}"#]);
+        assert!(resultado(&t).unwrap().unwrap().zerou);
     }
 
     #[test]

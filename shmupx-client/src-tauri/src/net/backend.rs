@@ -92,6 +92,9 @@ struct SubmeterRunPayload<'a> {
     score_bruto: i64,
     vidas_perdidas: i32,
     continues_usados: i32,
+    /// O jogo foi zerado (só pela memória); sem ele, a run não entra na tabela 1CC.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    zerou: Option<bool>,
 }
 
 /// `status` é `needs_review`: o backend registra o resultado, mas a aprovação é posterior.
@@ -151,6 +154,7 @@ pub async fn submeter_run(
     score_bruto: i64,
     vidas_perdidas: i32,
     continues_usados: i32,
+    zerou: Option<bool>,
 ) -> Result<SubmeterRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs"))
@@ -161,6 +165,7 @@ pub async fn submeter_run(
             score_bruto,
             vidas_perdidas,
             continues_usados,
+            zerou,
         })
         .send()
         .await

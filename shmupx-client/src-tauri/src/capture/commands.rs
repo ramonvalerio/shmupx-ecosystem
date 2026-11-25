@@ -257,14 +257,15 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
     };
     if let Some(resultado) = pela_memoria {
         log::info!(
-            "capture: run {} pela memória: placar {}, vidas perdidas {}, nave {:?}, {}",
+            "capture: run {} pela memória: placar {}, vidas perdidas {}, nave {:?}, {}{}",
             job.run_id,
             resultado.placar,
             resultado.vidas_perdidas,
             resultado.nave,
-            if resultado.game_over { "game over" } else { "encerrada antes do game over" }
+            if resultado.game_over { "game over" } else { "encerrada antes do game over" },
+            if resultado.zerou { ", zerou" } else { "" }
         );
-        match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0).await {
+        match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0, Some(resultado.zerou)).await {
             Ok(_) => {
                 pendentes::remover(app, &job.run_id);
                 emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "submitted", None, Some(resultado.placar));
@@ -288,6 +289,7 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             result.score_bruto,
             result.vidas_perdidas,
             result.continues_usados,
+            None,
         )
         .await
         .map_err(|error| format!("vídeo preservado; falha ao enviar resultado: {error}"))?;
