@@ -21,7 +21,8 @@ service cloud.firestore {
     //   account, shown in the room's player list) every
     //   30 s and deletes it on leaving the room; entries older than 75 s show as offline.
     // moderation/{uid}: Users Manager do Lab (banned, muted, disabled, chatHidden). Server-only
-    //   write; the player reads their own. Banned/disabled can't post or show presence; muted can't post.
+    //   write; the player reads their own. Banned/disabled can't read/post chat or show presence;
+    //   muted can't post; chatHidden is out of the chat (can't read or post).
     // chatModeration/hidden: uids whose messages the Client hides (no chat visibility or banned).
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
@@ -45,7 +46,9 @@ service cloud.firestore {
       return exists(path) && get(path).data.get(flag, false) == true;
     }
     function notBlocked() { return !moderationFlag('banned') && !moderationFlag('disabled'); }
-    function mayChat() { return notBlocked() && !moderationFlag('muted'); }
+    // Sem visibilidade no chat: não lê nem posta (e o Client esconde as mensagens dele dos outros).
+    function outOfChat() { return moderationFlag('chatHidden'); }
+    function mayChat() { return notBlocked() && !moderationFlag('muted') && !outOfChat(); }
     function validMessage(data) {
       return data.keys().hasAll(['authorId', 'authorName', 'text', 'createdAt'])
         && data.keys().hasOnly(['authorId', 'authorName', 'text', 'createdAt'])
@@ -142,7 +145,7 @@ service cloud.firestore {
       }
     }
     match /rooms/{gameId}/messages/{messageId} {
-      allow read: if signedIn() && publishedGame(gameId);
+      allow read: if signedIn() && publishedGame(gameId) && notBlocked() && !outOfChat();
       allow create: if signedIn() && publishedGame(gameId) && validMessage(request.resource.data) && mayChat();
       allow update, delete: if false;
     }

@@ -8,6 +8,7 @@ import CatalogView from "./features/catalog/CatalogView";
 import CoinsView from "./features/coins/CoinsView";
 import UsersView from "./features/users/UsersView";
 import { useUsers } from "./features/users/useUsers";
+import { useReports } from "./features/users/useReports";
 import { useAdminCatalog } from "./features/catalog/useAdminCatalog";
 import ReleasesView from "./features/releases/ReleasesView";
 import { useReleases } from "./features/releases/useReleases";
@@ -57,6 +58,7 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
   const releases = useReleases(signedIn && view === "releases", validation.environment?.scripts);
   // Jogadores: no Users Manager e no Coins Manager (escolher quem recebe as fichas).
   const users = useUsers(signedIn && (view === "users" || view === "coins"));
+  const reports = useReports(signedIn && view === "users");
   const [coinsFor, setCoinsFor] = useState<string | null>(null);
   const clearCoinsFor = useCallback(() => setCoinsFor(null), []);
 
@@ -93,6 +95,12 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
           updatedAt={users.updatedAt}
           onReload={() => void users.reload()}
           onModerated={users.setModeration}
+          reports={reports.reports}
+          onReportChanged={(report) => {
+            reports.replace(report);
+            // O contador de denúncias abertas da lista de jogadores vem do backend.
+            void users.reload(true);
+          }}
           onSendCoins={(uid) => {
             setCoinsFor(uid);
             setView("coins");

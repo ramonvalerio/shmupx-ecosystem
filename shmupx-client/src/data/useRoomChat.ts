@@ -7,6 +7,8 @@ import { useHiddenChatAuthors, useMyModeration } from "./useModeration";
 
 /** Aviso do chat para quem foi mutado no Users Manager do Lab. */
 export const MUTED_MESSAGE = "Você está sem permissão para enviar mensagens no chat.";
+/** Aviso no lugar do chat para quem perdeu a visibilidade no chat (Users Manager do Lab). */
+export const OUT_OF_CHAT_MESSAGE = "O chat das salas não está disponível para a sua conta.";
 
 /** Mensagens mais recentes mantidas na tela. */
 const HISTORY = 100;
@@ -69,8 +71,8 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
 
   // Moderação (Lab): quem perdeu a visibilidade no chat some para os outros; mutado não envia.
   const hidden = useHiddenChatAuthors();
-  const { muted, banned, disabled } = useMyModeration(author.uid);
-  const silenced = muted || banned || disabled;
+  const { muted, banned, disabled, chatHidden } = useMyModeration(author.uid);
+  const silenced = muted || banned || disabled || chatHidden;
   const visible = useMemo(
     () => (hidden.size ? messages.filter((m) => !m.authorId || m.authorId === author.uid || !hidden.has(m.authorId)) : messages),
     [messages, hidden, author.uid],
@@ -79,8 +81,9 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
   const send = useCallback(
     async (text: string) => {
       if (silenced) {
-        setError(MUTED_MESSAGE);
-        throw new Error(MUTED_MESSAGE);
+        const message = chatHidden ? OUT_OF_CHAT_MESSAGE : MUTED_MESSAGE;
+        setError(message);
+        throw new Error(message);
       }
       // Palavrões viram `*` antes de gravar: todo mundo recebe a mensagem já limpa.
       const trimmed = censor(text.trim().slice(0, MAX_MESSAGE_LENGTH)).text;
@@ -99,8 +102,10 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         throw failure;
       }
     },
-    [roomId, author.uid, author.displayName, silenced],
+    [roomId, author.uid, author.displayName, silenced, chatHidden],
   );
 
+  // Fora do chat: as Rules recusam a leitura; no lugar das mensagens, o aviso.
+  if (chatHidden) return { messages: [], status: "error" as ChatStatus, error: OUT_OF_CHAT_MESSAGE, send };
   return { messages: visible, status, error: silenced ? MUTED_MESSAGE : error, send };
 }

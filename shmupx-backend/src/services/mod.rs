@@ -2,6 +2,7 @@
 //! no Firestore dentro de transações.
 
 pub mod catalogo;
+pub mod denuncias;
 pub mod distribuicoes;
 pub mod email;
 pub mod gameplays;

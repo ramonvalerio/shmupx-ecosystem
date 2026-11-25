@@ -141,16 +141,25 @@ test("moderation (Lab Users Manager): muted can't post, banned/disabled can't po
   const message = (id) => setDoc(doc(db("alice"), `rooms/earthion/messages/${id}`), { authorId: "alice", authorName: "Alice", text: "oi", createdAt: serverTimestamp() });
   const presence = () => setDoc(doc(db("alice"), "rooms/earthion/presence/alice"), { name: "Alice", state: "online", lastSeen: serverTimestamp() });
   const moderate = (flags) => environment.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), "moderation/alice"), flags));
+  const read = () => getDocs(query(collection(db("alice"), "rooms/earthion/messages"), orderBy("createdAt", "desc"), limit(50)));
   // Documento sem bandeiras: liberado.
-  await moderate({ banned: false, muted: false, disabled: false, chatHidden: true });
+  await moderate({ banned: false, muted: false, disabled: false, chatHidden: false });
   await assertSucceeds(message("ok"));
+  await assertSucceeds(read());
   await assertSucceeds(presence());
   await moderate({ muted: true });
   await assertFails(message("muted"));
+  await assertSucceeds(read());
+  await assertSucceeds(presence());
+  // Sem visibilidade no chat: não lê nem posta, mas continua aparecendo na sala.
+  await moderate({ chatHidden: true });
+  await assertFails(message("hidden"));
+  await assertFails(read());
   await assertSucceeds(presence());
   for (const flag of ["banned", "disabled"]) {
     await moderate({ [flag]: true });
     await assertFails(message(flag));
+    await assertFails(read());
     await assertFails(presence());
   }
   // O jogador lê só a própria moderação; ninguém grava pelo app.

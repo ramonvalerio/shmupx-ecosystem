@@ -5,7 +5,8 @@
 //!   `updatedBy`. Só o servidor grava; o próprio jogador lê o seu (o Client mostra o aviso e trava
 //!   o chat). As Security Rules leem o documento para recusar mensagens e presença.
 //! - `chatModeration/hidden`: `uids` de quem não aparece no chat (sem visibilidade ou banido). Todo
-//!   jogador logado lê: o Client esconde as mensagens dessas pessoas.
+//!   jogador logado lê: o Client esconde as mensagens dessas pessoas. Quem está sem visibilidade
+//!   também não lê nem posta no chat (Rules).
 //! - Situação: a presença nas salas (`rooms/*/presence/{uid}`, a cada 30 s) e o sinal do Client
 //!   aberto (`remoteLaunch/{uid}.desktop.seenAt`, a cada 45 s).
 
@@ -68,6 +69,8 @@ pub struct UsuarioAdmin {
     pub activity: Option<String>,
     pub is_admin: bool,
     pub moderation: Moderacao,
+    /// Denúncias do chat ainda abertas contra o jogador.
+    pub reports_open: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,7 +153,7 @@ fn situacao(sinais: &Sinais) -> (String, Option<String>) {
 /// Todos os jogadores com a situação de agora e a moderação.
 pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
     let agora = Utc::now();
-    let (usuarios, jogadores, perfis, carteiras, moderacoes, presencas, remotos, jogos) = tokio::try_join!(
+    let (usuarios, jogadores, perfis, carteiras, moderacoes, presencas, remotos, jogos, denuncias) = tokio::try_join!(
         fs.consultar(selecionar("users", &["displayName", "createdAt"])),
         fs.consultar(selecionar("players", &["email", "lastSeenAt", "clientVersion"])),
         fs.consultar(selecionar("publicProfiles", &["handle", "displayName"])),
@@ -162,7 +165,9 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
         })),
         fs.consultar(selecionar("remoteLaunch", &["desktop.seenAt", "playing.title", "playing.beatAt"])),
         fs.consultar(selecionar("games", &["title"])),
+        crate::services::denuncias::todas(fs),
     )?;
+    let denunciados = crate::services::denuncias::abertas_por_autor(&denuncias);
 
     let titulos: HashMap<String, String> = jogos.into_iter().filter_map(|(id, c)| Some((id, ler_texto(&c, "title")?))).collect();
     let usuarios: HashMap<String, Campos> = usuarios.into_iter().collect();
@@ -232,6 +237,7 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
                 status,
                 activity,
                 moderation: moderacoes.get(uid).map(moderacao_de).unwrap_or_default(),
+                reports_open: denunciados.get(uid.as_str()).copied().unwrap_or(0),
             }
         })
         .collect();

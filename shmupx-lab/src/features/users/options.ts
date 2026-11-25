@@ -1,4 +1,18 @@
-import type { AdminUser, UserStatus } from "../../lib/backend";
+import type { AdminUser, ChatReport, ChatReportReason, UserStatus } from "../../lib/backend";
+
+/** Motivos de denúncia (os mesmos do Client e do Lite, `data/chatSafety.ts`). */
+export const REPORT_REASON_LABEL: Record<ChatReportReason, string> = {
+  abuse: "Ofensa ou assédio",
+  spam: "Spam ou golpe",
+  inappropriate: "Conteúdo impróprio",
+  other: "Outro motivo",
+};
+
+export const REPORT_STATUS_LABEL: Record<ChatReport["status"], string> = {
+  open: "Aberta",
+  actioned: "Resolvida",
+  dismissed: "Dispensada",
+};
 
 export const STATUS_LABEL: Record<UserStatus, string> = {
   live: "Ao vivo",

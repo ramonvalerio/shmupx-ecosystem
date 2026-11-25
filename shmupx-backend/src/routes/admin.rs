@@ -10,6 +10,7 @@ use crate::error::AppError;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
 use crate::services::catalogo::{self, Jogo, JogoEntrada};
+use crate::services::denuncias::{self, Denuncia, Resolucao};
 use crate::services::distribuicoes::{self, Distribuicao, DistribuicaoEntrada};
 use crate::services::usuarios::{self, Moderacao, ModeracaoEntrada, UsuarioAdmin};
 use crate::services::email::{mensagem_da_versao, Ses};
@@ -40,6 +41,8 @@ where
         .route("/api/admin/coins/grants/{id}/retry", post(repetir_distribuicao))
         .route("/api/admin/users", get(listar_usuarios))
         .route("/api/admin/users/{uid}/moderation", put(moderar_usuario))
+        .route("/api/admin/reports", get(listar_denuncias))
+        .route("/api/admin/reports/{id}/resolve", post(resolver_denuncia))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
         .layer(Extension(firestore))
         .layer(Extension(email))
@@ -355,6 +358,28 @@ async fn moderar_usuario(
 ) -> Result<Json<Moderacao>, AppError> {
     exigir_admin(&usuario)?;
     Ok(Json(usuarios::moderar(&firestore, &uid, entrada, &usuario).await?))
+}
+
+/// `GET /api/admin/reports`: denúncias do chat, abertas primeiro.
+async fn listar_denuncias(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Vec<Denuncia>>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(denuncias::listar(&firestore).await?))
+}
+
+/// `POST /api/admin/reports/{id}/resolve`: marca a denúncia como resolvida, dispensada ou reaberta.
+async fn resolver_denuncia(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+    Json(entrada): Json<Resolucao>,
+) -> Result<Json<Denuncia>, AppError> {
+    exigir_admin(&usuario)?;
+    let r = denuncias::resolver(&firestore, &id, entrada, &quem(&usuario)).await?;
+    println!("denúncias: {} marcou {id} como {}", quem(&usuario), r.status);
+    Ok(Json(r))
 }
 
 /// `POST /api/admin/releases/{version}/cancel`: cancela um agendamento ainda não liberado e

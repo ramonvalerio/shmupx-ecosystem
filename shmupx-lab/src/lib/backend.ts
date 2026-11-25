@@ -286,6 +286,37 @@ export interface AdminUser {
   activity?: string;
   is_admin: boolean;
   moderation: UserModeration;
+  /** Denúncias do chat ainda abertas contra o jogador. */
+  reports_open: number;
+}
+
+export type ChatReportReason = "abuse" | "spam" | "inappropriate" | "other";
+
+/** Denúncia de uma mensagem do chat (feita no Client ou no Lite), como o backend devolve em `/api/admin/reports`. */
+export interface ChatReport {
+  id: string;
+  reporter_id: string;
+  reporter_name?: string;
+  author_id: string;
+  author_name: string;
+  room_id: string;
+  room_title?: string;
+  message_id: string;
+  text: string;
+  reason: ChatReportReason;
+  created_at?: string;
+  status: "open" | "actioned" | "dismissed";
+  resolved_at?: string;
+  resolved_by?: string;
+}
+
+export function listReports(): Promise<ChatReport[]> {
+  return adminRequest<ChatReport[]>("/api/admin/reports");
+}
+
+/** `actioned` = houve moderação; `dismissed` = sem ação; `open` = reabrir. */
+export function resolveReport(id: string, resolution: ChatReport["status"]): Promise<ChatReport> {
+  return adminRequest<ChatReport>(`/api/admin/reports/${encodeURIComponent(id)}/resolve`, { method: "POST", body: JSON.stringify({ resolution }) });
 }
 
 export type UserModerationInput = Partial<Pick<UserModeration, "banned" | "muted" | "disabled" | "chat_hidden" | "note">>;
