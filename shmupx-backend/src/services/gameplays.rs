@@ -62,6 +62,9 @@ pub struct Detalhes {
     pub versao: Option<String>,
     /// `pc` ou `mister`, pela credencial usada (`middleware::jogador`).
     pub origem: &'static str,
+    /// Id da live no YouTube que transmitiu a partida (Ranked com live). Se a run entrar no top 3,
+    /// a live vai para o canal oficial da ShmupX (`services::destaques`).
+    pub live_broadcast_id: Option<String>,
 }
 
 /// Modos de partida e o modo do catálogo (`games.modes`) a que pertencem. No 1CC a partida usa
@@ -102,6 +105,9 @@ pub async fn iniciar(fs: &Firestore, uid: &str, game_id: &str, detalhes: &Detalh
     }
     if detalhes.versao.as_deref().is_some_and(|v| !versao_valida(v)) {
         return Err(AppError::bad_request("versão do jogo inválida"));
+    }
+    if detalhes.live_broadcast_id.as_deref().is_some_and(|id| !crate::services::youtube::id_valido(id)) {
+        return Err(AppError::bad_request("id da live inválido"));
     }
     let tx = fs.iniciar_transacao().await?;
     let resultado = iniciar_na_transacao(fs, &tx, uid, game_id, detalhes).await;
@@ -192,6 +198,12 @@ async fn iniciar_na_transacao(
     }
     if let Some(versao) = &detalhes.versao {
         campos_gameplay.insert("gameVersion".into(), texto(versao));
+    }
+    if let Some(id) = &detalhes.live_broadcast_id {
+        campos_gameplay.insert("live".into(), mapa(campos(&[
+            ("broadcastId", texto(id)),
+            ("watchUrl", texto(&format!("https://www.youtube.com/watch?v={id}"))),
+        ])));
     }
     escritas.push(criar(fs, &format!("gameplays/{run_id}"), campos_gameplay));
 

@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { liveActive, useLive, useYouTube } from "../data/useLive";
+import { liveActive, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { readEmulatorControls } from "../data/emulatorControls";
@@ -40,7 +39,11 @@ export function useLivePrefs(): LivePrefs {
   return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, readLivePrefs);
 }
 
-/** Live do jogo: começar (abrindo o jogo na plataforma escolhida) e encerrar. */
+/**
+ * Live do jogo (só no Play Ranked): começar e encerrar. A live entra no ar primeiro, com a tela de
+ * espera da ShmupX; só depois o Rust abre o jogo no modo ranked (estado inicial de 1 crédito, sem
+ * continue) e a run começa como num Play Ranked comum (ficha e gravação).
+ */
 export function useRankedLive(room: GameRoom) {
   const live = useLive();
   const prefs = useLivePrefs();
@@ -48,17 +51,16 @@ export function useRankedLive(room: GameRoom) {
   const liveHere = live.state.game_id === room.id;
   const liveOn = liveActive(live.state);
 
-  /** Play Ranked com live: na Steam a live abre o jogo sozinha; o emulador abre antes. */
+  /** Play Ranked com live: confere o jogo instalado e põe a live no ar; o jogo abre depois dela. */
   async function start(platform: PlayOn, ensureInstalled: (platform: PlayOn) => Promise<boolean>) {
     setLiveError(null);
+    if (platform === "mister") return;
     if (!(await ensureInstalled(platform))) return;
+    const launch: LiveLaunch = platform === "steam"
+      ? { platform: "steam", steamAppId: room.steamAppId }
+      : { platform: "emulator", roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() };
     try {
-      if (platform === "emulator") {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: true, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
-        await live.start(room.id, `${room.title} · ShmupX`, prefs.public, 0);
-      } else {
-        await live.start(room.id, `${room.title} · ShmupX`, prefs.public, room.steamAppId);
-      }
+      await live.start(room.id, `${room.title} · Ranked · ShmupX`, prefs.public, launch);
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : String(error));
     }
@@ -174,9 +176,9 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
     : !youtube.connection?.connected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
   const withLive = prefs.on && !liveUnavailable;
-  const liveLabel = live.state.status === "waiting" ? t("Abrindo o jogo…")
-    : live.state.status === "preparing" ? t("Criando a live…")
+  const liveLabel = live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
+    : live.state.status === "live" && !live.state.game_open ? t("Abrindo o jogo…")
     : live.state.status === "ending" ? t("Encerrando…")
     : t("End live");
   const optionsLocked = comingSoon || busy || liveOn;

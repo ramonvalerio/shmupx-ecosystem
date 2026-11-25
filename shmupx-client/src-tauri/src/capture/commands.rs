@@ -33,10 +33,9 @@ pub async fn iniciar_corrida_safe(
     // Modo escolhido no Play Ranked (`highscore`, `1cc`, `caravan`): vai para a gameplay.
     modo: Option<String>,
 ) -> Result<u32, String> {
-    // A live e a run disputam a captura da tela (spec 033 D-03301): uma de cada vez.
-    if live.ativa() {
-        return Err("Encerre a live antes de iniciar uma run.".into());
-    }
+    // Uma live no ar só transmite a run ranked do jogo dela (Play Ranked com live): a run sai
+    // ligada à live, para o destaque do top 3. Live de outro jogo barra a run.
+    let live_broadcast = live.broadcast_para_run(&jogo_id)?;
     if !ffmpeg::is_ffmpeg_available() {
         return Err("FFmpeg não encontrado: reinstale o ShmupX Client".into());
     }
@@ -84,7 +83,7 @@ pub async fn iniciar_corrida_safe(
 
     // Débito de ficha + abertura da "ficha ativa" no backend com a captura já confirmada. Se o
     // backend recusar (sem saldo, jogo não publicado, token inválido), a captura é descartada.
-    let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref()).await {
+    let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref(), live_broadcast.as_deref()).await {
         Ok(inicio) => inicio,
         Err(e) => {
             let _ = child.kill().await;
@@ -93,6 +92,9 @@ pub async fn iniciar_corrida_safe(
         }
     };
     let run_id = inicio.run_id.clone();
+    if live_broadcast.is_some() {
+        live.vincular_run(&jogo_id, &run_id);
+    }
 
     *guard = Some(RunHandle {
         child,
@@ -156,6 +158,10 @@ struct RunAnalysisPayload {
     message: Option<String>,
     /// Placar enviado (`submitted`).
     score: Option<i64>,
+    /// Posição da run no ranking do jogo (`submitted`, quando é o melhor placar do jogador).
+    position: Option<usize>,
+    /// Pódio (top 3 do Hi-Score) do jogo já com esta run (`submitted`): a sala reordena se mudou.
+    podium: Option<Vec<backend::LugarNoPodio>>,
 }
 
 fn emit_analysis(app: &AppHandle, jogo_id: &str, pid: u32, status: &str, message: Option<String>) {
@@ -172,8 +178,33 @@ fn emit_run(app: &AppHandle, jogo_id: &str, pid: u32, run_id: Option<&str>, stat
             status: status.into(),
             message,
             score,
+            position: None,
+            podium: None,
         },
     );
+}
+
+/// Resultado aceito: avisa a interface (placar, posição e pódio) e decide a cópia da live da
+/// run: no top 3, vai para o canal oficial da ShmupX; senão, é apagada.
+fn run_enviada(app: &AppHandle, job: &AnaliseJob, score: i64, resposta: backend::SubmeterRunResponse) {
+    pendentes::remover(app, &job.run_id);
+    let _ = app.emit(
+        "run://analysis",
+        RunAnalysisPayload {
+            jogo_id: job.jogo_id.clone(),
+            pid: job.pid,
+            run_id: Some(job.run_id.clone()),
+            status: "submitted".into(),
+            message: None,
+            score: Some(score),
+            position: resposta.posicao,
+            podium: Some(resposta.podio),
+        },
+    );
+    match resposta.destaque {
+        Some(destaque) => crate::live::destaque::enviar(app, &job.jogo_id, &job.run_id, destaque),
+        None => crate::live::destaque::descartar(app, &job.run_id),
+    }
 }
 
 /// O que a análise precisa depois que a captura terminou (sem o processo do FFmpeg).
@@ -198,6 +229,8 @@ fn token_atual(app: &AppHandle, guardado: &str) -> String {
 /// gameplay passou do tempo da ficha, não há o que analisar; uma falha de rede não impede a
 /// análise (o envio ainda cabe na janela da gameplay).
 async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
+    // Ranked com live: a live termina junto com a run.
+    app.state::<crate::live::LiveState>().run_terminou(&handle.run_id);
     let job = AnaliseJob {
         pid: handle.pid,
         jogo_id: handle.jogo_id,
@@ -266,10 +299,7 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             if resultado.zerou { ", zerou" } else { "" }
         );
         match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0, Some(resultado.zerou)).await {
-            Ok(_) => {
-                pendentes::remover(app, &job.run_id);
-                emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "submitted", None, Some(resultado.placar));
-            }
+            Ok(resposta) => run_enviada(app, &job, resultado.placar, resposta),
             Err(error) => {
                 log::warn!("capture: run {} (memória) não enviada: {error}", job.run_id);
                 emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(format!("falha ao enviar resultado: {error}")), None);
@@ -282,7 +312,7 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
     let _vez = fila.lock().await;
     let result = async {
         let result = analysis::analisar_run(app, &job.video_path, &job.jogo_id).await?;
-        backend::submeter_run(
+        let resposta = backend::submeter_run(
             &token_atual(app, &job.token),
             &job.run_id,
             &job.jogo_id,
@@ -293,14 +323,11 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
         )
         .await
         .map_err(|error| format!("vídeo preservado; falha ao enviar resultado: {error}"))?;
-        Ok::<i64, String>(result.score_bruto)
+        Ok::<(i64, backend::SubmeterRunResponse), String>((result.score_bruto, resposta))
     }
     .await;
     match result {
-        Ok(score) => {
-            pendentes::remover(app, &job.run_id);
-            emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "submitted", None, Some(score));
-        }
+        Ok((score, resposta)) => run_enviada(app, &job, score, resposta),
         Err(error) => {
             log::warn!("capture: run {} não enviada: {error}", job.run_id);
             // O vídeo fica: o jogador pode analisar de novo (Ranking da sala › Analisar de novo).

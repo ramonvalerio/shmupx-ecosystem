@@ -131,15 +131,39 @@ fn iniciar_saida() -> Result<Loopback, String> {
     Ok(Loopback { taxa, amostras, parar })
 }
 
-/// Escreve no FFmpeg o áudio no ritmo do relógio (estéreo `f32le`) até `parar` ou erro de escrita.
-/// Sem `loopback`, escreve só silêncio.
-pub async fn alimentar<W: tokio::io::AsyncWrite + Unpin>(mut destino: W, loopback: Option<Loopback>, parar: Arc<AtomicBool>) {
-    let taxa = loopback.as_ref().map_or(TAXA_PADRAO, |l| l.taxa) as f64;
+/// De onde vem o som da live. Começa vazia (silêncio, com a tela de espera) e recebe o som do
+/// jogo quando ele abre, sem reabrir o FFmpeg.
+pub type Fonte = Arc<Mutex<Option<Loopback>>>;
+
+/// `quadros_saida` quadros estéreo a partir de `origem` (outra taxa), por interpolação linear.
+fn converter(origem: &[f32], quadros_saida: usize) -> impl Iterator<Item = (f32, f32)> + '_ {
+    let quadros_origem = origem.len() / 2;
+    (0..quadros_saida).map(move |i| {
+        if quadros_origem == 0 {
+            return (0.0, 0.0);
+        }
+        let x = if quadros_saida > 1 { i as f64 * (quadros_origem - 1) as f64 / (quadros_saida - 1) as f64 } else { 0.0 };
+        let (a, frac) = (x.floor() as usize, (x - x.floor()) as f32);
+        let b = (a + 1).min(quadros_origem - 1);
+        let l = origem[a * 2] + (origem[b * 2] - origem[a * 2]) * frac;
+        let r = origem[a * 2 + 1] + (origem[b * 2 + 1] - origem[a * 2 + 1]) * frac;
+        (l, r)
+    })
+}
+
+/// Escreve no FFmpeg o áudio no ritmo do relógio (estéreo `f32le` a [`TAXA_PADRAO`]) até `parar`
+/// ou erro de escrita. Sem som na `fonte`, escreve silêncio; uma fonte em outra taxa (a saída
+/// padrão a 44,1 kHz) é convertida.
+pub async fn alimentar<W: tokio::io::AsyncWrite + Unpin>(mut destino: W, fonte: Fonte, parar: Arc<AtomicBool>) {
+    let taxa = TAXA_PADRAO as f64;
     let inicio = Instant::now();
     let mut escritos: u64 = 0;
+    // Quadros da fonte devidos (fração acumulada) quando a taxa dela é outra.
+    let mut sobra = 0f64;
     let mut tique = tokio::time::interval(Duration::from_millis(10));
     tique.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut bytes = Vec::<u8>::with_capacity(8192);
+    let mut lidos = Vec::<f32>::with_capacity(4096);
     while !parar.load(Ordering::SeqCst) {
         tique.tick().await;
         let devidos = (inicio.elapsed().as_secs_f64() * taxa) as u64;
@@ -149,18 +173,35 @@ pub async fn alimentar<W: tokio::io::AsyncWrite + Unpin>(mut destino: W, loopbac
         }
         bytes.clear();
         let mut entregues = 0usize;
-        if let Some(lb) = &loopback {
+        if let Some(lb) = travar(&fonte).as_ref() {
+            let proporcao = f64::from(lb.taxa) / taxa;
             let mut buffer = travar(&lb.amostras);
+            let pedidos = faltam as f64 * proporcao + sobra;
+            let quero = pedidos.floor() as usize;
+            sobra = pedidos - quero as f64;
             let excesso = buffer.len() / 2;
-            let maximo = faltam + (FOLGA_MAXIMA * taxa) as usize;
+            let maximo = quero + (FOLGA_MAXIMA * f64::from(lb.taxa)) as usize;
             if excesso > maximo {
                 buffer.drain(..(excesso - maximo) * 2);
             }
-            while entregues < faltam && buffer.len() >= 2 {
-                let (l, r) = (buffer.pop_front().unwrap_or(0.0), buffer.pop_front().unwrap_or(0.0));
-                bytes.extend_from_slice(&l.to_le_bytes());
-                bytes.extend_from_slice(&r.to_le_bytes());
-                entregues += 1;
+            let disponiveis = (buffer.len() / 2).min(quero);
+            lidos.clear();
+            lidos.extend(buffer.drain(..disponiveis * 2));
+            drop(buffer);
+            // Saída proporcional ao que chegou (o resto do tique vira silêncio, como antes).
+            let saida = if quero == 0 { 0 } else { (faltam * disponiveis).div_ceil(quero).min(faltam) };
+            if lb.taxa == TAXA_PADRAO {
+                for par in lidos.chunks_exact(2) {
+                    bytes.extend_from_slice(&par[0].to_le_bytes());
+                    bytes.extend_from_slice(&par[1].to_le_bytes());
+                }
+                entregues = disponiveis;
+            } else {
+                for (l, r) in converter(&lidos, saida) {
+                    bytes.extend_from_slice(&l.to_le_bytes());
+                    bytes.extend_from_slice(&r.to_le_bytes());
+                }
+                entregues = saida;
             }
         }
         for _ in entregues..faltam {
@@ -327,6 +368,21 @@ mod processo {
             .map_err(|e| format!("falha ao criar a thread de áudio: {e}"))?;
         pronto_rx.recv_timeout(Duration::from_secs(6)).map_err(|_| "o som do jogo não respondeu".to_string())??;
         Ok(Loopback { taxa: TAXA, amostras, parar })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converte_44100_para_48000_sem_perder_o_sinal() {
+        let origem: Vec<f32> = (0..441).flat_map(|i| [i as f32, -(i as f32)]).collect();
+        let saida: Vec<(f32, f32)> = converter(&origem, 480).collect();
+        assert_eq!(saida.len(), 480);
+        assert_eq!(saida[0], (0.0, 0.0));
+        assert_eq!(saida[479], (440.0, -440.0));
+        assert!(saida.windows(2).all(|w| w[1].0 >= w[0].0), "rampa continua crescente");
     }
 }
 

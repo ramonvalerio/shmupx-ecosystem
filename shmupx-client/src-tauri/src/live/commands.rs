@@ -3,7 +3,7 @@
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
-use super::{conduzir, Estado, LiveState};
+use super::{conduzir, Abertura, Estado, LiveState};
 use crate::auth::oauth;
 use crate::capture::RunState;
 use crate::net::backend::chamar_json;
@@ -68,7 +68,8 @@ pub fn live_estado(live: State<'_, LiveState>) -> Estado {
     live.snapshot()
 }
 
-/// START LIVE: começa em segundo plano; o andamento chega pelo evento `live://estado`.
+/// Play Ranked com live: põe a live no ar e só então abre o jogo (`abrir`) no modo ranked. Começa
+/// em segundo plano; o andamento chega pelo evento `live://estado`.
 #[tauri::command]
 pub async fn live_iniciar(
     app: AppHandle,
@@ -78,8 +79,7 @@ pub async fn live_iniciar(
     jogo_id: String,
     titulo: String,
     publica: bool,
-    // Jogo da sala: app_id da Steam (0/ausente = emulador). A live captura só a janela dele.
-    steam_app_id: Option<u32>,
+    abrir: Abertura,
 ) -> Result<(), String> {
     let token = token(&sessao)?;
     if live.ativa() {
@@ -96,8 +96,10 @@ pub async fn live_iniciar(
     if let Some(pasta) = log.parent() {
         let _ = std::fs::create_dir_all(pasta);
     }
+    // A cópia da live (para o destaque do top 3) fica na pasta das gravações.
+    let pasta = crate::capture::destino::pasta_das_gravacoes(&app)?;
     let estado = live.inner().clone();
-    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, publica, steam_app_id, log));
+    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, publica, abrir, log, pasta));
     Ok(())
 }
 

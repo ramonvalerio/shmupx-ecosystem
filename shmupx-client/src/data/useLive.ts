@@ -2,10 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-/** Estado da live no YouTube (Rust `live::Estado`), atualizado pelo evento `live://estado`. */
+/**
+ * Estado da live no YouTube (Rust `live::Estado`), atualizado pelo evento `live://estado`. A live
+ * só existe no Play Ranked: ela entra no ar primeiro (`live` sem `game_open`, com a tela de espera)
+ * e só então o jogo abre no modo ranked.
+ */
 export interface LiveState {
-  /** `waiting`: abrindo o jogo e esperando a janela dele (a live captura só a janela). */
-  status: "idle" | "waiting" | "preparing" | "connecting" | "live" | "ending" | "failed";
+  status: "idle" | "preparing" | "connecting" | "live" | "ending" | "failed";
   game_id?: string | null;
   watch_url?: string | null;
   public: boolean;
@@ -13,9 +16,16 @@ export interface LiveState {
   error?: string | null;
   ended_by_time_limit: boolean;
   silent: boolean;
+  /** No ar com o jogo na tela (antes, a live mostra a tela de espera enquanto o jogo abre). */
+  game_open: boolean;
 }
 
-const IDLE: LiveState = { status: "idle", public: false, ended_by_time_limit: false, silent: false };
+/** Como abrir o jogo depois que a live entra no ar (Rust `live::Abertura`). */
+export type LiveLaunch =
+  | { platform: "steam"; steamAppId: number }
+  | { platform: "emulator"; roms: string[]; pasta: string | null; motorVideo: unknown; motorControles: unknown };
+
+const IDLE: LiveState = { status: "idle", public: false, ended_by_time_limit: false, silent: false, game_open: false };
 
 export const liveActive = (s: LiveState) => s.status !== "idle" && s.status !== "failed";
 
@@ -34,8 +44,8 @@ export function useLive() {
     return () => { alive = false; stop?.(); };
   }, []);
 
-  const start = useCallback((gameId: string, title: string, isPublic: boolean, steamAppId?: number) =>
-    invoke("live_iniciar", { jogoId: gameId, titulo: title, publica: isPublic, steamAppId: steamAppId && steamAppId > 0 ? steamAppId : null }), []);
+  const start = useCallback((gameId: string, title: string, isPublic: boolean, launch: LiveLaunch) =>
+    invoke("live_iniciar", { jogoId: gameId, titulo: title, publica: isPublic, abrir: launch }), []);
   const stop = useCallback(() => invoke("live_encerrar"), []);
   const open = useCallback((url: string) => invoke("live_abrir", { url }), []);
   return { state, start, stop, open };

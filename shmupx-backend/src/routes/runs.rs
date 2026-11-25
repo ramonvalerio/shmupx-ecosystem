@@ -4,20 +4,22 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::middleware;
 use axum::routing::post;
 use axum::{Extension, Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::FirebaseUser;
 use crate::middleware::jogador::{exigir_jogador, Origem};
 use crate::routes::notificacoes::versao_do_client;
+use crate::services::destaques::{self, DepoisDoEnvio};
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
+use crate::services::youtube::YouTube;
 use crate::services::{jogo_aberto, usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
 /// `route_layer` escopa a exigência só a estas rotas, sem afetar `/health` após o `.merge()`.
-pub fn router<S>(firestore: Arc<Firestore>) -> Router<S>
+pub fn router<S>(firestore: Arc<Firestore>, youtube: Option<Arc<YouTube>>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
@@ -25,9 +27,11 @@ where
         .route("/api/runs/start", post(iniciar_run))
         .route("/api/runs/end", post(encerrar_run))
         .route("/api/runs", post(submeter_run))
+        .route("/api/runs/destaque", post(destaque_enviado))
         .route("/api/mister/playing", post(jogo_aberto_no_mister))
         .route_layer(middleware::from_fn(exigir_jogador))
         .layer(Extension(firestore))
+        .layer(Extension(youtube))
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +43,9 @@ struct IniciarRunPayload {
     /// Versão do jogo; o ranking separa versões diferentes do mesmo jogo.
     #[serde(default)]
     versao: Option<String>,
+    /// Ranked com live: id da live no YouTube que transmite a partida.
+    #[serde(default)]
+    live_broadcast_id: Option<String>,
 }
 
 /// `POST /api/runs/start`: debita 1 ficha e abre a gameplay (ver `services::gameplays`). Antes,
@@ -58,7 +65,8 @@ async fn iniciar_run(
     if origem == "pc" {
         versoes::exigir_versao_em_dia(&firestore, versao_do_client(&headers).as_deref()).await?;
     }
-    let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem };
+    let live_broadcast_id = payload.live_broadcast_id.filter(|id| !id.is_empty());
+    let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem, live_broadcast_id };
     let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
     Ok((StatusCode::CREATED, Json(run)))
 }
@@ -103,13 +111,23 @@ struct SubmeterRunPayload {
     zerou: Option<bool>,
 }
 
+/// Resultado registrado, com a posição da run, o pódio da sala e o destaque (top 3 com live).
+#[derive(Debug, Serialize)]
+struct RespostaEnvio {
+    #[serde(flatten)]
+    run: RunSubmetida,
+    #[serde(flatten)]
+    depois: DepoisDoEnvio,
+}
+
 /// `POST /api/runs`: registra o resultado do validador offline na run indicada. Reenvio do mesmo
 /// resultado é idempotente; a gameplay fica em `needs_review` até a aprovação do backend.
 async fn submeter_run(
     Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(youtube): Extension<Option<Arc<YouTube>>>,
     Extension(usuario): Extension<FirebaseUser>,
     Json(payload): Json<SubmeterRunPayload>,
-) -> Result<Json<RunSubmetida>, AppError> {
+) -> Result<Json<RespostaEnvio>, AppError> {
     let resultado = Resultado {
         score_bruto: payload.score_bruto,
         vidas_perdidas: payload.vidas_perdidas,
@@ -117,5 +135,22 @@ async fn submeter_run(
         zerou: payload.zerou,
     };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
-    Ok(Json(run))
+    let depois = destaques::depois_do_envio(&firestore, youtube.as_deref(), &usuario.uid, &payload.run_id, &payload.jogo_id).await;
+    Ok(Json(RespostaEnvio { run, depois }))
+}
+
+#[derive(Debug, Deserialize)]
+struct DestaqueEnviadoPayload {
+    run_id: String,
+    video_id: String,
+}
+
+/// `POST /api/runs/destaque`: o Client terminou de mandar a live do top 3 ao canal oficial.
+async fn destaque_enviado(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Json(payload): Json<DestaqueEnviadoPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    destaques::registrar_envio(&firestore, &usuario.uid, &payload.run_id, &payload.video_id).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

@@ -141,8 +141,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     if (kind !== "training" && platform === "mister" && !room.rankedMister) { setError(t(RANKED_MISTER_OFF)); return; }
     setPractice(kind === "training");
     setMode(chosen);
+    // Live: a run ranked começa quando a live abrir o jogo; leva o modo escolhido também.
+    if (kind !== "training" && platform !== "mister") setPendingRunMode(room.id, chosen);
     if (kind === "live") { onLive?.(platform, chosen); return; }
-    if (kind === "ranked" && platform !== "mister") setPendingRunMode(room.id, chosen);
     void launchOn(platform, kind === "training", chosen);
   }
 
@@ -154,9 +155,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     const { kind, platform, mode: chosen } = choosing;
     setChoosing(null);
     setMode(chosen);
+    // A run começa quando o jogo abrir (PC; com live, depois que ela entra no ar): leva o modo.
+    if (kind !== "training" && platform !== "mister") setPendingRunMode(room.id, chosen);
     if (kind === "live") { onLive?.(platform, chosen); return; }
-    // A run começa quando o jogo abrir (PC): leva o modo escolhido.
-    if (kind === "ranked" && platform !== "mister") setPendingRunMode(room.id, chosen);
     void launchOn(platform, kind === "training", chosen);
   }
 

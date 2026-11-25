@@ -177,7 +177,7 @@ async fn do_jogo(
 }
 
 /// `games` publicados: id -> título.
-async fn jogos_publicados(fs: &Firestore) -> Result<HashMap<String, String>, AppError> {
+pub(crate) async fn jogos_publicados(fs: &Firestore) -> Result<HashMap<String, String>, AppError> {
     Ok(fs
         .listar("games")
         .await?
@@ -195,7 +195,7 @@ fn filtro(campo: &str, op: &str, valor: Value) -> Value {
 }
 
 /// Gameplays com resultado nos estados do ranking (de um jogo, ou de todos), de jogos publicados.
-async fn ler_partidas(
+pub(crate) async fn ler_partidas(
     fs: &Firestore,
     jogo: Option<&str>,
     publicados: &HashMap<String, String>,
@@ -248,7 +248,7 @@ fn partida(campos: &Campos) -> Option<Partida> {
 }
 
 /// Nome de exibição: `publicProfiles/{uid}` quando existir, senão o `displayName` do perfil.
-async fn nomes_dos_jogadores<'a>(
+pub(crate) async fn nomes_dos_jogadores<'a>(
     fs: &Firestore,
     uids: impl Iterator<Item = &'a str>,
 ) -> Result<HashMap<String, String>, AppError> {
@@ -272,7 +272,7 @@ async fn nomes_dos_jogadores<'a>(
         .collect())
 }
 
-fn nome_ou_padrao(nomes: &HashMap<String, String>, uid: &str) -> String {
+pub(crate) fn nome_ou_padrao(nomes: &HashMap<String, String>, uid: &str) -> String {
     nomes.get(uid).cloned().unwrap_or_else(|| "Jogador".to_string())
 }
 

@@ -11,6 +11,38 @@ export interface SessionRun {
   score?: number;
   message?: string;
   status: "recording" | "analyzing" | "submitted" | "expired" | "failed";
+  /** Posição da run no ranking do jogo (quando é o melhor placar do jogador). */
+  position?: number;
+  /** Pódio (top 3 do Hi-Score) do jogo logo depois desta run: a sala reordena se mudou. */
+  podium?: PodiumPlace[];
+  /** Ranked com live no top 3: a live indo para o canal oficial da ShmupX. */
+  highlight?: RunHighlight;
+}
+
+/** Um dos 3 primeiros do ranking do jogo da sala. */
+export interface PodiumPlace {
+  posicao: number;
+  jogador_id: string;
+  nome: string;
+  score: number;
+}
+
+export interface RunHighlight {
+  position: number;
+  status: "uploading" | "posted" | "failed";
+  /** 0 a 1, enquanto envia. */
+  progress?: number;
+  videoUrl?: string;
+}
+
+/** Andamento do destaque (Rust `live::destaque`, evento `run://destaque`). */
+export interface RunHighlightEvent {
+  jogo_id: string;
+  run_id: string;
+  posicao: number;
+  status: RunHighlight["status"];
+  video_url?: string | null;
+  progresso?: number | null;
 }
 
 export interface RunAnalysisEvent {
@@ -20,6 +52,8 @@ export interface RunAnalysisEvent {
   status: "analyzing" | "submitted" | "failed" | "discarded";
   message?: string | null;
   score?: number | null;
+  position?: number | null;
+  podium?: PodiumPlace[] | null;
 }
 
 /** Run "Não enviada" guardada pelo Client (`runs_pendentes`), com o vídeo ainda no disco. */
@@ -56,6 +90,26 @@ export function applyRunAnalysis(runs: SessionRun[], event: RunAnalysisEvent, no
       run.status !== "submitted" && run.status !== "failed";
     if (!sameRun && !samePid) return run;
     return { ...run, runId: runId ?? run.runId, status: event.status as SessionRun["status"], endedAt: run.endedAt ?? now,
-      message: event.message ?? undefined, score: event.score ?? run.score };
+      message: event.message ?? undefined, score: event.score ?? run.score,
+      position: event.position ?? run.position, podium: event.podium ?? run.podium };
   });
+}
+
+export function applyRunHighlight(runs: SessionRun[], event: RunHighlightEvent): SessionRun[] {
+  return runs.map((run) => run.runId !== event.run_id ? run : {
+    ...run,
+    highlight: { position: event.posicao, status: event.status, progress: event.progresso ?? undefined, videoUrl: event.video_url ?? undefined },
+  });
+}
+
+/** Mesmo pódio (mesmos jogadores nas mesmas posições)? */
+export function samePodium(a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>): boolean {
+  return a.size === b.size && [...a].every(([player, place]) => b.get(player) === place);
+}
+
+/** Pódio da sala: jogador → posição (1º a 3º). */
+export function podiumPlaces(places: readonly { posicao: number; jogador_id: string }[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const place of places) if (place.posicao <= 3) map.set(place.jogador_id, place.posicao);
+  return map;
 }

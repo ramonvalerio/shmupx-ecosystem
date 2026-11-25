@@ -21,6 +21,7 @@ use crate::firestore::{Campos, Firestore};
 const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const REVOKE_URL: &str = "https://oauth2.googleapis.com/revoke";
 const API: &str = "https://www.googleapis.com/youtube/v3";
+const ENVIO: &str = "https://www.googleapis.com/upload/youtube/v3";
 pub const ESCOPO: &str = "https://www.googleapis.com/auth/youtube";
 const COLECAO: &str = "youtubeConnections";
 const TITULO_MAXIMO: usize = 100;
@@ -258,6 +259,37 @@ impl YouTube {
             broadcast_id,
             stream_id,
         })
+    }
+
+    /// Abre um envio de vídeo (upload retomável) no canal conectado por `uid` e devolve o endereço
+    /// do envio. Quem tem o endereço manda os bytes direto ao YouTube, sem o token do canal: é
+    /// assim que o Client do jogador posta a live do top 3 no canal oficial da ShmupX.
+    pub async fn abrir_envio_de_video(&self, fs: &Firestore, uid: &str, titulo: &str, descricao: &str, tags: &[&str]) -> Result<String, AppError> {
+        let titulo: String = titulo.trim().chars().take(TITULO_MAXIMO).collect();
+        let descricao: String = descricao.chars().take(4900).collect();
+        let acesso = self.acesso(fs, uid).await?;
+        let resposta = self
+            .http
+            .post(format!("{ENVIO}/videos?uploadType=resumable&part=snippet,status"))
+            .bearer_auth(&acesso)
+            .header("X-Upload-Content-Type", "video/mp4")
+            .json(&json!({
+                // 20: categoria Jogos.
+                "snippet": { "title": titulo, "description": descricao, "categoryId": "20", "tags": tags },
+                "status": { "privacyStatus": "public", "selfDeclaredMadeForKids": false },
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("falha de rede com o YouTube: {e}")))?;
+        let status = resposta.status();
+        let endereco = resposta.headers().get(reqwest::header::LOCATION).and_then(|v| v.to_str().ok()).map(str::to_string);
+        if !status.is_success() {
+            let corpo = resposta.text().await.unwrap_or_default();
+            return Err(erro_da_api(status, &corpo));
+        }
+        endereco
+            .filter(|e| e.starts_with("https://www.googleapis.com/upload/youtube/"))
+            .ok_or_else(|| AppError::internal("YouTube não devolveu o endereço do envio"))
     }
 
     async fn apagar_live(&self, acesso: &str, broadcast_id: &str) {

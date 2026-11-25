@@ -4,6 +4,7 @@
 pub mod catalogo;
 pub mod cliques_download;
 pub mod denuncias;
+pub mod destaques;
 pub mod distribuicoes;
 pub mod email;
 pub mod eventos;

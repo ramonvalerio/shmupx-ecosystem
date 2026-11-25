@@ -169,9 +169,9 @@ impl Drop for CapturaJanela {
     }
 }
 
-/// Começa a capturar a janela. Sem borda amarela quando o Windows permite (Windows 11).
-pub fn iniciar(janela: Window) -> Result<CapturaJanela, String> {
-    let tela: Tela = Arc::new(Mutex::new(vec![0; BYTES]));
+/// Começa a capturar a janela para dentro de `tela` (a mesma que o FFmpeg já recebe: a live troca
+/// a tela de espera pelo jogo sem parar). Sem borda amarela quando o Windows permite (Windows 11).
+pub fn iniciar(janela: Window, tela: Tela) -> Result<CapturaJanela, String> {
     let fechada = Arc::new(AtomicBool::new(false));
     let pid = janela.process_id().unwrap_or(0);
     let hwnd = janela.as_raw_hwnd() as isize;
@@ -280,7 +280,7 @@ mod neste_pc {
             .1;
         println!("janela: {:?} {}x{}", janela.title(), janela.width().unwrap(), janela.height().unwrap());
         println!("área interna: {:?}", area_interna(janela.as_raw_hwnd() as isize, janela.width().unwrap() as u32, janela.height().unwrap() as u32));
-        let captura = iniciar(janela).unwrap();
+        let captura = iniciar(janela, Arc::new(Mutex::new(vec![0; BYTES]))).unwrap();
         std::thread::sleep(Duration::from_millis(1500));
         let tela = captura.tela.lock().unwrap();
         let acesos = tela.chunks(4).filter(|p| p[0] > 10 || p[1] > 10 || p[2] > 10).count();

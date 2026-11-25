@@ -290,7 +290,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {AMBIENTE === "dev" && <span className="env-badge" title={t("Firestore e login nos emuladores locais (Docker). Nada aqui chega à produção.")}>{t("DESENVOLVIMENTO")}</span>}
         {AMBIENTE === "prd" && import.meta.env.DEV && <span className="env-badge is-production" title={t("Versão em desenvolvimento ligada aos dados reais: o que você fizer vale para os jogadores.")}>{t("DEV · PRODUÇÃO")}</span>}
         <div className="client-status-group">
-          {live.state.status === "live" || live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
+          {live.state.status === "live" || live.state.status === "preparing" || live.state.status === "connecting" ? <>
             {live.state.status === "live" ? (
               // No ar: microfone desligado (a live leva só o som do jogo) e a pílula LIVE.
               <div className="live-indicator" role="status" aria-label={t("Ao vivo no YouTube, sem microfone")} title={`${liveRoom?.title ?? "YouTube"}${liveCountdown ? ` · ${liveCountdown}` : ""}`}>

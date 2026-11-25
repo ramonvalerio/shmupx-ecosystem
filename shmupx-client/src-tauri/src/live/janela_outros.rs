@@ -22,7 +22,7 @@ pub fn janela_dos_processos(_pids: &[u32]) -> Option<Window> {
     None
 }
 
-pub fn iniciar(_janela: Window) -> Result<CapturaJanela, String> {
+pub fn iniciar(_janela: Window, _tela: Tela) -> Result<CapturaJanela, String> {
     Err("a live ainda não está disponível no Linux".to_string())
 }
 

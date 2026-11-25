@@ -60,6 +60,9 @@ struct IniciarRunPayload<'a> {
     jogo_id: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     modo: Option<&'a str>,
+    /// Ranked com live: a live que transmite a partida (o destaque do top 3 sai dela).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    live_broadcast_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -73,11 +76,11 @@ pub struct IniciarRunResponse {
 /// Chamada por `capture::commands::iniciar_corrida_safe` antes de sequer abrir o FFmpeg — se o
 /// backend recusar (sem fichas, jogador/jogo inexistente, token inválido), a run nem começa a
 /// gravar localmente.
-pub async fn iniciar_run(token: &str, jogo_id: &str, modo: Option<&str>) -> Result<IniciarRunResponse, String> {
+pub async fn iniciar_run(token: &str, jogo_id: &str, modo: Option<&str>, live_broadcast_id: Option<&str>) -> Result<IniciarRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs/start"))
         .bearer_auth(token)
-        .json(&IniciarRunPayload { jogo_id, modo })
+        .json(&IniciarRunPayload { jogo_id, modo, live_broadcast_id })
         .send()
         .await
         .map_err(|e| format!("falha de rede ao iniciar a run no backend: {e}"))?;
@@ -97,11 +100,27 @@ struct SubmeterRunPayload<'a> {
     zerou: Option<bool>,
 }
 
-/// `status` é `needs_review`: o backend registra o resultado, mas a aprovação é posterior.
+/// Um dos 3 primeiros do Hi-Score do jogo (o pódio da sala), já com a run enviada.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct LugarNoPodio {
+    pub posicao: usize,
+    pub jogador_id: String,
+    pub nome: String,
+    pub score: i64,
+}
+
+/// `status` é `needs_review`: o backend registra o resultado, mas a aprovação é posterior. Junto,
+/// a posição da run no ranking, o pódio da sala e, no top 3 com live, o destaque no canal oficial.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmeterRunResponse {
     pub run_id: String,
     pub status: String,
+    #[serde(default)]
+    pub posicao: Option<usize>,
+    #[serde(default)]
+    pub podio: Vec<LugarNoPodio>,
+    #[serde(default)]
+    pub destaque: Option<crate::live::destaque::Destaque>,
 }
 
 /// Por que o encerramento da run falhou.

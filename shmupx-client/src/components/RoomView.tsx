@@ -1,9 +1,10 @@
 import { useI18n } from "../i18n";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import ChatFeed from "./ChatFeed";
 import ChatInput from "./ChatInput";
 import type { ChatMessage, GameRoom } from "../types/room";
-import type { SessionRun } from "../types/submission";
+import { podiumPlaces, samePodium, type SessionRun } from "../types/submission";
+import { invoke } from "@tauri-apps/api/core";
 import type { ChatStatus } from "../data/useRoomChat";
 import { answer as robotxAnswer } from "../data/robotx";
 import { useGameArt } from "../data/gameArt";
@@ -108,11 +109,27 @@ function RunOutcome({ run, onOpenRanking }: { run: SessionRun; onOpenRanking: ()
     : run.status === "submitted" ? t("Última run enviada: o resultado entrou em revisão.")
     : run.status === "expired" ? t("O tempo da ficha acabou e a gravação foi encerrada; a gameplay está sendo processada.")
     : t("A última run não foi enviada: {reason}", { reason: run.message ?? t("motivo não informado") });
+  const highlight = run.highlight;
   return (
-    <p className={`room-banner ${tone}`} role="status">
-      {text}
-      <button type="button" className="text-action" onClick={onOpenRanking}>{t("Ver no ranking")}</button>
-    </p>
+    <>
+      <p className={`room-banner ${tone}`} role="status">
+        {text}
+        {run.status === "submitted" && run.position !== undefined && run.position <= 3 && ` ${t("Você está em {place}º lugar no ranking!", { place: run.position })}`}
+        <button type="button" className="text-action" onClick={onOpenRanking}>{t("Ver no ranking")}</button>
+      </p>
+      {/* Ranked com live no top 3: a live vai para o canal oficial da ShmupX. */}
+      {highlight && (
+        <p className={`room-banner ${highlight.status === "posted" ? "success" : highlight.status === "failed" ? "warning" : ""}`} role="status">
+          {highlight.status === "uploading"
+            ? t("Sua live vai para o canal oficial da ShmupX, com seu nome, placar e posição. Enviando o vídeo… {percent}%", { percent: Math.round((highlight.progress ?? 0) * 100) })
+            : highlight.status === "posted" ? t("Sua live está no canal oficial da ShmupX!")
+            : t("Não foi possível publicar sua live no canal da ShmupX agora. O vídeo continua na sua pasta de gravações.")}
+          {highlight.status === "posted" && highlight.videoUrl && (
+            <button type="button" className="text-action" onClick={() => void invoke("live_abrir", { url: highlight.videoUrl })}>{t("Assistir")}</button>
+          )}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -142,13 +159,32 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const stats = useGameStats(playerId, room.id);
   const myJoinedAt = useMyJoinedAt(room.id);
-  // Pódio do jogo da sala (Hi-Score): medalha de ouro, prata e bronze na lista de jogadores.
+  // Pódio do jogo da sala (Hi-Score): medalha de ouro, prata e bronze e o topo da lista de jogadores.
+  // Ao fim de uma ranked, o backend devolve o pódio já com a run: se a ordem for outra, a sala
+  // reordena na hora (a rota pública do ranking guarda 60 s em cache, e um pódio mais antigo que o
+  // mostrado é ignorado). A cada minuto a sala confere o ranking de novo, para as runs dos outros.
   const podiumRanking = useGameRanking(room.id, "highscore", 3);
-  const podium = useMemo(() => {
-    const places = new Map<string, number>();
-    for (const entry of podiumRanking.data?.entradas ?? []) if (entry.posicao <= 3) places.set(entry.jogador_id, entry.posicao);
-    return places;
-  }, [podiumRanking.data]);
+  const [podiumState, setPodiumState] = useState<{ roomId: string; places: Map<string, number>; at: number }>(() => ({ roomId: room.id, places: new Map(), at: 0 }));
+  const keepPodium = useCallback((places: Map<string, number>, at: number) => setPodiumState((current) => {
+    if (current.roomId !== room.id) return { roomId: room.id, places, at };
+    if (at < current.at || samePodium(current.places, places)) return current;
+    return { roomId: room.id, places, at };
+  }), [room.id]);
+  useEffect(() => {
+    const data = podiumRanking.data;
+    if (data && data.jogo_id === room.id) keepPodium(podiumPlaces(data.entradas), Date.parse(data.atualizado_em) || 0);
+  }, [podiumRanking.data, room.id, keepPodium]);
+  useEffect(() => {
+    if (lastRun?.status !== "submitted" || !lastRun.podium || lastRun.gameId !== room.id) return;
+    // O pódio chegou agora, calculado pelo backend no envio: vale mais que o ranking já mostrado.
+    keepPodium(podiumPlaces(lastRun.podium), Date.now());
+  }, [lastRun?.status, lastRun?.podium, lastRun?.gameId, room.id, keepPodium]);
+  const reloadPodium = podiumRanking.reload;
+  useEffect(() => {
+    const timer = window.setInterval(reloadPodium, 60_000);
+    return () => window.clearInterval(timer);
+  }, [reloadPodium]);
+  const podium = podiumState.roomId === room.id ? podiumState.places : new Map<string, number>();
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
   // Respostas do RobotX desta sessão (locais, por sala).
@@ -277,14 +313,21 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         </header>
 
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}
-        {liveHere && live.state.status === "live" && (
+        {liveHere && live.state.status === "live" && live.state.game_open && (
           <p className="room-banner recording" role="status">
             <span className="status-dot" /> {t("AO VIVO no YouTube")}{countdown && ` · ${t("termina em {time}", { time: countdown })}`}{live.state.public ? ` · ${t("pública")}` : ` · ${t("não listada")}`}
             {live.state.watch_url && <button type="button" className="text-action" onClick={() => void live.open(live.state.watch_url!)}>{t("Abrir no YouTube")}</button>}
           </p>
         )}
-        {liveHere && live.state.status === "live" && live.state.silent && <p className="room-banner warning">{t("Não foi possível capturar o som do sistema: a live está sem áudio do jogo.")}</p>}
-        {liveHere && (live.state.status === "waiting" || live.state.status === "preparing" || live.state.status === "connecting") && <p className="room-banner" role="status">{live.state.status === "waiting" ? t("Abrindo o jogo; a live começa quando a janela do jogo aparecer.") : live.state.status === "preparing" ? t("Criando a live no seu canal…") : t("Enviando a janela do jogo para o YouTube; a live entra no ar assim que o vídeo chegar.")}</p>}
+        {liveHere && live.state.status === "live" && live.state.game_open && live.state.silent && <p className="room-banner warning">{t("Não foi possível capturar o som do sistema: a live está sem áudio do jogo.")}</p>}
+        {/* Live Ranked: primeiro a live entra no ar; só então o jogo abre no modo ranked. */}
+        {liveHere && (live.state.status === "preparing" || live.state.status === "connecting" || (live.state.status === "live" && !live.state.game_open)) && (
+          <p className="room-banner" role="status">
+            {live.state.status === "preparing" ? t("Criando a live no seu canal…")
+              : live.state.status === "connecting" ? t("Conectando a live ao YouTube. O jogo abre assim que ela entrar no ar.")
+              : t("Live no ar! Abrindo o jogo no Ranked (1 ficha, sem continue)…")}
+          </p>
+        )}
         {liveHere && live.state.status === "failed" && live.state.error && <p className="room-banner warning" role="alert">{t("A live não continuou: {reason}", { reason: t(live.state.error) })}</p>}
         {liveHere && live.state.status === "idle" && live.state.ended_by_time_limit && <p className="room-banner">{t("A live terminou no limite de 45 minutos.")}</p>}
         {liveError && <p className="room-banner warning" role="alert">{t(liveError)}</p>}

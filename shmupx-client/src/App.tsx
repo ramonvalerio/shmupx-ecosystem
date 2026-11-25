@@ -14,7 +14,7 @@ import { usePresenceMode } from "./data/presenceMode";
 import { useRoomPresence } from "./data/useRoomPresence";
 import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
-import { applyRunAnalysis, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type SessionRun } from "./types/submission";
+import { applyRunAnalysis, applyRunHighlight, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type RunHighlightEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
 import { takePendingRunMode } from "./data/gameModes";
 import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
@@ -82,6 +82,9 @@ export default function App() {
   const accountRemote = useRemoteLaunch(signedUid);
   useEffect(() => setAccountPlaying(accountRemote?.playing), [accountRemote?.playing]);
   const live = useLive();
+  // O listener do jogo aberto é registrado uma vez: a ref dá a ele o estado atual da live.
+  const liveRef = useRef(live.state);
+  liveRef.current = live.state;
   const clientMister = useClientMisterGame();
   const liveGameId = liveActive(live.state) ? live.state.game_id ?? null : null;
   const practiceRoomId = Object.keys(practiceGames)[0] ?? null;
@@ -169,6 +172,10 @@ export default function App() {
           const message = typeof error === "string" ? error : String(error);
           setStartErrors((current) => ({ ...current, [roomId]: message }));
           remoteRef.current.runFailed(roomId, message);
+          // Live Ranked sem a run ranked (sem ficha, gravação recusada): a live não continua.
+          if (liveRef.current.status !== "idle" && liveRef.current.status !== "failed" && liveRef.current.game_id === roomId) {
+            invoke("live_encerrar").catch(() => {});
+          }
         });
     };
 
@@ -200,8 +207,14 @@ export default function App() {
       setRuns((current) => applyRunAnalysis(current, event.payload, Date.now()));
     });
 
+    // Live Ranked no top 3: o envio da live ao canal oficial da ShmupX.
+    const unlistenHighlight = listen<RunHighlightEvent>("run://destaque", (event) => {
+      setRuns((current) => applyRunHighlight(current, event.payload));
+    });
+
     return () => {
       unlistenAnalysis.then((unlisten) => unlisten());
+      unlistenHighlight.then((unlisten) => unlisten());
       unlistenLaunched.then((unlisten) => unlisten());
       unlistenEmulator.then((unlisten) => unlisten());
       unlistenExpired.then((unlisten) => unlisten());

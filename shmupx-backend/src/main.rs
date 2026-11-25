@@ -117,10 +117,10 @@ async fn servidor() {
         .merge(routes::mister::router(firestore.clone(), email.clone()))
         .merge(routes::perfil::router(firestore.clone(), email))
         .merge(routes::notificacoes::router(firestore.clone()))
-        .merge(routes::youtube::router(firestore.clone(), youtube))
+        .merge(routes::youtube::router(firestore.clone(), youtube.clone()))
         .merge(routes::notificacoes::router_publico(firestore.clone()))
         .merge(routes::ranking_publico::router(firestore.clone()))
-        .merge(routes::runs::router(firestore));
+        .merge(routes::runs::router(firestore, youtube));
 
     // Legado: catálogo e ranking do portal ainda leem o PostgreSQL/Supabase. Só são montados
     // quando DATABASE_URL existe; o fluxo do cliente não depende deles.

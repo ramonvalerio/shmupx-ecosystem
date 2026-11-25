@@ -264,3 +264,19 @@ test("chat links become clickable parts", () => {
   assert.deepEqual(linkParts("(veja www.shmupx.com)"), [{ text: "(veja " }, { text: "www.shmupx.com", url: "https://www.shmupx.com" }, { text: ")" }]);
   assert.deepEqual(linkParts("sem link"), [{ text: "sem link" }]);
 });
+
+const { podiumPlaces, samePodium, applyRunHighlight } = await sourceModule("../src/types/submission.ts");
+test("room podium only changes when the top 3 order changes", () => {
+  const before = podiumPlaces([{ posicao: 1, jogador_id: "ana" }, { posicao: 2, jogador_id: "bia" }, { posicao: 3, jogador_id: "caio" }]);
+  const same = podiumPlaces([{ posicao: 1, jogador_id: "ana" }, { posicao: 2, jogador_id: "bia" }, { posicao: 3, jogador_id: "caio" }, { posicao: 4, jogador_id: "davi" }]);
+  const swapped = podiumPlaces([{ posicao: 1, jogador_id: "bia" }, { posicao: 2, jogador_id: "ana" }, { posicao: 3, jogador_id: "caio" }]);
+  assert.equal(same.has("davi"), false);
+  assert.equal(samePodium(before, same), true);
+  assert.equal(samePodium(before, swapped), false);
+});
+test("highlight progress attaches to the submitted run", () => {
+  const runs = [{ id: "a", gameId: "aero", startedAt: 1, runId: "r1", status: "submitted" }, { id: "b", gameId: "aero", startedAt: 2, runId: "r2", status: "submitted" }];
+  const result = applyRunHighlight(runs, { jogo_id: "aero", run_id: "r1", posicao: 2, status: "uploading", progresso: 0.5 });
+  assert.deepEqual(result[0].highlight, { position: 2, status: "uploading", progress: 0.5, videoUrl: undefined });
+  assert.equal(result[1].highlight, undefined);
+});
