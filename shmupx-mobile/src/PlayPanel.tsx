@@ -77,7 +77,7 @@ export default function PlayPanel({ room, preset, onSettings }: { room: GameRoom
               <div className="lite-mode-chips" role="radiogroup" aria-label={t("Modo de jogo")}>
                 {modes.map((m) => (
                   <button key={m.id} type="button" role="radio" aria-checked={sheet.mode === m.id} className="lite-chip" disabled={m.soon} onClick={() => setSheet({ ...sheet, mode: m.id })}>
-                    <strong>{m.label}{m.soon && <> · {t("Coming soon")}</>}</strong><small>{t(m.detail)}</small>
+                    <strong>{m.label}{m.soon && <> · {t("Em breve")}</>}</strong><small>{t(m.detail)}</small>
                   </button>
                 ))}
               </div>

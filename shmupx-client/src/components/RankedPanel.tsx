@@ -209,7 +209,7 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
   // Ranked Mode indisponível: jogo sem script de validação, no MiSTer sem leitura de placar, ou sem
   // fichas (o treino continua).
   const rankedBlocked = comingSoon
-    ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.")
+    ? t("Em breve: o Play Ranked fica disponível quando o jogo tiver o script de validação.")
     : target === "mister" && !room.rankedMister ? t(RANKED_MISTER_OFF)
     : credits !== null && credits < 1 ? t("Sem fichas: o Ranked Mode precisa de 1 ficha.") : null;
 

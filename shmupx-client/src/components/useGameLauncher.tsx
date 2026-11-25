@@ -382,7 +382,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
             <div className="play-mode-options" role="radiogroup" aria-label={t("Modo de jogo")}>
               {playModesFor(room).map((m) => (
                 <button key={m.id} type="button" role="radio" aria-checked={choosing.mode === m.id} className="play-mode-option" disabled={m.soon} onClick={() => setChoosing({ ...choosing, mode: m.id })}>
-                  <strong>{m.label}{m.soon && <span className="coming-soon-tag">{t("Coming soon")}</span>}</strong><small>{t(m.detail)}</small>
+                  <strong>{m.label}{m.soon && <span className="coming-soon-tag">{t("Em breve")}</span>}</strong><small>{t(m.detail)}</small>
                 </button>
               ))}
             </div>

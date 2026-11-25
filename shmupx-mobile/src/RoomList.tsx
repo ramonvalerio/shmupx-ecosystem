@@ -67,7 +67,7 @@ function PresetBar({ preset, onChange, onSettings }: { preset: PlayPreset; onCha
       <div className="lite-preset-row" role="radiogroup" aria-label={t("Modo de jogo")}>
         {PLAY_MODES.map((m) => (
           <button key={m.id} type="button" role="radio" aria-checked={preset.mode === m.id || (m.id === "highscore" && preset.mode === "1cc")} disabled={m.soon} onClick={() => onChange({ ...preset, mode: m.id })}>
-            {m.label}{m.soon && <small>{t("Coming soon")}</small>}
+            {m.label}{m.soon && <small>{t("Em breve")}</small>}
           </button>
         ))}
       </div>

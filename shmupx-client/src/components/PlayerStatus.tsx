@@ -1,16 +1,14 @@
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
-import { misterAuth, readMisterPlayer } from "../data/misterPlayer";
-import { readMisterLibrary } from "../data/misterLibrary";
-import { clearPlaying, playingWhere, setClientMisterGame, useAccountPlaying, type PlayingNow } from "../data/playing";
+import { playingWhere, useAccountPlaying, type PlayingNow } from "../data/playing";
+import { stopGame, useStoppingGame } from "../data/stopGame";
 
-const KIND_LABEL: Record<PlayingNow["kind"], string> = { training: "Training", ranked: "Ranked", live: "Live" };
+const KIND_LABEL: Record<PlayingNow["kind"], string> = { training: "Treino", ranked: "Ranked", live: "Live" };
 
 /**
  * Indicador global do jogador, no centro do topo do Client: o que a conta está fazendo agora em
  * qualquer aparelho (gravando uma run aqui, jogando no PC, no MiSTer ou pelo celular) com o botão
- * STOP, ou "Disponível para jogar". A live no ar tem o próprio indicador (ClientShell).
+ * PARAR JOGO (o mesmo da sala), ou "Disponível para jogar". A live no ar tem o próprio indicador (ClientShell).
  */
 export default function PlayerStatus({ uid, recording, practiceGames }: {
   uid: string;
@@ -21,47 +19,24 @@ export default function PlayerStatus({ uid, recording, practiceGames }: {
 }) {
   const { t } = useI18n();
   const playing = useAccountPlaying();
-  const [busy, setBusy] = useState(false);
+  const busy = useStoppingGame();
   const [error, setError] = useState<string | null>(null);
 
+  // STOP: o mesmo que o PARAR JOGO da sala (data/stopGame).
   async function stop() {
-    setBusy(true);
     setError(null);
     try {
-      if (recording) {
-        // Encerra a gravação: a análise tira o placar e a run vai para o ranking.
-        await invoke("finalizar_corrida_manual");
-        return;
-      }
-      if (!playing) return;
-      if (playing.platform === "mister") {
-        // O MiSTer volta ao menu (o agente grava a partida e libera a conta); a conta é liberada
-        // aqui também, mesmo que o MiSTer já esteja no menu ou desligado.
-        const player = readMisterPlayer();
-        const host = player?.host || readMisterLibrary()?.host;
-        if (host) await invoke("mister_parar", { host, ...misterAuth(player?.password) }).catch(() => undefined);
-        setClientMisterGame(null);
-        await clearPlaying(uid);
-        return;
-      }
-      const pid = practiceGames[playing.gameId];
-      if (playing.device === "pc" && pid !== undefined) {
-        await invoke("treino_parar", { pid });
-        return;
-      }
-      // Aberto em outro aparelho (outro PC ou o celular): libera a conta daqui.
-      await clearPlaying(uid);
+      const practicePid = playing?.device === "pc" ? practiceGames[playing.gameId] : undefined;
+      await stopGame({ uid, recording: Boolean(recording), practicePid });
     } catch (failure) {
       setError(typeof failure === "string" ? failure : failure instanceof Error ? failure.message : String(failure));
-    } finally {
-      setBusy(false);
     }
   }
 
   const stopButton = (
     <button type="button" className="player-status-stop" disabled={busy} onClick={() => void stop()}
       title={t(recording ? "Encerrar a gravação da run" : "Parar o jogo e liberar a conta")}>
-      <span aria-hidden="true" />{t(busy ? "Parando…" : "STOP")}
+      <span aria-hidden="true" />{t(busy ? "Parando…" : "Parar jogo")}
     </button>
   );
 

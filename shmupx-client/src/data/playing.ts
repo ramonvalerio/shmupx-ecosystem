@@ -116,6 +116,7 @@ export function setClientMisterGame(game: typeof misterFromClient) {
   misterFromClient = game;
   misterListeners.forEach((listener) => listener());
 }
+export const getClientMisterGame = () => misterFromClient;
 export function useClientMisterGame() {
   return useSyncExternalStore((listener) => { misterListeners.add(listener); return () => misterListeners.delete(listener); }, () => misterFromClient);
 }

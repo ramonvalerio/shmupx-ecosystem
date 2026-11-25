@@ -1,6 +1,5 @@
 import { useI18n } from "../i18n";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import ChatFeed from "./ChatFeed";
 import ChatInput from "./ChatInput";
 import type { ChatMessage, GameRoom } from "../types/room";
@@ -13,6 +12,7 @@ import { useCountdown } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { usePresenceMode } from "../data/presenceMode";
 import { useAccountPlaying } from "../data/playing";
+import { stopGame as stopPlaying, useStoppingGame } from "../data/stopGame";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
 import { formatPlayTime, useGameStats } from "../data/useGameStats";
@@ -131,7 +131,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const ranked = useRankedLive(room);
   const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const stats = useGameStats(playerId, room.id);
-  const [isStopping, setIsStopping] = useState(false);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
   // Respostas do RobotX desta sessão (locais, por sala).
@@ -142,7 +141,6 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const robotxReady = knowledge.length > 0;
 
   useEffect(() => {
-    setIsStopping(false);
     setBotReplies(readRobotxReplies(playerId, room.id));
     setFilter("everyone");
   }, [room.id, playerId]);
@@ -184,15 +182,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     if (robotxReady && MENCAO_ROBOTX.test(text)) reply(text);
   }
 
+  // PARAR JOGO: o mesmo que o STOP do topo (data/stopGame).
   async function handleStopGame() {
     launcher.setError(null);
-    setIsStopping(true);
     try {
-      await invoke("finalizar_corrida_manual");
+      await stopPlaying({ uid: playerId, recording: isRecording, practicePid });
     } catch (error) {
-      launcher.setError(typeof error === "string" ? error : "Falha ao interromper a run manualmente.");
-    } finally {
-      setIsStopping(false);
+      launcher.setError(typeof error === "string" ? error : t("Não foi possível parar o jogo."));
     }
   }
 
@@ -206,14 +202,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // a análise tira o placar), jogo no MiSTer (volta ao menu; o agente registra o placar) ou
   // treino no PC (fecha o jogo).
   const gameOpen = isRecording || practicePid !== undefined || launcher.misterGame !== null;
-  const stopping = isStopping || launcher.isStopping;
+  const stopping = useStoppingGame() || launcher.isStopping;
 
   // PARAR JOGO: run no PC (encerra a gravação e a análise tira o placar), jogo no MiSTer (volta ao
   // menu; o agente registra o placar) ou treino no PC (fecha o jogo).
-  const stopGame = isRecording ? handleStopGame
-    : launcher.misterGame ? () => void launcher.stopMister()
-    : practicePid !== undefined ? () => void invoke("treino_parar", { pid: practicePid }).catch((error) => launcher.setError(String(error)))
-    : null;
+  const stopGame = gameOpen ? () => void handleStopGame() : null;
 
   // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
   // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
@@ -251,11 +244,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             {(gameOpen || stopping) && (
               <div className="game-room-actions">
                 <button type="button" className="room-action stop stop-action" onClick={stopGame ?? undefined} disabled={stopping || !stopGame}>
-                  <span className="action-icon is-square" aria-hidden="true" />{t(stopping ? "Encerrando o jogo…" : "Parar jogo")}
+                  <span className="action-icon is-square" aria-hidden="true" />{t(stopping ? "Parando…" : "Parar jogo")}
                 </button>
               </div>
             )}
-            {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Coming soon")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
+            {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Em breve")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
           <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping} />
