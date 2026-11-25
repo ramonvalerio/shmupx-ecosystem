@@ -657,3 +657,7 @@
 .room-chip-soon { margin-left: 6px; color: #f2c14e; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
 .play-mode-option:disabled { opacity: .55; cursor: default; }
 .play-mode-option .coming-soon-tag { margin-left: 8px; vertical-align: 2px; }
+/* Linha do jogador sem jogo aberto: "Disponível para jogar" em verde; ausente e offline, discretos. */
+.room-player-idle.is-available { color: #3fd98b; }
+.room-player-idle.is-away { color: #fd4851; }
+.room-player-idle.is-offline { color: #7d878e; }

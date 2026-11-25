@@ -328,7 +328,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                       ▶ {player.game.title}
                       {player.game.kind && <span className={`room-player-kind is-${player.game.kind}`}>{t(KIND_LABEL[player.game.kind])}</span>}
                     </small>
-                  : <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>}
+                  // Sem jogo aberto: online, "Disponível para jogar" (verde); ausente ou offline, o status.
+                  : player.status === "away" || player.status === "offline"
+                  ? <small className={`room-player-idle is-${player.status}`}>{t(STATUS_LABEL[player.status])}</small>
+                  : <small className="room-player-idle is-available">{t("Disponível para jogar")}</small>}
               </span>
               <span className="room-player-state">
                 {player.status === "live"
