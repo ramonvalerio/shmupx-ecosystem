@@ -6,7 +6,7 @@ import { IconAlert, IconCheck, IconClose, IconCoins, IconRefresh, IconSearch, Ic
 import Switch from "../../components/ui/Switch";
 import CopyButton from "../../components/ui/CopyButton";
 import { moderateUser, resolveReport, type AdminUser, type ChatReport, type UserModeration, type UserStatus } from "../../lib/backend";
-import { isModerated, matchesUser, REPORT_REASON_LABEL, REPORT_STATUS_LABEL, STATUS_DOT, STATUS_LABEL, timeAgo, userName } from "./options";
+import { formatDate, formatDuration, isModerated, matchesUser, REPORT_REASON_LABEL, REPORT_STATUS_LABEL, STATUS_DOT, STATUS_LABEL, timeAgo, userName } from "./options";
 
 type Filter = "all" | "connected" | "away" | "offline" | "moderated" | "reported";
 
@@ -143,7 +143,10 @@ export default function UsersView({ users, loading, error, updatedAt, onReload, 
                   <th className="px-4 py-3 font-semibold">Jogador</th>
                   <th className="px-4 py-3 font-semibold">Situação</th>
                   <th className="px-4 py-3 text-right font-semibold">Fichas</th>
+                  <th className="px-4 py-3 text-right font-semibold" title="Tempo com o ShmupX aberto (online, ausente, jogando ou ao vivo), contado desde 25/11/2026">Tempo conectado</th>
                   <th className="px-4 py-3 font-semibold">Último acesso</th>
+                  <th className="px-4 py-3 font-semibold">Cadastro</th>
+                  <th className="px-4 py-3 font-semibold">Atualizado</th>
                   <th className="px-4 py-3 font-semibold">Moderação</th>
                 </tr>
               </thead>
@@ -170,9 +173,12 @@ export default function UsersView({ users, loading, error, updatedAt, onReload, 
                     <td className="px-4 py-2.5 text-right font-mono text-zinc-300 tabular-nums" title={user.balance == null ? "Ainda sem carteira: ganha as fichas iniciais na primeira run" : undefined}>
                       {user.balance == null ? <span className="text-zinc-600">50*</span> : user.balance.toLocaleString("pt-BR")}
                     </td>
+                    <td className="px-4 py-2.5 text-right text-xs text-zinc-300 tabular-nums">{formatDuration(user.connected_seconds)}</td>
                     <td className="px-4 py-2.5 text-xs text-zinc-400" title={user.last_seen_at ? new Date(user.last_seen_at).toLocaleString("pt-BR") : undefined}>
                       {user.status === "offline" ? timeAgo(user.last_seen_at, now) : <span className="text-emerald-300">agora</span>}
                     </td>
+                    <td className="px-4 py-2.5 text-xs whitespace-nowrap text-zinc-400 tabular-nums">{formatDate(user.created_at)}</td>
+                    <td className="px-4 py-2.5 text-xs whitespace-nowrap text-zinc-400 tabular-nums">{formatDate(user.updated_at)}</td>
                     <td className="px-4 py-2.5"><ModerationBadges moderation={user.moderation} reportsOpen={user.reports_open} /></td>
                   </tr>
                 ))}
@@ -306,7 +312,9 @@ function UserPanel({ user, now, reports, onReportChanged, onClose, onSendCoins, 
     ["E-mail", user.email ?? "—"],
     ["Nick", user.handle ? `@${user.handle}` : "—"],
     ["Fichas", user.balance == null ? "50 (ainda sem carteira)" : user.balance.toLocaleString("pt-BR")],
-    ["Cadastro", user.created_at ? new Date(user.created_at).toLocaleDateString("pt-BR") : "—"],
+    ["Cadastro", formatDate(user.created_at)],
+    ["Atualizado", formatDate(user.updated_at)],
+    ["Tempo conectado", formatDuration(user.connected_seconds)],
     ["Último acesso", user.status === "offline" ? timeAgo(user.last_seen_at, now) : "agora"],
     ["Versão do Client", user.client_version ?? "—"],
   ];

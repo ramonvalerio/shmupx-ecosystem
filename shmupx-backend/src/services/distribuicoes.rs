@@ -454,6 +454,10 @@ pub async fn acordar(fs: Arc<Firestore>) {
     if let Err(e) = processar_vencidas(&fs).await {
         eprintln!("fichas: falha ao conferir as distribuições agendadas: {e:?}");
     }
+    // Mesma batida de minuto: tempo conectado de quem está online/ausente (Users Manager).
+    if let Err(e) = crate::services::tempo_conectado::contabilizar(&fs).await {
+        eprintln!("tempo conectado: falha na contagem: {e:?}");
+    }
 }
 
 #[cfg(test)]

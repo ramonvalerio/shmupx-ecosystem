@@ -54,6 +54,11 @@ pub struct UsuarioAdmin {
     pub email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
+    /// Última alteração do perfil (nome, idioma).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
+    /// Tempo total com o ShmupX aberto (online, ausente, jogando ou ao vivo), contado minuto a minuto.
+    pub connected_seconds: i64,
     /// Último sinal de vida (backend, sala ou Client aberto).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_seen_at: Option<DateTime<Utc>>,
@@ -150,32 +155,25 @@ fn situacao(sinais: &Sinais) -> (String, Option<String>) {
     }
 }
 
-/// Todos os jogadores com a situação de agora e a moderação.
-pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
-    let agora = Utc::now();
-    let (usuarios, jogadores, perfis, carteiras, moderacoes, presencas, remotos, jogos, denuncias) = tokio::try_join!(
-        fs.consultar(selecionar("users", &["displayName", "createdAt"])),
-        fs.consultar(selecionar("players", &["email", "lastSeenAt", "clientVersion"])),
-        fs.consultar(selecionar("publicProfiles", &["handle", "displayName"])),
-        fs.consultar(selecionar("wallets", &["balance"])),
-        fs.listar("moderation"),
-        fs.consultar_caminhos(json!({
-            "from": [{ "collectionId": "presence", "allDescendants": true }],
-            "select": { "fields": [{ "fieldPath": "state" }, { "fieldPath": "lastSeen" }, { "fieldPath": "playingTitle" }] },
-        })),
-        fs.consultar(selecionar("remoteLaunch", &["desktop.seenAt", "playing.title", "playing.beatAt"])),
-        fs.consultar(selecionar("games", &["title"])),
-        crate::services::denuncias::todas(fs),
-    )?;
-    let denunciados = crate::services::denuncias::abertas_por_autor(&denuncias);
+fn consulta_presencas() -> serde_json::Value {
+    json!({
+        "from": [{ "collectionId": "presence", "allDescendants": true }],
+        "select": { "fields": [{ "fieldPath": "state" }, { "fieldPath": "lastSeen" }, { "fieldPath": "playingTitle" }] },
+    })
+}
 
-    let titulos: HashMap<String, String> = jogos.into_iter().filter_map(|(id, c)| Some((id, ler_texto(&c, "title")?))).collect();
-    let usuarios: HashMap<String, Campos> = usuarios.into_iter().collect();
-    let jogadores: HashMap<String, Campos> = jogadores.into_iter().collect();
-    let perfis: HashMap<String, Campos> = perfis.into_iter().collect();
-    let carteiras: HashMap<String, Campos> = carteiras.into_iter().collect();
-    let moderacoes: HashMap<String, Campos> = moderacoes.into_iter().collect();
+fn consulta_remotos() -> serde_json::Value {
+    selecionar("remoteLaunch", &["desktop.seenAt", "playing.title", "playing.beatAt"])
+}
 
+/// Sinais de cada jogador agora (`rooms/*/presence/{uid}` e `remoteLaunch/{uid}`) e o último
+/// momento em que cada um deu sinal de vida.
+fn montar_sinais(
+    presencas: &[(String, Campos)],
+    remotos: &[(String, Campos)],
+    titulos: &HashMap<String, String>,
+    agora: DateTime<Utc>,
+) -> (HashMap<String, Sinais>, HashMap<String, DateTime<Utc>>) {
     let mut sinais: HashMap<String, Sinais> = HashMap::new();
     let mut vistos: HashMap<String, DateTime<Utc>> = HashMap::new();
     let mut ver = |uid: &str, quando: Option<DateTime<Utc>>| {
@@ -184,9 +182,7 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
             *v = (*v).max(q);
         }
     };
-
-    // rooms/{jogo}/presence/{uid}
-    for (caminho, c) in &presencas {
+    for (caminho, c) in presencas {
         let partes: Vec<&str> = caminho.split('/').collect();
         let [_, sala, _, uid] = partes.as_slice() else { continue };
         let visto = ler_data(c, "lastSeen");
@@ -201,7 +197,7 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
             s.presenca = Some((estado, titulo));
         }
     }
-    for (uid, c) in &remotos {
+    for (uid, c) in remotos {
         let desktop = ler_mapa(c, "desktop").and_then(|d| ler_inteiro(&d, "seenAt")).and_then(de_milissegundos);
         ver(uid, desktop);
         let s = sinais.entry(uid.clone()).or_default();
@@ -213,6 +209,40 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
             }
         }
     }
+    (sinais, vistos)
+}
+
+/// Quem está conectado agora (online, ausente, jogando ou ao vivo): conta para o tempo conectado.
+pub async fn conectados_agora(fs: &Firestore) -> Result<Vec<String>, AppError> {
+    let (presencas, remotos) = tokio::try_join!(fs.consultar_caminhos(consulta_presencas()), fs.consultar(consulta_remotos()))?;
+    let (sinais, _) = montar_sinais(&presencas, &remotos, &HashMap::new(), Utc::now());
+    Ok(sinais.into_iter().filter(|(uid, s)| id_valido(uid) && situacao(s).0 != "offline").map(|(uid, _)| uid).collect())
+}
+
+/// Todos os jogadores com a situação de agora e a moderação.
+pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
+    let agora = Utc::now();
+    let (usuarios, jogadores, perfis, carteiras, moderacoes, presencas, remotos, jogos, denuncias) = tokio::try_join!(
+        fs.consultar(selecionar("users", &["displayName", "createdAt", "updatedAt"])),
+        fs.consultar(selecionar("players", &["email", "lastSeenAt", "clientVersion", "connectedSeconds"])),
+        fs.consultar(selecionar("publicProfiles", &["handle", "displayName"])),
+        fs.consultar(selecionar("wallets", &["balance"])),
+        fs.listar("moderation"),
+        fs.consultar_caminhos(consulta_presencas()),
+        fs.consultar(consulta_remotos()),
+        fs.consultar(selecionar("games", &["title"])),
+        crate::services::denuncias::todas(fs),
+    )?;
+    let denunciados = crate::services::denuncias::abertas_por_autor(&denuncias);
+
+    let titulos: HashMap<String, String> = jogos.into_iter().filter_map(|(id, c)| Some((id, ler_texto(&c, "title")?))).collect();
+    let usuarios: HashMap<String, Campos> = usuarios.into_iter().collect();
+    let jogadores: HashMap<String, Campos> = jogadores.into_iter().collect();
+    let perfis: HashMap<String, Campos> = perfis.into_iter().collect();
+    let carteiras: HashMap<String, Campos> = carteiras.into_iter().collect();
+    let moderacoes: HashMap<String, Campos> = moderacoes.into_iter().collect();
+
+    let (sinais, vistos) = montar_sinais(&presencas, &remotos, &titulos, agora);
 
     let uids: BTreeSet<&String> = usuarios.keys().chain(jogadores.keys()).filter(|uid| id_valido(uid)).collect();
     let mut lista: Vec<UsuarioAdmin> = uids
@@ -231,6 +261,8 @@ pub async fn listar(fs: &Firestore) -> Result<Vec<UsuarioAdmin>, AppError> {
                 is_admin: email.as_ref().is_some_and(|e| FirebaseUser { uid: uid.clone(), email: Some(e.clone()), email_verified: true }.e_admin()),
                 email,
                 created_at: usuario.and_then(|c| ler_data(c, "createdAt")),
+                updated_at: usuario.and_then(|c| ler_data(c, "updatedAt")),
+                connected_seconds: jogador.and_then(|c| ler_inteiro(c, "connectedSeconds")).unwrap_or(0),
                 last_seen_at: ultimo,
                 client_version: jogador.and_then(|c| ler_texto(c, "clientVersion")),
                 balance: carteiras.get(uid).and_then(|c| ler_inteiro(c, "balance")),

@@ -47,7 +47,22 @@ where
     Router::new()
         .route("/api/client/update/{target}/{arch}/{current}", get(atualizacao))
         .route("/api/client/downloads", get(downloads))
+        .route("/api/client/downloads/click", post(clique_no_download))
         .layer(Extension(firestore))
+}
+
+/// `POST /api/client/downloads/click` (público): o site avisa o clique num instalador (`sendBeacon`,
+/// que pode mandar o JSON como texto). Sempre `204`; o Client Manager do Lab mostra os números.
+async fn clique_no_download(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    headers: HeaderMap,
+    corpo: String,
+) -> Result<StatusCode, AppError> {
+    let clique: crate::services::cliques_download::Clique =
+        serde_json::from_str(corpo.trim()).map_err(|_| AppError::bad_request("clique inválido"))?;
+    let ip = crate::services::cliques_download::ip_do_visitante(headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
+    crate::services::cliques_download::registrar(&firestore, &clique, &ip).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

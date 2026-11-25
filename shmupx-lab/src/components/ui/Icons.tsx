@@ -81,6 +81,9 @@ export const IconCoins = (p: SVGProps<SVGSVGElement>) => (
 export const IconUsers = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></Icon>
 );
+export const IconMonitor = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="m9 9 3 3 3-3M12 6v6" /></Icon>
+);
 export const IconCalendar = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Icon>
 );

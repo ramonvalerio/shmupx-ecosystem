@@ -6,6 +6,7 @@ import LoginScreen from "./components/layout/LoginScreen";
 import Button from "./components/ui/Button";
 import CatalogView from "./features/catalog/CatalogView";
 import CoinsView from "./features/coins/CoinsView";
+import ClientView from "./features/client/ClientView";
 import UsersView from "./features/users/UsersView";
 import { useUsers } from "./features/users/useUsers";
 import { useReports } from "./features/users/useReports";
@@ -85,6 +86,8 @@ function Lab({ onSwitchEnvironment }: { onSwitchEnvironment?: () => void }) {
 
       {view === "catalog" ? (
         <CatalogView games={catalog.games} loading={catalog.loading} error={catalog.error} onReload={catalog.reload} onSaved={catalog.upsert} onDeleted={catalog.remove} />
+      ) : view === "client" ? (
+        <ClientView />
       ) : view === "coins" ? (
         <CoinsView users={users.users} usersLoading={users.loading} preselectedUid={coinsFor} onPreselectedUsed={clearCoinsFor} />
       ) : view === "users" ? (

@@ -288,6 +288,26 @@ export interface AdminUser {
   moderation: UserModeration;
   /** Denúncias do chat ainda abertas contra o jogador. */
   reports_open: number;
+  /** Última alteração do perfil. */
+  updated_at?: string;
+  /** Tempo total com o ShmupX aberto (online, ausente, jogando ou ao vivo), contado desde 25/11/2026. */
+  connected_seconds: number;
+}
+
+export type DownloadPlatform = "windows" | "appimage" | "deb" | "android";
+
+/** Client Manager: cliques nos instaladores do site, visitantes anônimos e versões em uso. */
+export interface ClientOverview {
+  /** Cliques por dia (AAAA-MM-DD, horário de Brasília), só os dias com clique. */
+  days: { day: string; clicks: Partial<Record<DownloadPlatform, number>> }[];
+  /** Um item por visitante anônimo: os dias em que clicou. */
+  visitors: string[][];
+  versions: { version: string; players: number; active_7d: number }[];
+  downloads: Partial<Record<"windows" | "appimage" | "deb", { version: string; url: string; size?: number }>>;
+}
+
+export function getClientOverview(): Promise<ClientOverview> {
+  return adminRequest<ClientOverview>("/api/admin/client/overview");
 }
 
 export type ChatReportReason = "abuse" | "spam" | "inappropriate" | "other";

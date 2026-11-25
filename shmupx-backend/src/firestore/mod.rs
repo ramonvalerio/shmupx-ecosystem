@@ -195,6 +195,21 @@ impl Firestore {
         Ok(())
     }
 
+    /// Soma valores a campos numéricos (`increment`, atômico no servidor), criando o documento ou o
+    /// campo que ainda não existe. Cada item é `(caminho, campo, valor)`; vai em lotes de 400 escritas.
+    pub async fn somar(&self, itens: &[(String, String, i64)]) -> Result<(), AppError> {
+        for lote in itens.chunks(400) {
+            let escritas: Vec<Value> = lote
+                .iter()
+                .map(|(caminho, campo, n)| {
+                    json!({ "transform": { "document": self.nome(caminho), "fieldTransforms": [{ "fieldPath": campo, "increment": valor::inteiro(*n) }] } })
+                })
+                .collect();
+            let _: Value = self.post(&format!("{}:commit", self.raiz), &json!({ "writes": escritas })).await?;
+        }
+        Ok(())
+    }
+
     /// Lista os documentos de uma coleção de primeiro nível, como `(id, campos)`.
     pub async fn listar(&self, colecao: &str) -> Result<Vec<(String, Campos)>, AppError> {
         Ok(self.listar_com_datas(colecao).await?.into_iter().map(|d| (d.id, d.campos)).collect())

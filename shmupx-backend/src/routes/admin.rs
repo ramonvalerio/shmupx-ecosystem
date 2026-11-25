@@ -41,6 +41,7 @@ where
         .route("/api/admin/coins/grants/{id}/retry", post(repetir_distribuicao))
         .route("/api/admin/users", get(listar_usuarios))
         .route("/api/admin/users/{uid}/moderation", put(moderar_usuario))
+        .route("/api/admin/client/overview", get(painel_do_client))
         .route("/api/admin/reports", get(listar_denuncias))
         .route("/api/admin/reports/{id}/resolve", post(resolver_denuncia))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
@@ -358,6 +359,16 @@ async fn moderar_usuario(
 ) -> Result<Json<Moderacao>, AppError> {
     exigir_admin(&usuario)?;
     Ok(Json(usuarios::moderar(&firestore, &uid, entrada, &usuario).await?))
+}
+
+/// `GET /api/admin/client/overview`: Client Manager (cliques nos instaladores do site, visitantes
+/// anônimos e versões do Client em uso).
+async fn painel_do_client(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<crate::services::cliques_download::PainelClient>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(crate::services::cliques_download::painel(&firestore).await?))
 }
 
 /// `GET /api/admin/reports`: denúncias do chat, abertas primeiro.

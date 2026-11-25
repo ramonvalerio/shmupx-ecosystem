@@ -2,6 +2,7 @@
 //! no Firestore dentro de transações.
 
 pub mod catalogo;
+pub mod cliques_download;
 pub mod denuncias;
 pub mod distribuicoes;
 pub mod email;
@@ -12,6 +13,7 @@ pub mod perfil;
 pub mod placar;
 pub mod ranking;
 pub mod robotx;
+pub mod tempo_conectado;
 pub mod usuarios;
 pub mod versoes;
 pub mod youtube;
