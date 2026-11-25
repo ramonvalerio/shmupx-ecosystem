@@ -29,7 +29,7 @@
   border: 1px solid var(--rk-rule); border-left: 0; background: var(--rk-panel) linear-gradient(#ffffff05 1px, transparent 1px) 0 0 / 100% 24px;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%);
 }
-.rk-leader::after { content: ""; position: absolute; top: -1px; right: 18px; width: 22px; height: 22px; border-top: 2px solid var(--rk-red); border-right: 2px solid var(--rk-red); pointer-events: none; }
+.rk-leader::after { content: ""; position: absolute; top: -1px; right: -1px; width: 22px; height: 22px; border-top: 2px solid var(--rk-red); border-right: 2px solid var(--rk-red); pointer-events: none; }
 .rk-leader > :not(.rk-hit) { position: relative; z-index: 1; pointer-events: none; }
 .rk-leader .rk-yt:not(.is-off) { pointer-events: auto; }
 .rk-leader:hover { background-color: #232323; }
