@@ -117,6 +117,16 @@ fn de_milissegundos(ms: i64) -> Option<DateTime<Utc>> {
     Utc.timestamp_millis_opt(ms).single()
 }
 
+/// Título do jogo com o modo ao lado (`Darius Gaiden · Ranked`), quando o modo é conhecido.
+fn com_modo(titulo: String, modo: Option<&str>) -> String {
+    match modo {
+        Some("training") => format!("{titulo} · Training"),
+        Some("ranked") => format!("{titulo} · Ranked"),
+        Some("live") => format!("{titulo} · Live"),
+        _ => titulo,
+    }
+}
+
 /// Presença mais "forte" vence: ao vivo > jogando > online > ausente.
 fn peso(estado: &str) -> u8 {
     match estado {
@@ -191,7 +201,10 @@ fn montar_sinais(
             continue;
         }
         let estado = ler_texto(c, "state").unwrap_or_else(|| "online".into());
-        let titulo = ler_texto(c, "playingTitle").filter(|_| estado == "playing").or_else(|| titulos.get(*sala).cloned());
+        let titulo = ler_texto(c, "playingTitle")
+            .filter(|_| estado == "playing")
+            .map(|t| com_modo(t, ler_texto(c, "playingKind").as_deref()))
+            .or_else(|| titulos.get(*sala).cloned());
         let s = sinais.entry(uid.to_string()).or_default();
         if s.presenca.as_ref().is_none_or(|(atual, _)| peso(&estado) > peso(atual)) {
             s.presenca = Some((estado, titulo));
@@ -205,7 +218,7 @@ fn montar_sinais(
         if let Some(jogo) = ler_mapa(c, "playing") {
             let batida = ler_inteiro(&jogo, "beatAt").and_then(de_milissegundos);
             if batida.is_some_and(|b| agora - b < Duration::seconds(JOGANDO_SEGUNDOS)) {
-                s.jogando = ler_texto(&jogo, "title");
+                s.jogando = ler_texto(&jogo, "title").map(|titulo| com_modo(titulo, ler_texto(&jogo, "kind").as_deref()));
             }
         }
     }
@@ -378,6 +391,14 @@ mod tests {
         assert_eq!(situacao(&jogando), ("playing".into(), Some("Earthion".into())));
         let live = Sinais { presenca: Some(("live".into(), Some("Darius".into()))), jogando: Some("Darius".into()), ..Default::default() };
         assert_eq!(situacao(&live), ("live".into(), Some("Darius".into())));
+    }
+
+    #[test]
+    fn modo_ao_lado_do_titulo() {
+        assert_eq!(com_modo("Ketsui".into(), Some("ranked")), "Ketsui · Ranked");
+        assert_eq!(com_modo("Ketsui".into(), Some("training")), "Ketsui · Training");
+        assert_eq!(com_modo("Ketsui".into(), None), "Ketsui");
+        assert_eq!(com_modo("Ketsui".into(), Some("outro")), "Ketsui");
     }
 
     #[test]
