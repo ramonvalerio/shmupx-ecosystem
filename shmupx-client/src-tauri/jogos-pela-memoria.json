@@ -4,5 +4,9 @@
   { "game": "zed-blade", "rom": "zedblade" },
   { "game": "ketsui", "rom": "ket" },
   { "game": "grind-stormer", "rom": "grindstm" },
-  { "game": "battle-garegga", "rom": "bgaregga" }
+  { "game": "battle-garegga", "rom": "bgaregga" },
+  { "game": "carrier-air-wing", "rom": "cawing" },
+  { "game": "dodonpachi", "rom": "ddonpach" },
+  { "game": "espgaluda-ii", "rom": "espgal2" },
+  { "game": "raiden-dx", "rom": "raidendx" }
 ]

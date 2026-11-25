@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn outro_jogo_ou_sem_telemetria_segue_pelo_video() {
         assert_eq!(resultado(&Telemetria::default()), Ok(None));
-        let t = run(&[r#"SHMUPX {"ev":"start","rom":"ddonpach","map":"ok","ranked":true,"start_state":true,"frame":0}"#]);
+        let t = run(&[r#"SHMUPX {"ev":"start","rom":"ddp3","map":"ok","ranked":true,"start_state":true,"frame":0}"#]);
         assert_eq!(resultado(&t), Ok(None));
     }
 
@@ -264,12 +264,13 @@ mod tests {
 
     #[test]
     fn lista_dos_jogos_pela_memoria() {
-        for rom in ["sonicwi2", "dariusg", "zedblade", "ket", "grindstm", "bgaregga"] {
+        for rom in ["sonicwi2", "dariusg", "zedblade", "ket", "grindstm", "bgaregga", "cawing", "ddonpach", "espgal2", "raidendx"] {
             assert!(rom_pela_memoria(rom), "{rom}");
         }
-        assert!(!rom_pela_memoria("ddonpach"));
+        assert!(!rom_pela_memoria("ddp3"));
         assert_eq!(roms_pela_memoria("darius-gaiden"), ["dariusg"]);
-        assert!(roms_pela_memoria("dodonpachi").is_empty());
+        assert_eq!(roms_pela_memoria("dodonpachi"), ["ddonpach"]);
+        assert!(roms_pela_memoria("dodonpachi-daioujou").is_empty());
     }
 
     #[test]
