@@ -173,6 +173,12 @@ for (const [key, value] of Object.entries(PLAYING_ENGLISH)) ENGLISH[key] ??= val
 // Menu ShmupX do MiSTer: jogos do Lab marcados com MiSTer entram ao sincronizar a biblioteca.
 const MISTER_MENU_ENGLISH: Record<string, string> = {
   "Menu ShmupX do MiSTer atualizado: {games}.": "MiSTer ShmupX menu updated: {games}.",
+  "Monitor dos jogos": "Game monitor",
+  "O principal do Windows": "The Windows main display",
+  "Monitor {number} · {width}×{height}": "Monitor {number} · {width}×{height}",
+  "Monitor {number} · {width}×{height} (principal do Windows)": "Monitor {number} · {width}×{height} (Windows main display)",
+  "Monitor escolhido (desligado agora)": "Chosen monitor (disconnected now)",
+  "O monitor escolhido não está ligado agora: os jogos abrem no principal do Windows até ele voltar.": "The chosen monitor is not connected now: games open on the Windows main display until it is back.",
   "{count} jogos do seu MiSTer têm sala no ShmupX:": "{count} games on your MiSTer have a ShmupX room:",
   "Ao conectar, o ShmupX lê os jogos do MiSTer, instala o menu ShmupX nele e liga o seu jogador à sua conta: as partidas entram no seu perfil e no ranking. Usuário e senha vazios usam os de fábrica do MiSTer (root / 1).": "When you connect, ShmupX reads the MiSTer games, installs the ShmupX menu on it and links your player to your account: your runs go to your profile and the ranking. Empty user and password use the MiSTer factory defaults (root / 1).",
   "Informe o IP do MiSTer (Menu › Sistema mostra o endereço). Os jogos de arcade, Mega Drive e Neo Geo dele que têm sala no ShmupX ficam marcados na coleção, e as partidas valem para o ranking.": "Enter the MiSTer IP (Menu › System shows the address). Its arcade, Mega Drive and Neo Geo games that have a ShmupX room are marked in the collection, and your runs count for the ranking.",

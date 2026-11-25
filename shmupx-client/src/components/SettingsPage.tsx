@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PageHeading, type Section } from "./ClientPages";
 import { defaultPreferences, type ClientPreferences } from "./settingsState";
 import ImportGamesDialog from "./ImportGamesDialog";
@@ -13,7 +13,7 @@ import YouTubeNoChannelDialog from "./YouTubeNoChannelDialog";
 import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
-import { EMULATOR_RESOLUTIONS, defaultEmulatorSettings, useEmulatorSettings, type EmulatorResolution } from "../data/emulatorSettings";
+import { EMULATOR_RESOLUTIONS, defaultEmulatorSettings, listMonitors, useEmulatorSettings, type EmulatorResolution, type PcMonitor } from "../data/emulatorSettings";
 
 const GROUPS = [
   { id: "profile", title: "Perfil", detail: "Avatar, nome, nick e assinatura", icon: "◉" },
@@ -38,9 +38,19 @@ function EmulatorSettingsCard() {
   const { t } = useI18n();
   const { settings, update, saved } = useEmulatorSettings();
   const resolution = EMULATOR_RESOLUTIONS.find((r) => r.id === settings.resolution) ?? EMULATOR_RESOLUTIONS[0];
+  const [monitors, setMonitors] = useState<PcMonitor[]>([]);
+  useEffect(() => { listMonitors().then(setMonitors).catch(() => setMonitors([])); }, []);
+  const monitorLabel = (m: PcMonitor) => t(m.principal ? "Monitor {number} · {width}×{height} (principal do Windows)" : "Monitor {number} · {width}×{height}", { number: m.numero, width: m.largura, height: m.altura });
+  const savedMonitorGone = settings.monitor !== "" && monitors.length > 0 && !monitors.some((m) => m.id === settings.monitor);
   return <>
     <SettingsCard title="Vídeo do emulador" detail="Como o ShmupX Emulator abre os jogos de arcade neste computador. Vale a partir do próximo jogo aberto.">
       <label className="checkbox-field"><input type="checkbox" checked={!settings.windowed} onChange={(event) => update({ ...settings, windowed: !event.target.checked, scanlines: true })} />{t("Abrir sempre em tela cheia")}</label>
+      {(monitors.length > 1 || savedMonitorGone) && <label className="settings-field">{t("Monitor dos jogos")}<select value={settings.monitor} onChange={(event) => update({ ...settings, monitor: event.target.value })}>
+        <option value="">{t("O principal do Windows")}</option>
+        {monitors.map((m) => <option key={m.id} value={m.id}>{monitorLabel(m)}</option>)}
+        {savedMonitorGone && <option value={settings.monitor}>{t("Monitor escolhido (desligado agora)")}</option>}
+      </select></label>}
+      {savedMonitorGone && <p className="muted">{t("O monitor escolhido não está ligado agora: os jogos abrem no principal do Windows até ele voltar.")}</p>}
       <label className="settings-field">{t("Resolução de vídeo")}<select value={settings.resolution} onChange={(event) => update({ ...settings, resolution: event.target.value as EmulatorResolution })}>{EMULATOR_RESOLUTIONS.map((r) => <option key={r.id} value={r.id}>{t(r.label)}</option>)}</select></label>
       <p className="muted">{t(resolution.detail)}</p>
     </SettingsCard>

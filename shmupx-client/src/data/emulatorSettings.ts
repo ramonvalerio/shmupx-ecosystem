@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 /** Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Mesmos campos do Rust (`VideoDoMotor`). */
 export interface EmulatorSettings {
@@ -8,6 +9,23 @@ export interface EmulatorSettings {
   scanlines: boolean;
   /** `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC. */
   resolution: EmulatorResolution;
+  /** Monitor onde os jogos abrem, pelo nome do Windows (`\\.\DISPLAY2`); vazio = o principal do Windows. */
+  monitor: string;
+}
+
+/** Monitor ligado ao PC (Rust `MonitorDoPc`). */
+export interface PcMonitor {
+  id: string;
+  numero: number;
+  largura: number;
+  altura: number;
+  principal: boolean;
+}
+
+/** Monitores ligados ao PC, do principal para os outros (só no app desktop). */
+export async function listMonitors(): Promise<PcMonitor[]> {
+  if (!isTauri()) return [];
+  return invoke<PcMonitor[]>("emulador_monitores");
 }
 
 export type EmulatorResolution = "native" | "crt15";
@@ -20,7 +38,7 @@ export const EMULATOR_RESOLUTIONS: { id: EmulatorResolution; label: string; deta
 const KEY = "shmupx.emulator.settings";
 
 export function defaultEmulatorSettings(): EmulatorSettings {
-  return { windowed: true, scanlines: true, resolution: "native" };
+  return { windowed: true, scanlines: true, resolution: "native", monitor: "" };
 }
 
 /** Preferências salvas neste computador; sem armazenamento, valem as padrão. */
@@ -34,6 +52,7 @@ export function readEmulatorSettings(): EmulatorSettings {
       // Sem opção na tela por enquanto: acima de 240p (fora da TV de tubo) as scanlines ficam sempre ligadas.
       scanlines: true,
       resolution: EMULATOR_RESOLUTIONS.some((r) => r.id === saved.resolution) ? (saved.resolution as EmulatorResolution) : fallback.resolution,
+      monitor: typeof saved.monitor === "string" ? saved.monitor : fallback.monitor,
     };
   } catch {
     return fallback;

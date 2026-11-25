@@ -297,12 +297,52 @@ pub struct VideoDoMotor {
     pub scanlines: bool,
     /// `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC.
     pub resolution: String,
+    /// Monitor onde o jogo abre, pelo nome do Windows (`\\.\DISPLAY2`); vazio = o principal do
+    /// Windows. Monitor que não está mais ligado: o motor abre no principal.
+    pub monitor: String,
 }
 
 impl Default for VideoDoMotor {
     fn default() -> Self {
-        Self { windowed: true, scanlines: true, resolution: "native".into() }
+        Self { windowed: true, scanlines: true, resolution: "native".into(), monitor: String::new() }
     }
+}
+
+/// Nome de monitor do Windows aceito no `-screen` (`\\.\DISPLAY1`…): vai como argumento do motor.
+fn monitor_valido(nome: &str) -> bool {
+    nome.strip_prefix(r"\\.\DISPLAY").is_some_and(|n| !n.is_empty() && n.len() <= 3 && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Monitor ligado ao PC, para Configurações › Emulador.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MonitorDoPc {
+    /// Nome do Windows (`\\.\DISPLAY2`), o valor guardado na preferência.
+    pub id: String,
+    /// Número do monitor no Windows (`DISPLAY2` → 2), como em Configurações › Tela.
+    pub numero: u32,
+    pub largura: u32,
+    pub altura: u32,
+    pub principal: bool,
+}
+
+/// Monitores ligados ao PC, do principal para os outros (pela ordem do Windows).
+pub fn monitores(app: &AppHandle) -> Vec<MonitorDoPc> {
+    let principal = app.primary_monitor().ok().flatten().and_then(|m| m.name().cloned());
+    let mut lista: Vec<MonitorDoPc> = app
+        .available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|m| {
+            let id = m.name()?.clone();
+            if !monitor_valido(&id) {
+                return None;
+            }
+            let numero = id.trim_start_matches(r"\\.\DISPLAY").parse().ok()?;
+            Some(MonitorDoPc { principal: principal.as_deref() == Some(id.as_str()), numero, largura: m.size().width, altura: m.size().height, id })
+        })
+        .collect();
+    lista.sort_by_key(|m| (!m.principal, m.numero));
+    lista
 }
 
 /// Cadeia de efeitos (bgfx) das scanlines, publicada junto do motor em `bgfx/chains/`.
@@ -322,6 +362,10 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
     }
     if video.scanlines && !crt && scanlines_disponiveis {
         args.extend(["-video".into(), "bgfx".into(), "-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
+    }
+    // Monitor escolhido pelo jogador (em janela e em tela cheia).
+    if monitor_valido(&video.monitor) {
+        args.extend(["-screen".into(), video.monitor.clone()]);
     }
     args
 }
@@ -477,8 +521,19 @@ mod tests {
         // A gravação que precisa da janela vence a tela cheia.
         assert_eq!(argumentos_de_video(&tela_cheia, true, true)[0], "-window");
         // TV de tubo: resolução do GroovyMAME (15 kHz) e nada de scanlines por cima.
-        let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao };
+        let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao.clone() };
         assert_eq!(argumentos_de_video(&crt, false, true), ["-window"]);
+        // Monitor escolhido vai no -screen; nome estranho é ignorado (abre no principal).
+        let segundo = VideoDoMotor { monitor: r"\\.\DISPLAY2".into(), scanlines: false, ..padrao.clone() };
+        assert_eq!(argumentos_de_video(&segundo, false, true), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
+        let estranho = VideoDoMotor { monitor: r"\\.\DISPLAY2 -x".into(), scanlines: false, ..padrao };
+        assert_eq!(argumentos_de_video(&estranho, false, true), ["-window", "-monitor", "lcd"]);
+    }
+
+    #[test]
+    fn so_nomes_de_monitor_do_windows() {
+        assert!(monitor_valido(r"\\.\DISPLAY1") && monitor_valido(r"\\.\DISPLAY12"));
+        assert!(!monitor_valido("") && !monitor_valido(r"\\.\DISPLAY") && !monitor_valido("DISPLAY1") && !monitor_valido(r"\\.\DISPLAY1;x"));
     }
 
     #[test]

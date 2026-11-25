@@ -49,6 +49,7 @@ pub fn run() {
             steam::controles::motor_captura_parar,
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
+            steam::commands::emulador_monitores,
             steam::commands::emulador_definir_pasta,
             steam::commands::emulador_baixar_roms,
             steam::commands::mister_biblioteca,

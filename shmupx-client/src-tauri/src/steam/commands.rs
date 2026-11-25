@@ -188,6 +188,13 @@ pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super
         .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada())
 }
 
+/// Monitores ligados ao PC, para escolher onde o ShmupX Emulator abre os jogos (Configurações ›
+/// Emulador).
+#[tauri::command]
+pub fn emulador_monitores(app: AppHandle) -> Vec<super::emulador::MonitorDoPc> {
+    super::emulador::monitores(&app)
+}
+
 /// Baixa para a pasta padrão (`roms` do Client) os ROMs de `roms.json` que o jogador ainda não tem
 /// em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Ver [`super::roms_auto`].
 #[tauri::command]
