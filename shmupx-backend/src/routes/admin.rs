@@ -11,6 +11,8 @@ use crate::firestore::Firestore;
 use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
 use crate::services::catalogo::{self, Jogo, JogoEntrada};
 use crate::services::denuncias::{self, Denuncia, Resolucao};
+use crate::services::eventos::{self, Evento, EventoEntrada};
+use crate::services::planos::{self, Plano, PlanoEntrada};
 use crate::services::distribuicoes::{self, Distribuicao, DistribuicaoEntrada};
 use crate::services::usuarios::{self, Moderacao, ModeracaoEntrada, UsuarioAdmin};
 use crate::services::email::{mensagem_da_versao, Ses};
@@ -44,6 +46,10 @@ where
         .route("/api/admin/client/overview", get(painel_do_client))
         .route("/api/admin/reports", get(listar_denuncias))
         .route("/api/admin/reports/{id}/resolve", post(resolver_denuncia))
+        .route("/api/admin/plans", get(listar_planos))
+        .route("/api/admin/plans/{id}", put(salvar_plano).delete(excluir_plano))
+        .route("/api/admin/events", get(listar_eventos))
+        .route("/api/admin/events/{id}", put(salvar_evento).delete(excluir_evento))
         .route_layer(middleware::from_fn(exigir_usuario_firebase))
         .layer(Extension(firestore))
         .layer(Extension(email))
@@ -405,4 +411,72 @@ async fn cancelar_versao(
     notificacoes::esconder_versao(&firestore, &cancelada.version).await?;
     println!("versões: {} cancelou {}", usuario.uid, cancelada.version);
     Ok(Json(cancelada))
+}
+
+/// `GET /api/admin/plans`: os planos de assinatura, na ordem do Lab.
+async fn listar_planos(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Vec<Plano>>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(planos::listar(&firestore).await?))
+}
+
+/// `PUT /api/admin/plans/{id}`: cria ou atualiza o plano.
+async fn salvar_plano(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+    Json(entrada): Json<PlanoEntrada>,
+) -> Result<Json<Plano>, AppError> {
+    exigir_admin(&usuario)?;
+    let plano = planos::salvar(&firestore, &id, entrada).await?;
+    println!("planos: {} salvou o plano {} (active={})", usuario.uid, plano.id, plano.active);
+    Ok(Json(plano))
+}
+
+/// `DELETE /api/admin/plans/{id}`: apaga o plano.
+async fn excluir_plano(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    exigir_admin(&usuario)?;
+    planos::excluir(&firestore, &id).await?;
+    println!("planos: {} excluiu o plano {id}", usuario.uid);
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+/// `GET /api/admin/events`: todos os eventos, inclusive os não publicados.
+async fn listar_eventos(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+) -> Result<Json<Vec<Evento>>, AppError> {
+    exigir_admin(&usuario)?;
+    Ok(Json(eventos::listar(&firestore).await?))
+}
+
+/// `PUT /api/admin/events/{id}`: cria ou atualiza o evento; `published` o mostra no Client.
+async fn salvar_evento(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+    Json(entrada): Json<EventoEntrada>,
+) -> Result<Json<Evento>, AppError> {
+    exigir_admin(&usuario)?;
+    let evento = eventos::salvar(&firestore, &id, entrada).await?;
+    println!("eventos: {} salvou o evento {} (published={})", usuario.uid, evento.id, evento.published);
+    Ok(Json(evento))
+}
+
+/// `DELETE /api/admin/events/{id}`: apaga o evento (some do Client).
+async fn excluir_evento(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    exigir_admin(&usuario)?;
+    eventos::excluir(&firestore, &id).await?;
+    println!("eventos: {} excluiu o evento {id}", usuario.uid);
+    Ok(Json(serde_json::json!({ "id": id })))
 }

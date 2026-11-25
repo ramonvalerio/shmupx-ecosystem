@@ -356,3 +356,74 @@ export function moderateUser(uid: string, input: UserModerationInput): Promise<U
 export function cancelRelease(version: string): Promise<ClientRelease> {
   return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/cancel`, { method: "POST" });
 }
+
+/** Período de cobrança do plano. */
+export type PlanPeriod = "monthly" | "quarterly" | "semiannual" | "yearly";
+
+/** Plano de assinatura (`plans/{id}`). Preço em centavos de real. */
+export interface Plan {
+  id: string;
+  name: string;
+  description: string;
+  price_cents: number;
+  period: PlanPeriod;
+  coins_per_period: number;
+  benefits: string[];
+  active: boolean;
+  order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+export type PlanInput = Omit<Plan, "id" | "created_at" | "updated_at">;
+
+export function listPlans(): Promise<Plan[]> {
+  return adminRequest<Plan[]>("/api/admin/plans");
+}
+/** Cria ou atualiza o plano. */
+export function savePlan(id: string, input: PlanInput): Promise<Plan> {
+  return adminRequest<Plan>(`/api/admin/plans/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export async function deletePlan(id: string): Promise<void> {
+  await adminRequest<{ id: string }>(`/api/admin/plans/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Modo que vale no evento (as tabelas do ranking). */
+export type EventMode = "highscore" | "1cc" | "caravan";
+
+/** Evento ou torneio (`events/{id}`). `published` o mostra no Client. */
+export interface LabEvent {
+  id: string;
+  title: string;
+  description: string;
+  game_ids: string[];
+  mode: EventMode;
+  starts_at: string | null;
+  ends_at: string | null;
+  rules: string[];
+  prizes: string[];
+  published: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+export interface LabEventInput {
+  title: string;
+  description: string;
+  game_ids: string[];
+  mode: EventMode;
+  starts_at: string;
+  ends_at: string;
+  rules: string[];
+  prizes: string[];
+  published: boolean;
+}
+
+export function listEvents(): Promise<LabEvent[]> {
+  return adminRequest<LabEvent[]>("/api/admin/events");
+}
+/** Cria ou atualiza o evento. Os jogos precisam estar no catálogo. */
+export function saveEvent(id: string, input: LabEventInput): Promise<LabEvent> {
+  return adminRequest<LabEvent>(`/api/admin/events/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+export async function deleteEvent(id: string): Promise<void> {
+  await adminRequest<{ id: string }>(`/api/admin/events/${encodeURIComponent(id)}`, { method: "DELETE" });
+}

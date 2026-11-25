@@ -29,6 +29,8 @@ beforeEach(async () => {
       "games/draft": { title: "Draft", published: false },
       "events/cup": { published: true, startsAt: now },
       "events/private": { published: false, startsAt: now },
+      "plans/pro": { name: "Pro", active: true },
+      "plans/old": { name: "Old", active: false },
       "gameplays/run-a": { ownerId: "alice", status: "approved", createdAt: now },
       "gameplays/run-b": { ownerId: "bob", status: "analyzing", createdAt: now },
       "wallets/alice": { balance: 3 },
@@ -80,6 +82,16 @@ test("catalog and events require published filters", async () => {
   await assertSucceeds(getDocs(query(collection(store, "events"), where("published", "==", true), orderBy("startsAt"), limit(50))));
   await assertFails(getDocs(collection(store, "games")));
   await assertFails(getDoc(doc(store, "games/draft")));
+});
+
+test("plans: only active plans are readable and nobody writes from the client", async () => {
+  const store = db("alice");
+  await assertSucceeds(getDoc(doc(store, "plans/pro")));
+  await assertFails(getDoc(doc(store, "plans/old")));
+  await assertSucceeds(getDocs(query(collection(store, "plans"), where("active", "==", true))));
+  await assertFails(getDocs(collection(store, "plans")));
+  await assertFails(setDoc(doc(store, "plans/free"), { name: "Free", active: true }));
+  await assertFails(getDoc(doc(db(), "plans/pro")));
 });
 
 test("gameplay history is private and queries must constrain owner", async () => {
