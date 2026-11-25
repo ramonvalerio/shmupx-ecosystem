@@ -31,7 +31,7 @@ export default function CreditsBadge({ uid, className = "", spin = 0, onPlay, pl
   return (
     <div className={`credits-badge ${credits !== null && credits <= 5 ? "is-low" : ""} ${className}`} title={t("Fichas: cada partida valendo ranking gasta 1. O modo treino não gasta.")}>
       {onPlay
-        ? <button type="button" className="credits-coin-button" onClick={onPlay} disabled={playDisabled} aria-label={t(live ? "Play Ranked com live" : "Play Ranked")}
+        ? <button type="button" className="credits-coin-button" data-tutorial="play-coin" onClick={onPlay} disabled={playDisabled} aria-label={t(live ? "Play Ranked com live" : "Play Ranked")}
             title={playTitle ?? t("Clique na ficha para jogar valendo ranking.")}>{coin}</button>
         : coin}
       <strong>{credits ?? "—"}</strong>

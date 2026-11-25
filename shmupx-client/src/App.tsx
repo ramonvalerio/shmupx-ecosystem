@@ -18,10 +18,10 @@ import { useDialogFocus } from "./components/useDialogFocus";
 import { takePendingRunMode } from "./data/gameModes";
 import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
 import { useRemoteLaunch } from "./data/remoteLaunch";
-import { setAccountPlaying, useClientMisterGame, usePlayingClaim } from "./data/playing";
+import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
 import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./data/misterLibrary";
-import { readMisterPlayer } from "./data/misterPlayer";
+import { misterAuth, readMisterPlayer } from "./data/misterPlayer";
 import { downloadMissingRoms } from "./data/emulatorLibrary";
 
 interface GameLaunchedPayload {
@@ -87,8 +87,23 @@ export default function App() {
   const ownGame = liveGameId ? { gameId: liveGameId, kind: "live" as const, platform: launchPlatforms[liveGameId] ?? "emulator" }
     : recordingRoomId ? { gameId: recordingRoomId, kind: "ranked" as const, platform: launchPlatforms[recordingRoomId] ?? "steam" }
     : practiceRoomId ? { gameId: practiceRoomId, kind: "training" as const, platform: launchPlatforms[practiceRoomId] ?? "emulator" }
-    : clientMister ? { gameId: clientMister.gameId, kind: clientMister.kind, platform: "mister" as const }
     : null;
+  // Jogo aberto por aqui no MiSTer: marca a conta uma vez; o agente do MiSTer assume (renova a cada
+  // minuto e libera na volta ao menu, mesmo com o Client fechado).
+  useEffect(() => {
+    if (!signedUid || !clientMister) return;
+    const now = Date.now();
+    publishPlaying(signedUid, { gameId: clientMister.gameId, title: clientMister.title, platform: "mister", kind: clientMister.kind, device: "pc", startedAt: now, beatAt: now })
+      .catch((error) => console.warn("jogo aberto: falha ao avisar a conta:", error));
+  }, [signedUid, clientMister]);
+  // A conta deixou de ter esse jogo do MiSTer (o agente avisou a volta ao menu): o PC esquece também.
+  const misterSeen = useRef(false);
+  useEffect(() => {
+    const playing = accountRemote?.playing;
+    if (!clientMister) { misterSeen.current = false; return; }
+    if (playing?.platform === "mister" && playing.gameId === clientMister.gameId) misterSeen.current = true;
+    else if (misterSeen.current) { misterSeen.current = false; setClientMisterGame(null); }
+  }, [accountRemote?.playing, clientMister]);
   // MiSTer já conhecido (IP salvo): a biblioteca dele se atualiza sozinha ao abrir o Client (se nunca
   // foi importada aqui ou tem mais de 6 h), e o menu ShmupX do MiSTer ganha os jogos do Lab que faltam.
   const misterSynced = useRef(false);
@@ -99,6 +114,11 @@ export default function App() {
     const host = library?.host || player?.host;
     if (!host) return;
     misterSynced.current = true;
+    // Agente do ShmupX no MiSTer: atualiza sozinho quando há versão nova publicada (só com o MiSTer
+    // no menu, para não cortar uma partida; mantém jogadores e tokens).
+    invoke<string | null>("mister_atualizar_agente", { host, ...misterAuth(player?.password) })
+      .then((version) => { if (version) console.info(`MiSTer: agente do ShmupX atualizado para ${version}`); })
+      .catch((error) => console.warn("MiSTer: falha ao atualizar o agente:", error));
     if (library && Date.now() - library.importedAt < 6 * 60 * 60_000) return;
     scanMister(host, player?.password)
       .then((result) => {
@@ -115,7 +135,7 @@ export default function App() {
   }, []);
 
   usePlayingClaim(signedUid, ownGame
-    ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? clientMister?.title ?? ownGame.gameId, device: "pc" }
+    ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? ownGame.gameId, device: "pc" }
     : null);
   useEffect(() => {
     if (!isTauri() || !signedUid) return;
@@ -208,6 +228,7 @@ export default function App() {
       recordingRoomId={recordingRoomId}
       onSelectRoom={setSelectedRoomId}
       runs={runs}
+      practiceGames={practiceGames}
       renderRoom={(room, actions) => (
         <LiveRoomView
           room={room}

@@ -152,7 +152,7 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
   }
   return (
     <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={ref} role="alertdialog" aria-modal="true" aria-labelledby="launch-problem-title" aria-describedby="launch-problem-text" tabIndex={-1} className="controller-dialog close-room-dialog launch-problem-dialog">
+      <div ref={ref} role="alertdialog" aria-modal="true" aria-labelledby="launch-problem-title" aria-describedby="launch-problem-text" tabIndex={-1} className="controller-dialog close-room-dialog launch-problem-dialog" data-tutorial="launch-problem">
         <header>
           <div>
             <h2 id="launch-problem-title">{title}</h2>

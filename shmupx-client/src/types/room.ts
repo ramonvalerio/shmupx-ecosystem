@@ -16,6 +16,8 @@ export interface GameRoom {
   platforms: PlayOn[];
   /** Modos competitivos marcados no Lab; vazio = todos. */
   modes?: GameMode[];
+  /** Ranked no MiSTer liberado no Lab (o agente lê o placar da memória lá). Sem isso, MiSTer é só Training. */
+  rankedMister?: boolean;
   /** Metadados do catálogo (Lab); ausentes quando o admin não preencheu. */
   platform?: string;
   developer?: string;

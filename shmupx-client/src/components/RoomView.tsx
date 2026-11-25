@@ -54,6 +54,9 @@ export interface RoomViewProps {
 type ChatFilter = "everyone" | "robotx";
 type SortBy = "score" | "name";
 
+/** Modo do jogo aberto, em etiqueta ao lado do título na lista de jogadores. No treino, a lista não
+ *  mostra o jogo: só "Treinando". */
+const KIND_LABEL = { ranked: "Ranked", live: "Live" } as const;
 const ROBOTX = "RobotX";
 
 /** Conversa reservada com o RobotX, por jogador e sala: continua ao sair e voltar à sala. */
@@ -218,7 +221,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const meLive = liveHere && live.state.status === "live";
   // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
   // O jogo aberto na conta (aqui, no MiSTer ou pelo celular) aparece na linha do jogador.
-  const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title } : undefined;
+  const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : undefined;
   const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
   const rest = others
     .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false }))
@@ -318,8 +321,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src={avatarOf(avatars, player.you ? playerId : player.id)} alt="" /></span>
               <span className="room-player-info">
                 <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
-                {player.game
-                  ? <small className="room-player-game" title={t("Jogando {game}", { game: player.game.title })}>▶ {player.game.title}</small>
+                {player.game?.kind === "training"
+                  ? <small className="room-player-game">▶ {t("Treinando")}</small>
+                  : player.game
+                  ? <small className="room-player-game" title={t("Jogando {game}", { game: player.game.title })}>
+                      ▶ {player.game.title}
+                      {player.game.kind && <span className={`room-player-kind is-${player.game.kind}`}>{t(KIND_LABEL[player.game.kind])}</span>}
+                    </small>
                   : <small>{player.score === null ? t("Hi-Score: —") : t("Hi-Score: {score}", { score: player.score.toLocaleString() })}</small>}
               </span>
               <span className="room-player-state">

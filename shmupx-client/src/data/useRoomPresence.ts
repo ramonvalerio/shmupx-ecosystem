@@ -23,13 +23,18 @@ export interface RoomPresence {
   /** Live no ar: vídeo do YouTube e quantos assistem (atualizado a cada 30 s por quem transmite). */
   live?: { videoId: string; viewers: number };
   /** Jogo aberto na conta do jogador (em qualquer sala, modo ou plataforma). */
-  game?: { id: string; title: string };
+  game?: { id: string; title: string; kind?: PlayingKind };
 }
+
+/** Modo do jogo aberto: Training (sem ficha), Ranked (vale ranking) ou Live (Ranked ao vivo). */
+export type PlayingKind = "training" | "ranked" | "live";
+const PLAYING_KINDS: readonly string[] = ["training", "ranked", "live"];
 
 /** Jogo aberto na conta, publicado na presença de todas as salas abertas. */
 export interface PresenceGame {
   gameId: string;
   title: string;
+  kind?: PlayingKind;
 }
 
 /** Live do jogador nesta sala (o vídeo do YouTube é o id da transmissão). */
@@ -57,7 +62,7 @@ function presenceFrom(uid: string, data: Record<string, unknown>, now: number): 
   const live = !offline && state === "live" && videoId ? { videoId, viewers: typeof data.liveViewers === "number" ? data.liveViewers : 0 } : undefined;
   const status: PresenceStatus = offline ? "offline" : live ? "live" : state === "away" ? "away" : "online";
   const game = !offline && typeof data.playingGameId === "string" && typeof data.playingTitle === "string"
-    ? { id: data.playingGameId, title: data.playingTitle } : undefined;
+    ? { id: data.playingGameId, title: data.playingTitle, kind: typeof data.playingKind === "string" && PLAYING_KINDS.includes(data.playingKind) ? data.playingKind as PlayingKind : undefined } : undefined;
   return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && (state === "playing" || Boolean(game)), live, game };
 }
 
@@ -101,6 +106,7 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
   const liveVideo = live?.videoId ?? null;
   const playingId = playing?.gameId ?? null;
   const playingTitle = playing ? playing.title.trim().slice(0, 80) : null;
+  const playingKind = playing?.kind ?? null;
   useEffect(() => {
     if (!me.uid || !rooms) return;
     const ids = rooms.split("\n");
@@ -116,7 +122,9 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
         const ref = presenceRef(roomId, me.uid);
         if (playingId && playingTitle) {
           // Regras antigas (sem os campos do jogo) recusam a gravação: tenta de novo sem o jogo.
-          setDoc(ref, { ...data, playingGameId: playingId, playingTitle })
+          setDoc(ref, { ...data, playingGameId: playingId, playingTitle, ...(playingKind ? { playingKind } : {}) })
+            // Regras antigas: sem o modo, depois sem o jogo.
+            .catch(() => setDoc(ref, { ...data, playingGameId: playingId, playingTitle }))
             .catch(() => setDoc(ref, data))
             .catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
         } else {
@@ -127,7 +135,7 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
     void beat();
     const timer = window.setInterval(() => void beat(), HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away, playingId, playingTitle]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away, playingId, playingTitle, playingKind]);
 }
 
 /** Presença de um jogador (a janela da live acompanha quem transmite). */

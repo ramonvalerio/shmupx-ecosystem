@@ -3,17 +3,18 @@ import { deleteField, getDoc, setDoc } from "firebase/firestore";
 import { remoteRef, type RemoteState } from "./remoteLaunch";
 
 /**
- * Um jogo por vez na conta. O jogo aberto fica em `remoteLaunch/{uid}.playing`: o Client grava os
- * jogos que abre (no PC ou no MiSTer) e o ShmupX Lite os que abre no MiSTer. Antes de abrir outro,
- * os dois conferem aqui e, se houver um aberto, mostram qual e oferecem PARAR JOGO.
+ * Jogo aberto na conta: `remoteLaunch/{uid}.playing`. O Client grava os jogos que abre no PC, e o
+ * agente do MiSTer (pelo backend) os que abrem no MiSTer, por qualquer caminho, e libera a conta na
+ * volta ao menu. Um jogo valendo ranking (Ranked ou Live) por vez: antes de abrir outro, o Client e o
+ * Lite conferem aqui. Training não trava a conta nem é travado (ver `blocksLaunch`).
  */
 export interface PlayingNow {
   gameId: string;
   title: string;
   platform: "steam" | "emulator" | "mister";
   kind: "training" | "ranked" | "live";
-  /** Quem abriu: o Client do PC ou o Lite do celular. */
-  device: "pc" | "lite";
+  /** Quem marcou: o Client do PC, o Lite do celular ou o agente do próprio MiSTer. */
+  device: "pc" | "lite" | "mister";
   /** ms desde a época Unix. */
   startedAt: number;
   /** Último sinal de quem abriu (renovado a cada minuto enquanto o jogo está aberto). */
@@ -23,15 +24,29 @@ export interface PlayingNow {
 export const PLAYING_BEAT_MS = 60_000;
 /** O Client renova sozinho: 3 min sem sinal = o PC fechou sem avisar. */
 const PC_STALE_MS = 3 * 60_000;
-/** O celular em segundo plano não renova; no MiSTer vale por até 4 h (ou até alguém parar). */
-const MISTER_STALE_MS = 4 * 60 * 60_000;
+/**
+ * Jogo no MiSTer marcado pelo Client ou pelo Lite (antes de o agente do MiSTer assumir): vale por
+ * pouco tempo. O agente marca de novo (`device: "mister"`) e renova a cada minuto até a volta ao menu.
+ */
+const MISTER_HANDOFF_MS = 5 * 60_000;
 
 /** O registro ainda vale (quem abriu não sumiu). */
 export function playingActive(playing: PlayingNow | undefined | null, now = Date.now()): playing is PlayingNow {
   if (!playing?.gameId) return false;
-  const limit = playing.platform === "mister" ? MISTER_STALE_MS : PC_STALE_MS;
+  const limit = playing.platform === "mister" && playing.device !== "mister" ? MISTER_HANDOFF_MS : PC_STALE_MS;
   return now - Math.max(playing.beatAt, playing.startedAt) < limit;
 }
+
+/**
+ * O jogo aberto impede abrir este? Só um jogo valendo ranking por vez: Training nunca trava (nem é
+ * travado), então dá para treinar à vontade e trocar de jogo sem fechar o anterior.
+ */
+export function blocksLaunch(open: PlayingNow | null | undefined, kind: PlayingNow["kind"]): open is PlayingNow {
+  return Boolean(open) && open!.kind !== "training" && kind !== "training";
+}
+
+/** Jogo sem leitura de placar no MiSTer (flag "Ranked no MiSTer" do Lab desligada): Client e Lite. */
+export const RANKED_MISTER_OFF = "No MiSTer, este jogo é só Training: o ShmupX ainda não lê o placar dele lá. Para Ranked, jogue no Emulador.";
 
 /** Grava (ou apaga, com `null`) o jogo aberto da conta. */
 export async function publishPlaying(uid: string, playing: PlayingNow | null) {
@@ -90,7 +105,7 @@ export function useAccountPlaying(): PlayingNow | null {
 export function playingWhere(playing: PlayingNow): { platform: string; device: string } {
   return {
     platform: playing.platform === "mister" ? "MiSTer" : playing.platform === "steam" ? "Steam" : "Emulador",
-    device: playing.device === "lite" ? "pelo celular" : "no PC",
+    device: playing.device === "lite" ? "pelo celular" : playing.device === "mister" ? "no próprio MiSTer" : "no PC",
   };
 }
 

@@ -1,0 +1,84 @@
+/* Tutorial da primeira vez (FirstRunTutorial.tsx): tela escurecida com o recorte no botão certo, a mão
+ * apontando e o balão do passo. Identidade do Client: Share Tech, superfícies grafite chapadas (#1f1f1f,
+ * #141414), linhas de 1px, placa em chevron e cantoneiras da sala. Sem brilho nenhum (nada de
+ * box-shadow, text-shadow, drop-shadow ou gradiente radial). Ciano var(--cyan) e vermelho lavado #c8605a;
+ * nada de amarelo. */
+.tut-root {
+  --tut-cyan: var(--cyan); --tut-cyan-2: var(--cyan-2); --tut-red: #c8605a; --tut-panel: #1f1f1f; --tut-well: #141414; --tut-ink: var(--on-cyan);
+  --tut-rule: #ffffff1f; --tut-text: #f0fcff; --tut-muted: #a8c1cc; --tut-dim: #6f8a94;
+  position: fixed; inset: 0; z-index: 200; pointer-events: none; font-family: "Share Tech", "Segoe UI", system-ui, sans-serif; font-synthesis: none;
+}
+.tut-dim { position: fixed; pointer-events: auto; background: #080a0bd1; }
+
+/* Recorte: régua de 1px ciano e as cantoneiras (ciano em cima à esquerda, vermelha embaixo à direita). */
+.tut-frame { position: fixed; pointer-events: none; border: 1px solid color-mix(in srgb, var(--cyan) 54.9%, transparent); }
+.tut-frame::before, .tut-frame::after { content: ""; position: absolute; width: 14px; height: 14px; }
+.tut-frame::before { top: -4px; left: -4px; border-top: 2px solid var(--tut-cyan); border-left: 2px solid var(--tut-cyan); }
+.tut-frame::after { right: -4px; bottom: -4px; border-right: 2px solid var(--tut-red); border-bottom: 2px solid var(--tut-red); }
+
+/* Mão: a ponta do indicador fica no ponto (left, top); toca no alvo e um anel de 1px se abre. */
+.tut-hand { position: fixed; width: 0; height: 0; pointer-events: none; }
+.tut-hand-inner { position: absolute; left: -16px; top: -3px; display: block; transform-origin: 16px 3px; animation: tut-tap 1.3s cubic-bezier(.3, .7, .4, 1) infinite; }
+.tut-hand.is-down .tut-hand-inner { animation-name: tut-tap-down; }
+.tut-hand.is-nudge .tut-hand-inner { animation: tut-nudge .36s ease-out 1, tut-tap 1.3s cubic-bezier(.3, .7, .4, 1) .36s infinite; }
+.tut-hand.is-down.is-nudge .tut-hand-inner { animation: tut-nudge-down .36s ease-out 1, tut-tap-down 1.3s cubic-bezier(.3, .7, .4, 1) .36s infinite; }
+.tut-hand-svg { display: block; overflow: visible; }
+.tut-glove { fill: #f0fcff; stroke: #101010; stroke-width: 2; stroke-linejoin: round; }
+.tut-crease { fill: none; stroke: #8fa9b3; stroke-width: 1.5; stroke-linecap: round; }
+.tut-cuff { fill: var(--tut-red); stroke: #101010; stroke-width: 2; }
+.tut-cuff-line { stroke: #101010; stroke-width: 1; }
+.tut-ring { position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border: 1px solid var(--tut-cyan); border-radius: 50%; opacity: 0; animation: tut-ring 1.3s ease-out infinite; }
+@keyframes tut-tap { 0%, 100% { transform: translate(12px, 16px); } 38%, 52% { transform: translate(0, 0) scale(1); } 45% { transform: translate(0, 0) scale(.93); } }
+@keyframes tut-tap-down { 0%, 100% { transform: translate(12px, -16px) scaleY(-1); } 38%, 52% { transform: translate(0, 0) scaleY(-1); } 45% { transform: translate(0, 0) scale(.93, -.93); } }
+@keyframes tut-nudge { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-7px, 0); } 75% { transform: translate(7px, 0); } }
+@keyframes tut-nudge-down { 0%, 100% { transform: translate(0, 0) scaleY(-1); } 25% { transform: translate(-7px, 0) scaleY(-1); } 75% { transform: translate(7px, 0) scaleY(-1); } }
+@keyframes tut-ring { 0%, 40% { transform: scale(.3); opacity: 0; } 46% { opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+
+/* Balão do passo: painel chapado com pauta, canto cortado embaixo à direita e a placa do passo em chevron. */
+.tut-bubble {
+  position: fixed; width: 360px; max-width: calc(100vw - 32px); pointer-events: auto; color: var(--tut-text);
+  padding: 0 0 14px; border: 1px solid var(--tut-rule); border-top: 2px solid var(--tut-cyan);
+  background: var(--tut-panel) linear-gradient(#ffffff05 1px, transparent 1px) 0 0 / 100% 24px;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+  animation: tut-in .18s ease-out;
+}
+.tut-bubble::after { content: ""; position: absolute; left: 0; bottom: 0; width: 16px; height: 16px; border-left: 2px solid var(--tut-red); border-bottom: 2px solid var(--tut-red); pointer-events: none; }
+.tut-bubble.is-done { width: 420px; }
+@keyframes tut-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tut-head { display: flex; align-items: stretch; gap: 12px; height: 34px; padding-right: 60px; border-bottom: 1px solid var(--tut-rule); background: var(--tut-well); }
+.tut-plate { display: flex; align-items: center; padding: 0 22px 0 14px; background: var(--tut-cyan); color: var(--tut-ink); font-size: 17px; letter-spacing: .06em; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); }
+.tut-kicker { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--tut-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tut-kicker i { flex-shrink: 0; width: 18px; height: 2px; background: var(--tut-red); }
+.tut-count { position: absolute; top: 11px; right: 46px; font-size: 10.5px; letter-spacing: .1em; color: var(--tut-dim); white-space: nowrap; }
+.tut-title { margin: 14px 18px 6px; font-size: 21px; font-weight: 400; line-height: 1.15; color: var(--tut-text); }
+.tut-text { margin: 0 18px; font-size: 13.5px; line-height: 1.55; color: var(--tut-muted); }
+.tut-note { margin: 10px 18px 0; padding: 7px 10px; border-left: 2px solid var(--tut-red); background: var(--tut-well); font-size: 12px; line-height: 1.45; color: #e3958f; }
+.tut-foot { display: flex; align-items: center; gap: 12px; margin: 14px 18px 0; }
+.tut-pips { display: flex; gap: 4px; margin-right: auto; order: -1; }
+.tut-pips i { width: 14px; height: 4px; border: 1px solid #ffffff2e; }
+.tut-pips i.is-past { background: var(--tut-cyan-2); border-color: var(--tut-cyan-2); }
+.tut-pips i.is-now { background: var(--tut-cyan); border-color: var(--tut-cyan); width: 26px; }
+.tut-skip { padding: 4px 0; border: 0; background: transparent; color: var(--tut-dim); font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.tut-skip:hover { color: var(--tut-text); }
+.tut-next { height: 32px; padding: 0 24px 0 14px; border: 0; background: var(--tut-cyan); color: var(--tut-ink); font: inherit; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
+.tut-next:hover { background: #8ffdff; }
+.tut-close { position: absolute; top: 0; right: 0; width: 34px; height: 34px; border: 0; border-left: 1px solid var(--tut-rule); background: transparent; color: var(--tut-dim); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; }
+.tut-close:hover { color: var(--tut-text); background: #ffffff0a; }
+.tut-root button:focus-visible { outline: 2px solid var(--tut-cyan); outline-offset: 2px; }
+
+/* Tema claro: o tutorial continua escuro (é uma camada por cima da tela). */
+@media (prefers-reduced-motion: reduce) {
+  .tut-hand-inner, .tut-hand.is-nudge .tut-hand-inner { animation: none; }
+  .tut-hand.is-down .tut-hand-inner { animation: none; transform: scaleY(-1); }
+  .tut-ring { animation: none; opacity: 1; transform: scale(1); }
+  .tut-bubble { animation: none; }
+}
+
+/* Botão HOW TO USE no canto superior direito: abre o tutorial a qualquer momento. Contorno ciano;
+ * cheio ao passar o mouse, como os filtros marcados. */
+.how-to-use { display: inline-flex; flex-shrink: 0; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border: 1px solid var(--cyan); border-radius: 0; background: transparent; color: var(--cyan); font-size: 11.5px; letter-spacing: .1em; white-space: nowrap; cursor: pointer; }
+.how-to-use span { display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; letter-spacing: 0; }
+.how-to-use:hover:not(:disabled) { background: var(--cyan); color: var(--on-cyan); }
+.how-to-use:disabled { opacity: .45; cursor: default; }
+.theme-light .how-to-use:hover:not(:disabled) { color: #fff; }
+.big-picture .how-to-use { display: none; }

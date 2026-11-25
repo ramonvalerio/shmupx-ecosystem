@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n } from "@client/i18n";
 import { GAME_MODES, misterEntryMatches, modesFor } from "@client/data/gameModes";
@@ -6,7 +6,7 @@ import { romsFor } from "@client/data/emulatorLibrary";
 import { misterMatches, useMisterLibrary } from "@client/data/misterLibrary";
 import { misterAuth, readMisterPlayer, type MisterMenuGame } from "@client/data/misterPlayer";
 import { desktopOnline, sendRemoteCommand, useRemoteLaunch, type RemotePlatform } from "@client/data/remoteLaunch";
-import { clearPlaying, playingActive, playingWhere, usePlayingClaim, type PlayingNow } from "@client/data/playing";
+import { blocksLaunch, clearPlaying, playingActive, playingWhere, publishPlaying, RANKED_MISTER_OFF, type PlayingNow } from "@client/data/playing";
 import type { GameMode, GameRoom } from "@client/types/room";
 import type { Kind, Platform, PlayPreset } from "./prefs";
 import { useBackLayer } from "./back";
@@ -90,11 +90,25 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<PlayApi["error"]>(null);
 
-  // Um jogo por vez na conta: o jogo aberto no MiSTer por aqui fica declarado na conta.
-  usePlayingClaim(uid, session?.where === "mister"
-    ? { gameId: session.room.id, title: session.room.title, platform: "mister", kind: session.kind, device: "lite" }
-    : null);
+  // Jogo aberto no MiSTer por aqui: marca a conta uma vez; o agente do MiSTer assume (renova a cada
+  // minuto e libera na volta ao menu, com o celular no bolso ou o app fechado).
+  const misterRoomId = session?.where === "mister" ? session.room.id : null;
+  useEffect(() => {
+    if (session?.where !== "mister") return;
+    const now = Date.now();
+    publishPlaying(uid, { gameId: session.room.id, title: session.room.title, platform: "mister", kind: session.kind, device: "lite", startedAt: now, beatAt: now })
+      .catch((failure) => console.warn("jogo aberto: falha ao avisar a conta:", failure));
+    // Só ao abrir: o agente renova dali em diante.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, misterRoomId]);
   const accountPlaying = playingActive(remote?.playing) ? remote!.playing! : null;
+  // O agente avisou a volta ao menu (a conta ficou sem esse jogo): a sessão do MiSTer termina aqui também.
+  const misterSeen = useRef(false);
+  useEffect(() => {
+    if (!misterRoomId) { misterSeen.current = false; return; }
+    if (accountPlaying?.platform === "mister" && accountPlaying.gameId === misterRoomId) misterSeen.current = true;
+    else if (misterSeen.current) { misterSeen.current = false; setSession(null); }
+  }, [accountPlaying, misterRoomId]);
   // Jogo aberto que este app não está acompanhando (aberto pelo PC, ou num uso anterior do app).
   const external = session ? null : accountPlaying;
 
@@ -104,6 +118,7 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
     if (p === "mister") {
       const player = readMisterPlayer();
       if (!player) return { text: t("Ligue o MiSTer em Ajustes para jogar na TV"), ok: false };
+      if (kind !== "training" && !room.rankedMister) return { text: t("No MiSTer, só Training"), ok: false };
       return { text: kind === "training" ? t("Na TV, como CONVIDADO (sem ficha)") : t("Na TV, como {player}", { player: player.username.toUpperCase() }), ok: true };
     }
     if (!pcOnline) return { text: t("Abra o ShmupX no PC para jogar por lá"), ok: false };
@@ -165,7 +180,9 @@ export function PlayProvider({ uid, onSettings, children }: { uid: string; onSet
 
   const start = useCallback(async (room: GameRoom, kind: Kind, mode: GameMode, platform: Platform): Promise<boolean> => {
     if (session) { setError({ roomId: room.id, message: t("Já tem um jogo aberto: pare o {game} antes de abrir outro.", { game: session.room.title }) }); return false; }
-    if (accountPlaying) {
+    if (platform === "mister" && kind !== "training" && !room.rankedMister) { setError({ roomId: room.id, message: t(RANKED_MISTER_OFF) }); return false; }
+    // Um jogo valendo ranking por vez na conta; Training não trava nem é travado.
+    if (blocksLaunch(accountPlaying, kind)) {
       const where = playingWhere(accountPlaying);
       setError({ roomId: room.id, message: t("Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.", { game: accountPlaying.title, platform: t(where.platform), device: t(where.device) }) });
       return false;

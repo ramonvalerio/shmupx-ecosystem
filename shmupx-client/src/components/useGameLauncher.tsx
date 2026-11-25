@@ -14,10 +14,11 @@ import { PLAY_ON, installCheck, usePlatformOwnership } from "../data/platforms";
 import { checkMister, logFailure } from "../data/launchFailure";
 import { LaunchProblemDialog, type LaunchProblemKind } from "./LaunchProblemDialog";
 import { useDialogFocus } from "./useDialogFocus";
-import { getAccountPlaying, playingWhere, setClientMisterGame } from "../data/playing";
+import { blocksLaunch, getAccountPlaying, playingWhere, RANKED_MISTER_OFF, setClientMisterGame } from "../data/playing";
 
 /** Plataformas em que o jogo roda fora do PC: o Client não tem como abri-lo. */
 const OWN_HARDWARE: Record<string, string> = { mister: "MiSTer", xbox360: "Xbox 360" };
+export { RANKED_MISTER_OFF } from "../data/playing";
 
 /** Nome comparável (sem acento, minúsculas, hífens): o menu do MiSTer usa o título do jogo. */
 const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -83,10 +84,13 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
-  /** Um jogo por vez na conta: com um aberto (aqui ou no celular), avisa e não abre outro. */
-  function blockedByOpenGame(): boolean {
+  /**
+   * Um jogo valendo ranking por vez na conta: com um Ranked/Live aberto (aqui, no celular ou no
+   * MiSTer), avisa e não abre outro Ranked/Live. Training não trava nem é travado.
+   */
+  function blockedByOpenGame(kind: PlayKind): boolean {
     const open = getAccountPlaying();
-    if (!open) return false;
+    if (!blocksLaunch(open, kind)) return false;
     const where = playingWhere(open);
     setError(t("Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.", { game: open.title, platform: t(where.platform), device: t(where.device) }));
     return true;
@@ -96,10 +100,13 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   function play(kind: PlayKind) {
     setError(null);
     setNotice(null);
-    if (blockedByOpenGame()) return;
+    if (blockedByOpenGame(kind)) return;
     setPractice(kind === "training");
-    // A live captura a janela do jogo neste PC: o MiSTer (na TV) fica de fora.
-    const list = options().filter((id) => kind !== "live" || id !== "mister");
+    // A live captura a janela do jogo neste PC: o MiSTer (na TV) fica de fora. Ranked no MiSTer só
+    // nos jogos em que o ShmupX lê o placar da memória lá (flag do Lab).
+    const all = options().filter((id) => kind !== "live" || id !== "mister");
+    const list = all.filter((id) => kind === "training" || id !== "mister" || room.rankedMister);
+    if (list.length === 0 && all.includes("mister")) { setError(t(RANKED_MISTER_OFF)); return; }
     if (list.length === 0) {
       setError(room.platform && OWN_HARDWARE[room.platform]
           ? t("Este jogo roda no {platform}: abra-o no próprio aparelho.", { platform: OWN_HARDWARE[room.platform] })
@@ -117,7 +124,8 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   function playNow(kind: PlayKind, platform: PlayOn, chosen: GameMode) {
     setError(null);
     setNotice(null);
-    if (blockedByOpenGame()) return;
+    if (blockedByOpenGame(kind)) return;
+    if (kind !== "training" && platform === "mister" && !room.rankedMister) { setError(t(RANKED_MISTER_OFF)); return; }
     setPractice(kind === "training");
     setMode(chosen);
     if (kind === "live") { onLive?.(platform, chosen); return; }

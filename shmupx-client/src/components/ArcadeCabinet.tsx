@@ -250,8 +250,10 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
       <rect {...screen} fill={`url(#${id("glass")})`} pointerEvents="none" />
       {/* Painel, corpo de baixo e portas: abaixo do monitor */}
       <g transform="translate(0 36)">
-      {/* Painel de controle preto, largo e projetado à frente */}
-      <path d="M34 182 H286 Q294 182 294 191 L295 207 Q295 216 286 216 H34 Q25 216 25 207 L26 191 Q26 182 34 182 Z" fill="#16191c" stroke="#7d878e" strokeWidth="1.5" />
+      {/* Painel de controle preto, largo e projetado à frente. Em Minhas coleções, o mouse em cima
+          acende o contorno: é por aqui que se abrem os controles. */}
+      <g className="cabinet-panel">
+      <path className="cabinet-panel-face" d="M34 182 H286 Q294 182 294 191 L295 207 Q295 216 286 216 H34 Q25 216 25 207 L26 191 Q26 182 34 182 Z" fill="#16191c" stroke="#7d878e" strokeWidth="1.5" />
       <path d="M30 186 H290" stroke="#ffffff" strokeOpacity=".12" strokeWidth="1" />
       {/* Layout do painel do Astro City: joystick à esquerda, START pequeno em cima, entre os dois, e
           os 4 botões em arco (o 1º mais baixo, os outros mais altos) sobre a faixa cinza, como o painel
@@ -271,6 +273,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
         <circle cx="144.6" cy="187" r="1" fill="#ffffff" fillOpacity=".35" />
       </g>
       {BUTTONS.map((button) => <circle key={button.id} className={`cabinet-cap ${press(button.id)}`} cx={button.x} cy={button.y} r="4.6" fill="#fd4851" />)}
+      </g>
       {/* Corpo de baixo claro, reto: mesma largura do corpo de cima, cantos de baixo levemente arredondados */}
       <path d="M39 216 H281 V281 Q281 288 274 288 H46 Q39 288 39 281 Z" fill={`url(#${id("body")})`} stroke="#7d878e" strokeWidth="1.5" />
       {/* Esquerda: tampa de manutenção (só o recorte e a fechadura) */}

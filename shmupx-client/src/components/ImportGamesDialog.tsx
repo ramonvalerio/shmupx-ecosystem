@@ -117,10 +117,10 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
   const withoutRoom = installed.length - withRoom.length;
 
   return <div className="controller-dialog-backdrop">
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-dialog-title" tabIndex={-1} className="controller-dialog import-games-dialog">
-      <header><div><h2 id="import-dialog-title">{t(source ? "Conectar {platform}" : "Importar jogos", { platform: source ? t(source.title) : "" })}</h2><p>{t(source ? source.detail : "Escolha de onde deseja trazer seus jogos.")}</p></div><div className="import-header-actions">{source && <button data-dialog-close className="secondary-action" onClick={back}>{t("Voltar")}</button>}<button data-dialog-close={!source ? true : undefined} className="secondary-action" onClick={onClose}>{t("Fechar")}</button></div></header>
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-dialog-title" tabIndex={-1} className="controller-dialog import-games-dialog" data-tutorial="import-dialog" data-tutorial-source={sourceId ?? undefined}>
+      <header><div><h2 id="import-dialog-title">{t(source ? "Conectar {platform}" : "Importar jogos", { platform: source ? t(source.title) : "" })}</h2><p>{t(source ? source.detail : "Escolha de onde deseja trazer seus jogos.")}</p></div><div className="import-header-actions">{source && <button data-dialog-close data-tutorial="import-back" className="secondary-action" onClick={back}>{t("Voltar")}</button>}<button data-dialog-close={!source ? true : undefined} data-tutorial="import-close" className="secondary-action" onClick={onClose}>{t("Fechar")}</button></div></header>
       <div className="controller-dialog-body">
-        {!source && <div className="import-source-list">{SOURCES.map((item) => {
+        {!source && <div className="import-source-list" data-tutorial="import-sources">{SOURCES.map((item) => {
           const id = item.id === "local" ? null : (item.id as PlayOn);
           const lib = id ? playable.library(id) : null;
           const count = id && lib?.connected ? counts(id) : null;
@@ -140,18 +140,18 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "emulator" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">E</span><h3>{t("Emulador")}</h3></div>
           <p className="muted">{t(source.body)}</p>
-          {emu.status === "idle" && <div className="emulator-folder-actions">
+          {emu.status === "idle" && <div className="emulator-folder-actions" data-tutorial="import-run">
             <button className="primary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Importar ROMs")}</button>
             <button className="secondary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta de ROMs")}</button>
           </div>}
-          {emu.status === "scanning" && <p className="muted" role="status">{t("Importando os ROMs…")}</p>}
+          {emu.status === "scanning" && <p className="muted" role="status" data-tutorial="import-scanning">{t("Importando os ROMs…")}</p>}
           {emu.status === "error" && <p className="mode-error-inline" role="alert">{t(emu.error ?? "")}</p>}
-          {emu.status === "done" && !emu.found && <div className="integration-notice emulator-not-found" role="alert">
+          {emu.status === "done" && !emu.found && <div className="integration-notice emulator-not-found" role="alert" data-tutorial="import-not-found">
             <strong>{t("Nenhum ROM encontrado")}</strong>
             <p>{t("Não encontramos ROMs neste computador.")}</p>
             <p>{t("Selecione a pasta onde estão os ROMs (arquivos .zip) dos seus jogos.")}</p>
             <div className="emulator-folder-actions">
-              <button className="primary-action" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta de ROMs")}</button>
+              <button className="primary-action" data-tutorial="import-pick-folder" disabled={emuPicking} onClick={() => void pickEmulatorFolder()}>{t(emuPicking ? "Abrindo…" : "Selecionar pasta de ROMs")}</button>
               <button className="secondary-action" disabled={emuPicking} onClick={() => void readEmulator()}>{t("Procurar de novo")}</button>
             </div>
           </div>}
@@ -182,7 +182,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
           <form className="mister-connect-form" onSubmit={(event) => { event.preventDefault(); void readMister(); }}>
             <label className="settings-field">{t("IP do MiSTer")}<input value={mister.host} onChange={(event) => setMister((current) => ({ ...current, host: event.target.value }))} placeholder="192.168.0.23" inputMode="decimal" autoComplete="off" required /></label>
             <label className="settings-field">{t("Senha do FTP (vazio = padrão)")}<input type="password" value={mister.password} onChange={(event) => setMister((current) => ({ ...current, password: event.target.value }))} autoComplete="off" /></label>
-            <button type="submit" className="primary-action" disabled={mister.status === "scanning" || !mister.host.trim()}>{t(mister.status === "scanning" ? "Lendo os jogos do MiSTer…" : "Ler jogos do MiSTer")}</button>
+            <button type="submit" className="primary-action" data-tutorial={mister.status === "done" ? undefined : "import-run"} disabled={mister.status === "scanning" || !mister.host.trim()}>{t(mister.status === "scanning" ? "Lendo os jogos do MiSTer…" : "Ler jogos do MiSTer")}</button>
           </form>
           {mister.status === "error" && <p className="mode-error" role="alert">{t(mister.error ?? "Não foi possível ler o MiSTer.")}</p>}
           {mister.status === "done" && <>
@@ -191,7 +191,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
               ? <><p className="muted">{t("Com sala no ShmupX:")}</p><ul className="import-found-list">{misterRooms.map((room) => <li key={room.id}><span className="supported">✓</span> {room.title}</li>)}</ul></>
               : <p className="muted">{t("Nenhum jogo do MiSTer tem sala no ShmupX ainda.")}</p>}
             {imported === null
-              ? <button className="primary-action" onClick={() => {
+              ? <button className="primary-action" data-tutorial="import-run" onClick={() => {
                   saveMisterLibrary({ host: mister.host, mras: mister.mras ?? [], roms: mister.roms ?? [], importedAt: Date.now() });
                   setImported(misterRooms.length);
                   // Os jogos do Lab marcados com MiSTer que ele tem entram no menu ShmupX do MiSTer.
@@ -215,10 +215,10 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
         {source?.id === "steam" && <>
           <div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">S</span><h3>{t("Steam")}</h3></div>
           <p className="muted">{t(source.body)}</p>
-          {scan.status === "idle" && <button className="primary-action" onClick={() => void importSteam()}>{t("Importar biblioteca da Steam")}</button>}
-          {scan.status === "scanning" && <p className="muted" role="status">{t("Importando os jogos instalados…")}</p>}
+          {scan.status === "idle" && <button className="primary-action" data-tutorial="import-run" onClick={() => void importSteam()}>{t("Importar biblioteca da Steam")}</button>}
+          {scan.status === "scanning" && <p className="muted" role="status" data-tutorial="import-scanning">{t("Importando os jogos instalados…")}</p>}
           {scan.status === "error" && <p className="mode-error" role="alert">{scan.error}</p>}
-          {scan.status === "done" && !scan.found && <div className="integration-notice" role="alert"><strong>{t("Steam não encontrada")}</strong><p>{t("Não encontramos a Steam neste computador. Instale a Steam e tente de novo.")}</p></div>}
+          {scan.status === "done" && !scan.found && <div className="integration-notice" role="alert" data-tutorial="import-not-found"><strong>{t("Steam não encontrada")}</strong><p>{t("Não encontramos a Steam neste computador. Instale a Steam e tente de novo.")}</p></div>}
           {scan.status === "done" && scan.found && <>
             <p role="status"><strong>{t("{count} jogos instalados na sua Steam.", { count: installed.length })}</strong></p>
             {withRoom.length > 0

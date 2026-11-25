@@ -282,6 +282,20 @@ pub async fn mister_parar(host: String, usuario: Option<String>, senha: Option<S
     super::mister_ssh::voltar_ao_menu(host.trim(), &usuario, &senha).await.inspect_err(|e| log::warn!("mister: parar o jogo em {host}: {e}"))
 }
 
+/// MiSTer já conectado: atualiza o agente do ShmupX quando há versão nova publicada (só com o MiSTer
+/// no menu; mantém jogadores, tokens e jogos). `Some(versão)` quando atualizou.
+#[tauri::command]
+pub async fn mister_atualizar_agente(host: String, usuario: Option<String>, senha: Option<String>) -> Result<Option<String>, String> {
+    let (usuario, senha) = acesso(&usuario, &senha);
+    let resultado = super::mister_ssh::atualizar_agente(host.trim(), &usuario, &senha).await;
+    match &resultado {
+        Ok(Some(versao)) => log::info!("mister: agente do ShmupX atualizado para {versao} em {host}"),
+        Ok(None) => {}
+        Err(e) => log::warn!("mister: atualizar o agente em {host}: {e}"),
+    }
+    resultado
+}
+
 /// INICIAR JOGO › MiSTer: abre o jogo do menu ShmupX no MiSTer, já com o jogador e o modo.
 #[tauri::command]
 pub async fn mister_iniciar(host: String, usuario: Option<String>, senha: Option<String>, caminho: String) -> Result<(), String> {

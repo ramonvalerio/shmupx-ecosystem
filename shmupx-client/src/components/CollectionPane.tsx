@@ -220,7 +220,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Buscar seus jogos…")} aria-label={t("Buscar jogos")} />
           <span aria-hidden="true">⌕</span>
         </label>
-        <button type="button" className="collection-import" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
+        <button type="button" className="collection-import" data-tutorial="import-button" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
         <MultiSegmented label="Plataforma" allLabel="Todas" value={platformFilter} options={PLATFORM_FILTERS} onChange={setPlatformFilter} />
         {playable.anyLibrary && <MultiSegmented label="Biblioteca" allLabel="Todos" value={libraryFilter} options={LIBRARY_FILTERS} onChange={setLibraryFilter} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
@@ -237,7 +237,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
         {visible.map((room) => {
           const favorite = preferences.favorites.includes(room.id);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
-            <button type="button" className="game-card" aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
+            <button type="button" className="game-card" data-tutorial={inLibrary(room) ? "game-owned" : undefined} aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
               <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}{!isSupported(room) && <span className="coming-soon-sticker" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Coming soon")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>
@@ -264,7 +264,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
     </section>
 
     {aboutRoom && <GameAboutDialog room={aboutRoom} tags={playable.tags(aboutRoom)} owned={inLibrary(aboutRoom)} onClose={() => setAboutId(null)} />}
-    {!compact && <aside className="collection-details" aria-label={t("Detalhes do jogo")}>
+    {!compact && <aside className="collection-details" data-tutorial="game-details" aria-label={t("Detalhes do jogo")}>
       {selected ? <>
         <header>
           <h2>{selected.title}</h2>

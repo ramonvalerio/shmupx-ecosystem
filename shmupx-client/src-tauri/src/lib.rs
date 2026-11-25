@@ -59,6 +59,7 @@ pub fn run() {
             steam::commands::mister_alcance,
             steam::commands::registrar_falha,
             steam::commands::mister_parar,
+            steam::commands::mister_atualizar_agente,
             steam::commands::mister_sincronizar_menu,
             steam::trailer::steam_trailer,
             steam::commands::mister_procurar,

@@ -10,7 +10,7 @@ import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
 import { useDialogFocus } from "./useDialogFocus";
 import { useWallet } from "../data/useWallet";
-import type { useGameLauncher } from "./useGameLauncher";
+import { RANKED_MISTER_OFF, type useGameLauncher } from "./useGameLauncher";
 
 /** Opções do Play Ranked: transmitir no YouTube e se a live é pública. */
 export interface LivePrefs { on: boolean; public: boolean }
@@ -110,7 +110,7 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
             <p>{t("Como você quer jogar?")}</p>
           </div>
         </header>
-        <div className="play-mode-choices">
+        <div className="play-mode-choices" data-tutorial="play-mode-choices">
           <button type="button" className="play-mode-choice is-training" onClick={onTraining} aria-keyshortcuts="1">
             <span className="play-mode-art" aria-hidden="true" />
             <span className="play-mode-text">
@@ -206,9 +206,11 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     if (target) launcher.playNow("training", target, mode);
     else launcher.play("training");
   }
-  // Ranked Mode indisponível: jogo sem script de validação ou sem fichas (o treino continua).
+  // Ranked Mode indisponível: jogo sem script de validação, no MiSTer sem leitura de placar, ou sem
+  // fichas (o treino continua).
   const rankedBlocked = comingSoon
     ? t("Coming soon: Play Ranked fica disponível quando o jogo tiver o script de validação.")
+    : target === "mister" && !room.rankedMister ? t(RANKED_MISTER_OFF)
     : credits !== null && credits < 1 ? t("Sem fichas: o Ranked Mode precisa de 1 ficha.") : null;
 
   return (

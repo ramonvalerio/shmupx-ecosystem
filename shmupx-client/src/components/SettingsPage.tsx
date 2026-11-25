@@ -165,9 +165,11 @@ function ConnectedLibraries({ rooms, onImport }: { rooms: GameRoom[]; onImport: 
   </SettingsCard>;
 }
 
-export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate, profile, onProfile }: {
+export default function SettingsPage({ rooms = [], preferences, onPreferences, storageError, onNavigate, profile, onProfile, onReplayTutorial }: {
   rooms?: GameRoom[]; preferences: ClientPreferences; onPreferences: (value: ClientPreferences) => void; storageError: boolean; onNavigate: (section: Section) => void;
   profile: PlayerProfile; onProfile: (profile: PlayerProfile) => void;
+  /** "Rever tutorial": fecha as Configurações e abre o passo a passo de importar e jogar. */
+  onReplayTutorial?: () => void;
 }) {
   const { t } = useI18n();
   const [group, setGroup] = useState<typeof GROUPS[number]["id"]>("profile");
@@ -183,13 +185,14 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         {group === "interface" && <>
           <SettingsCard title={t("Idioma do sistema")} detail={t("O idioma muda na hora e fica salvo neste dispositivo.")}><label className="settings-field">{t("Idioma do sistema")}<select value={preferences.language} onChange={(event) => onPreferences({ ...preferences, language: event.target.value === "en" ? "en" : "pt-BR" })}><option value="pt-BR">{t("Português (Brasil)")}</option><option value="en">{t("English")}</option></select></label></SettingsCard>
           <SettingsCard title={t("Visual")} detail={t("Escolha a paleta do ShmupX. A mudança vale na hora e fica guardada para a próxima vez.")}>
-            <div className="theme-options" role="group" aria-label={t("Visual")}>{([{ id: "default", label: "Padrão" }, { id: "dark", label: "Escuro" }, { id: "light", label: "Claro" }] as const).map((theme) => <button key={theme.id} aria-pressed={preferences.appearance === theme.id} onClick={() => onPreferences({ ...preferences, appearance: theme.id })}><span className={`theme-swatch swatch-${theme.id}`} aria-hidden="true" />{t(theme.label)}</button>)}</div>
+            <div className="theme-options" role="group" aria-label={t("Visual")}>{([{ id: "default", label: "Padrão" }, { id: "dark", label: "Escuro" }, { id: "light", label: "Claro" }, { id: "fashion", label: "Fashion" }] as const).map((theme) => <button key={theme.id} aria-pressed={preferences.appearance === theme.id} onClick={() => onPreferences({ ...preferences, appearance: theme.id })}><span className={`theme-swatch swatch-${theme.id}`} aria-hidden="true" />{t(theme.label)}</button>)}</div>
             <label className="checkbox-field"><input type="checkbox" checked={preferences.compact} onChange={(event) => onPreferences({ ...preferences, compact: event.target.checked })} />{t("Coleção compacta")}</label>
           </SettingsCard>
           <SettingsCard title={t("Abrir ao iniciar")} detail={t("O cliente sempre abre na Coleção. Escolha o modo de apresentação.")}>
             <label className="checkbox-field"><input type="checkbox" checked={preferences.startupBigPicture} onChange={(event) => onPreferences({ ...preferences, startupBigPicture: event.target.checked })} />{t("Abrir em modo Big Picture")}</label>
             <p className="muted">{t("No desktop, Big Picture usa tela cheia. Na prévia do navegador, altera a apresentação.")}</p>
           </SettingsCard>
+          {onReplayTutorial && <SettingsCard title={t("Tutorial")} detail={t("Mostra de novo o passo a passo para importar os seus jogos e começar a jogar.")}><button className="secondary-action" onClick={onReplayTutorial}>{t("Rever tutorial")}</button></SettingsCard>}
           <SettingsCard title={t("Preferências da interface")}><p className="muted" role="status">{storageError ? t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.") : t("As alterações são aplicadas e salvas automaticamente neste dispositivo.")}</p><button className="secondary-action" onClick={() => onPreferences(defaultPreferences())}>{t("Restaurar preferências da interface")}</button></SettingsCard>
         </>}
         {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect /></SettingsCard></>}

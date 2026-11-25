@@ -21,6 +21,7 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     coverUrl: typeof data.coverUrl === "string" && data.coverUrl.startsWith(COVER_PREFIX) ? data.coverUrl : undefined,
     platforms: catalogPlayOn(data),
     modes: Array.isArray(data.modes) ? data.modes.filter((m): m is GameMode => m === "highscore" || m === "1cc" || m === "caravan") : [],
+    rankedMister: data.rankedMister === true,
     platform: texto(data.platform),
     developer: texto(data.developer),
     publisher: texto(data.publisher),

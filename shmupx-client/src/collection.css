@@ -10,18 +10,18 @@
 .collection-layout .collection-heading h1 { padding-left: 14px; border-left: 3px solid var(--cyan); font-size: 28px; font-weight: 600; line-height: 1.15; color: #f0fcff; }
 
 .collection-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 18px; margin-bottom: 16px; }
-.collection-layout .collection-search { flex: 1 1 320px; min-width: 220px; height: 32px; padding: 0 12px; border-radius: 2px; background: #141414; border: 1px solid #ffffff1f; }
+.collection-layout .collection-search { flex: 1 1 320px; min-width: 220px; height: 32px; padding: 0 12px; border-radius: 2px; background: var(--gray-141414); border: 1px solid #ffffff1f; }
 .collection-layout .collection-search input { font-size: 13px; }
 .collection-layout .collection-search > span { color: #d7e4e8; font-size: 15px; }
 .collection-segment { display: flex; flex-direction: column; gap: 6px; }
 .collection-segment > span { font-size: 12px; color: #d7e4e8; }
 .collection-segment > div { display: flex; }
-.collection-segment button, .collection-layout .collection-view-tools button { height: 28px; padding: 0 9px; border: 1px solid #ffffff1a; margin-left: -1px; border-radius: 0; background: #141414; color: #d7e4e8; font-size: 11.5px; white-space: nowrap; }
+.collection-segment button, .collection-layout .collection-view-tools button { height: 28px; padding: 0 9px; border: 1px solid #ffffff1a; margin-left: -1px; border-radius: 0; background: var(--gray-141414); color: #d7e4e8; font-size: 11.5px; white-space: nowrap; }
 .collection-segment button:first-child { margin-left: 0; }
-.collection-segment button[aria-pressed=true], .collection-layout .collection-view-tools button[aria-pressed=true] { background: var(--cyan); border-color: var(--cyan); color: #06181b; font-weight: 600; }
-.collection-segment button:hover:not([aria-pressed=true]) { background: #1f1f1f; }
+.collection-segment button[aria-pressed=true], .collection-layout .collection-view-tools button[aria-pressed=true] { background: var(--cyan); border-color: var(--cyan); color: var(--on-cyan); font-weight: 600; }
+.collection-segment button:hover:not([aria-pressed=true]) { background: var(--gray-1f1f1f); }
 /* Filtros de seleção múltipla: um divisor entre opções marcadas lado a lado. */
-.collection-segment button[aria-pressed=true] + button[aria-pressed=true] { border-left-color: #06181b55; }
+.collection-segment button[aria-pressed=true] + button[aria-pressed=true] { border-left-color: color-mix(in srgb, var(--on-cyan) 33.3%, transparent); }
 .collection-layout .collection-view-tools { margin: 0; gap: 4px; }
 .collection-layout .collection-view-tools button { margin-left: 0; min-width: 30px; font-size: 13px; }
 .collection-layout .collection-view-tools button:first-child { font-size: 10px; color: var(--cyan); }
@@ -30,9 +30,9 @@
 .collection-layout .game-grid { grid-template-columns: repeat(auto-fill, minmax(242px, 1fr)); gap: 16px; align-content: start; }
 .collection-layout .collection-card { border: 1px solid #ffffff1a; border-radius: 0; background: #161616; overflow: hidden; }
 .collection-layout .collection-card:hover { border-color: #ffffff40; }
-.collection-layout .collection-card.selected { border-color: var(--cyan); box-shadow: 0 0 0 1px #57fcff40; }
+.collection-layout .collection-card.selected { border-color: var(--cyan); box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 25.1%, transparent); }
 .collection-layout .collection-card.selected::after { content: ""; position: absolute; top: 0; right: 0; width: 0; height: 0; border-style: solid; border-width: 0 22px 22px 0; border-color: transparent var(--cyan) transparent transparent; pointer-events: none; }
-.collection-layout .game-art { height: 220px; aspect-ratio: auto; background: #101010; }
+.collection-layout .game-art { height: 220px; aspect-ratio: auto; background: var(--gray-101010); }
 .collection-layout .game-card-info { gap: 10px; padding: 14px 12px 14px; }
 .collection-layout .game-card-info strong { padding-right: 30px; color: #f0fcff; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .game-card-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #a8c1cc; }
@@ -56,7 +56,7 @@
 .collection-layout .game-grid + .collection-empty, .collection-layout .game-grid { margin-bottom: 18px; }
 
 /* painel de detalhes */
-.collection-details { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 18px 18px 20px; border-left: 1px solid #ffffff14; background: #141414; }
+.collection-details { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 18px 18px 20px; border-left: 1px solid #ffffff14; background: var(--gray-141414); }
 .collection-details > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-left: 12px; border-left: 3px solid var(--cyan); }
 .collection-details h2 { margin: 0; font-size: 19px; font-weight: 600; color: #f0fcff; text-transform: uppercase; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collection-details > header .favorite-action { position: static; transform: none; border: 0; background: transparent; font-size: 20px; color: #d7e4e8; }
@@ -69,6 +69,11 @@
    fora da tela, abre os controles do emulador. */
 .arcade-cabinet.is-configurable { cursor: pointer; }
 .arcade-cabinet.is-configurable [data-cabinet-screen] { cursor: default; }
+/* Mouse no painel de controle: o contorno acende em ciano e o painel brilha, para mostrar que abre
+   a configuração dos controles. */
+.cabinet-panel-face { transition: stroke 120ms ease-out, filter 120ms ease-out, fill 120ms ease-out; }
+.arcade-cabinet.is-configurable .cabinet-panel:hover .cabinet-panel-face { stroke: var(--cyan); fill: #1d2226; filter: drop-shadow(0 0 3px var(--cyan)); }
+@media (prefers-reduced-motion: reduce) { .cabinet-panel-face { transition: none; } }
 .cabinet-cap { transform-box: fill-box; transform-origin: center; transition: transform 70ms ease-out, filter 70ms ease-out; }
 .cabinet-cap.is-pressed { transform: translate(.4px, 1.2px) scale(.88); filter: brightness(.72); transition-duration: 30ms; }
 .cabinet-coin-slot { transition: fill 70ms; }
@@ -86,10 +91,10 @@
 .collection-facts.two-columns dd { text-align: left; }
 .collection-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
 .collection-main-action, .collection-secondary-action { height: 44px; border: 1px solid var(--cyan); font-size: 14px; font-weight: 600; letter-spacing: .1em; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
-.collection-main-action { background: #1d4b50; color: #57fcff; }
+.collection-main-action { background: var(--cyan-deep); color: var(--cyan); }
 .collection-main-action:hover { background: #22595f; }
-.collection-secondary-action { background: transparent; color: #57fcff; }
-.collection-secondary-action:hover { background: #57fcff12; }
+.collection-secondary-action { background: transparent; color: var(--cyan); }
+.collection-secondary-action:hover { background: color-mix(in srgb, var(--cyan) 7.1%, transparent); }
 .collection-last { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid #ffffff14; }
 .collection-last h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #f0fcff; }
 .collection-last > p { margin: 0 0 6px; font-size: 12px; line-height: 1.5; color: #a8c1cc; }
@@ -129,7 +134,7 @@
 
 /* Importar jogos ao lado da busca, no tamanho dos botões de filtro. */
 /* Importar jogos: ação principal da barra, em azul como os filtros marcados. */
-.collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid var(--cyan); border-radius: 0; background: var(--cyan); color: #06181b; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid var(--cyan); border-radius: 0; background: var(--cyan); color: var(--on-cyan); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .collection-layout .collection-import:hover { filter: brightness(1.12); }
 .theme-light .collection-layout .collection-import { color: #fff; }
 /* Coming soon: jogo ainda sem script de validação. Não tenho ainda: fora das bibliotecas (capa em preto e branco). */
@@ -182,10 +187,10 @@
 .cabinet-control { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #f0fcff; cursor: pointer; }
 .cabinet-control:hover, .cabinet-control:focus-visible { color: var(--cyan); outline: none; }
 .cabinet-expand { margin-left: auto; }
-.cabinet-volume { flex: 1; min-width: 0; max-width: 90px; height: 3px; margin: 0; accent-color: #57fcff; cursor: pointer; }
+.cabinet-volume { flex: 1; min-width: 0; max-width: 90px; height: 3px; margin: 0; accent-color: var(--cyan); cursor: pointer; }
 /* Vídeo grande, centralizado (expandir ou duplo clique). */
 .video-modal-backdrop { z-index: 80; }
-.video-modal { width: min(1100px, 86vw); display: flex; flex-direction: column; border: 1px solid #57fcff55; border-radius: 8px; background: #0b0b0b; box-shadow: 0 24px 80px #000c; overflow: hidden; }
+.video-modal { width: min(1100px, 86vw); display: flex; flex-direction: column; border: 1px solid color-mix(in srgb, var(--cyan) 33.3%, transparent); border-radius: 8px; background: #0b0b0b; box-shadow: 0 24px 80px #000c; overflow: hidden; }
 .video-modal header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #ffffff1a; color: #f0fcff; font-size: 15px; letter-spacing: .04em; }
 .video-modal-close { width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: #f0fcff; font-size: 16px; cursor: pointer; }
 .video-modal-close:hover, .video-modal-close:focus-visible { background: #ffffff14; color: var(--cyan); outline: none; }
@@ -197,8 +202,8 @@
 .collection-layout .collection-list .game-card-developer { flex: 0 0 150px; margin-top: 0; }
 
 /* About no card: no canto de baixo (onde ficava o Coming soon); na lista, antes da estrela. */
-.collection-layout .collection-card > .game-card-about { position: absolute; right: 12px; bottom: 13px; z-index: 1; padding: 3px 10px; border: 1px solid #57fcff59; border-radius: 3px; background: #0f1a1c; color: #57fcff; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
-.collection-layout .collection-card > .game-card-about:hover, .collection-layout .collection-card > .game-card-about:focus-visible { border-color: var(--cyan); background: #1d4b50; outline: none; }
+.collection-layout .collection-card > .game-card-about { position: absolute; right: 12px; bottom: 13px; z-index: 1; padding: 3px 10px; border: 1px solid color-mix(in srgb, var(--cyan) 34.9%, transparent); border-radius: 3px; background: #0f1a1c; color: var(--cyan); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.collection-layout .collection-card > .game-card-about:hover, .collection-layout .collection-card > .game-card-about:focus-visible { border-color: var(--cyan); background: var(--cyan-deep); outline: none; }
 .collection-layout .collection-list .collection-card > .game-card-about { top: 50%; bottom: auto; right: 52px; transform: translateY(-50%); }
 .theme-light .collection-layout .collection-card > .game-card-about { background: #e8f1fd; border-color: #1f6feb66; color: #0b4fb8; }
 

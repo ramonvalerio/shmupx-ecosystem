@@ -20,7 +20,7 @@ export default function PlaySetup({ play, owns, disabled, compact = false }: {
       {play.modes.length > 0 && (
         <div className="room-setup-group">
           <span id={`${uid}-mode`}>{t("Modo de jogo")}</span>
-          <div className="room-chips" role="radiogroup" aria-labelledby={`${uid}-mode`}>
+          <div className="room-chips" role="radiogroup" aria-labelledby={`${uid}-mode`} data-tutorial="play-modes">
             {play.modes.map((m) => (
               <button key={m.id} type="button" role="radio" aria-checked={play.mode === m.id} disabled={disabled} title={t(m.detail)} onClick={() => play.choose({ mode: m.id })}>{m.label}</button>
             ))}

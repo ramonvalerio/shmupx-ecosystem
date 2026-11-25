@@ -85,6 +85,8 @@ export const ENGLISH: Record<string, string> = {
   "Entenda o fluxo de uma run e consulte informações do aplicativo.":"Learn the run flow and view application information.", "Tópicos de ajuda":"Help topics", "Como funciona":"How it works", "Diagnóstico":"Diagnostics", "Da coleção ao placar":"From collection to score", "Escolha seu jogo":"Choose your game", "Abra a Coleção e selecione um título para entrar na sala.":"Open Collection and select a title to enter its room.", "Inicie pela Steam":"Launch via Steam", "Use o botão da sala. Quando o início da run é autorizado, o cliente começa a captura e acompanha o tempo da ficha.":"Use the room's button. Once the run is authorized, the client starts capture and tracks the credit time limit.", "Encerre a run":"End the run", "Use o botão de parada na sala ou aguarde o limite da ficha. O cliente processa a gravação e tenta enviar o resultado.":"Use the room's stop button or wait for the credit time limit. The client processes the recording and attempts to submit the result.", "O catálogo, o saldo de fichas e os rankings exibidos ainda são de demonstração.":"The catalog, credit balance and displayed rankings are still demo data.", "Ambiente":"Environment", "Versão nativa":"Native version", "Aplicativo desktop":"Desktop app", "Prévia no navegador":"Browser preview", "Consultar versão":"Check version", "Não consultada":"Not checked", "Para gravar, o aplicativo precisa do FFmpeg e de um dispositivo de áudio de loopback. A inicialização das runs também depende da autorização do serviço de fichas.":"Recording requires FFmpeg and a loopback audio device. Starting runs also requires authorization from the credit service.", "TEMPO EXPIRADO":"TIME EXPIRED", "Run encerrada — o tempo da ficha em":"Run ended — credit time for", "acabou e a gravação foi cortada automaticamente.":"expired and recording stopped automatically.", "Entendi":"Got it",
   // Moderação (Users Manager do Lab): conta banida/desativada e chat mutado.
   "CONTA BANIDA":"ACCOUNT BANNED", "ACESSO DESATIVADO":"ACCESS DISABLED", "Sua conta foi banida do ShmupX.":"Your account has been banned from ShmupX.", "O acesso da sua conta está desativado.":"Your account access is disabled.", "Você não pode mais jogar valendo ranking nem participar das salas.":"You can no longer play ranked or take part in game rooms.", "Enquanto estiver desativada, você não joga valendo ranking nem participa das salas.":"While it's disabled, you can't play ranked or take part in game rooms.", "Se acha que é um engano, escreva para shmupx-support@googlegroups.com informando o e-mail da sua conta{email}.":"If you think this is a mistake, write to shmupx-support@googlegroups.com with your account email{email}.", "Sair e entrar com outra conta":"Sign out and use another account", "Você está sem permissão para enviar mensagens no chat.":"You're not allowed to send chat messages right now.", "O chat das salas não está disponível para a sua conta.":"Room chat isn't available for your account.",
+  // Indicador global do jogador (topo) e Ranked no MiSTer.
+  "DISPONÍVEL PARA JOGAR":"AVAILABLE TO PLAY", "TREINANDO":"TRAINING", "STOP":"STOP", "Parando…":"Stopping…", "Encerrar a gravação da run":"Stop recording the run", "Parar o jogo e liberar a conta":"Stop the game and free your account", "Training":"Training", "no próprio MiSTer":"on the MiSTer itself", "No MiSTer, só Training":"On MiSTer, Training only", "No MiSTer, este jogo é só Training: o ShmupX ainda não lê o placar dele lá. Para Ranked, jogue no Emulador.":"On MiSTer this game is Training only: ShmupX can't read its score there yet. For Ranked, play on the Emulator.",
 };
 
 Object.assign(ENGLISH, {
@@ -120,7 +122,7 @@ const LITE_ENGLISH: Record<string, string> = {
   "Entrar na sala de {game}": "Open the {game} room", "Jogar {game} agora": "Play {game} now", "Jogar com a configuração acima": "Play with the setup above",
   "Ligue o MiSTer para jogar na TV.": "Link your MiSTer to play on the TV.",
   "Steam e Emulador abrem no seu PC: deixe o ShmupX Client aberto no PC com a mesma conta.": "Steam and Emulator open on your PC: keep the ShmupX Client open on the PC with the same account.",
-  "Treino ou ranking": "Training or ranked", "Treino": "Training", "Ranked": "Ranked",
+  "Treino ou ranking": "Training or ranked", "Treino": "Training", "Treinando": "Training", "Ranked": "Ranked",
   "Toque no jogo para entrar na sala, ou no ▶ para jogar direto com a configuração acima.": "Tap a game to open its room, or ▶ to play right away with the setup above.",
 };
 for (const [key, value] of Object.entries(LITE_ENGLISH)) ENGLISH[key] ??= value;
@@ -315,6 +317,54 @@ const ROMS_FOLDER_ENGLISH: Record<string, string> = {
   "link inválido": "invalid link",
 };
 for (const [key, value] of Object.entries(ROMS_FOLDER_ENGLISH)) ENGLISH[key] ??= value;
+
+// Tutorial da primeira vez (FirstRunTutorial): importar os jogos e jogar.
+const TUTORIAL_ENGLISH: Record<string, string> = {
+  "Passo 1 · Importar jogos": "Step 1 · Import games",
+  "Passo 2 · Jogar e rankear": "Step 2 · Play & rank", "Ver o tutorial: importar os jogos e começar a jogar": "See the tutorial: import your games and start playing",
+  "Tutorial concluído": "Tutorial complete",
+  "{step} de {total}": "{step} of {total}",
+  "Importe seus jogos": "Import your games",
+  "Toque em Importar jogos para trazer os jogos que você já tem neste computador.": "Tap Import games to bring in the games you already have on this computer.",
+  "Volte para a coleção": "Go back to the collection",
+  "Toque em Minhas coleções para ver os seus jogos.": "Tap My collections to see your games.",
+  "De onde vêm os seus jogos?": "Where are your games?",
+  "Steam lê os jogos instalados, Emulador lê os seus ROMs (.zip) e MiSTer lê os jogos do MiSTer na rede. Toque numa opção.": "Steam reads your installed games, Emulator reads your ROMs (.zip) and MiSTer reads the games on your MiSTer over the network. Tap an option.",
+  "Leia a sua biblioteca": "Read your library",
+  "Toque aqui. O ShmupX procura os jogos sozinho e marca na coleção os que você tem.": "Tap here. ShmupX finds the games by itself and marks the ones you have in the collection.",
+  "Procurando os seus jogos…": "Looking for your games…",
+  "Aguarde um instante enquanto o ShmupX lê a biblioteca.": "Hold on a moment while ShmupX reads the library.",
+  "Mostre onde estão os seus jogos": "Show where your games are",
+  "Não achamos os ROMs sozinhos. Toque em Selecionar pasta de ROMs e escolha a pasta com os arquivos .zip (por exemplo, a pasta de ROMs do Fightcade).": "We couldn't find the ROMs by ourselves. Tap Select ROMs folder and choose the folder with the .zip files (for example, Fightcade's ROMs folder).",
+  "Tente outra fonte": "Try another source",
+  "Aqui não há jogos do ShmupX neste computador. Toque em Voltar e escolha outra fonte.": "There are no ShmupX games here on this computer. Tap Back and choose another source.",
+  "Jogos importados!": "Games imported!",
+  "A coleção já mostra os jogos que você tem. Toque em Fechar para voltar a ela.": "The collection now shows the games you have. Tap Close to go back to it.",
+  "Escolha um jogo": "Pick a game",
+  "Toque num jogo colorido: são os que você tem. Os detalhes e a ficha para jogar aparecem ao lado.": "Tap a game in color: those are the ones you have. The details and the coin to play show up on the side.",
+  "Escolha o modo de pontuação": "Choose your score mode",
+  "Hi-Score: pontuação máxima, com quantos créditos quiser. 1CC: zerar com 1 crédito. Caravan: pontuação em tempo limitado. Toque num modo ou em Próximo.": "Hi-Score: highest score, with as many credits as you want. 1CC: clear the game on 1 credit. Caravan: score in a limited time. Tap a mode or Next.",
+  "Insira a ficha": "Insert a coin",
+  "Toque na ficha para jogar.": "Tap the coin to play.",
+  "Como você quer jogar?": "How do you want to play?",
+  "Training Mode é grátis e não vale ranking: ótimo para começar. Ranked Mode gasta 1 ficha, grava a run e vale para o ranking.": "Training Mode is free and doesn't count for the ranking: great to start. Ranked Mode spends 1 coin, records the run and counts for the ranking.",
+  "O jogo não abriu": "The game didn't open",
+  "Siga as dicas da janela. Se os ROMs estão em outra pasta, toque em Selecionar pasta de ROMs e depois tente de novo.": "Follow the tips in the window. If your ROMs are in another folder, tap Select ROMs folder and then try again.",
+  "Abrindo o jogo…": "Opening the game…",
+  "Quando a janela do jogo aparecer, é só jogar!": "When the game window shows up, just play!",
+  "Tudo pronto!": "All set!",
+  "Você já sabe jogar no ShmupX. Faça o seu recorde e suba no ranking. Para ver este tutorial de novo, toque em HOW TO USE, no canto superior direito.": "You know how to play on ShmupX now. Set your record and climb the ranking. To see this tutorial again, tap HOW TO USE in the top right corner.",
+  "Não encontramos este item na tela agora. Continue pela tela normalmente ou pule o tutorial.": "We can't find this item on the screen right now. Carry on as usual or skip the tutorial.",
+  "Se o jogo já abriu, toque em Concluir.": "If the game has already opened, tap Finish.",
+  "Pular tutorial": "Skip tutorial",
+  "Próximo": "Next",
+  "Concluir": "Finish",
+  "Fechar tutorial": "Close tutorial",
+  "Tutorial": "Tutorial",
+  "Mostra de novo o passo a passo para importar os seus jogos e começar a jogar.": "Shows the step-by-step guide to import your games and start playing again.",
+  "Rever tutorial": "Replay tutorial",
+};
+for (const [key, value] of Object.entries(TUTORIAL_ENGLISH)) ENGLISH[key] ??= value;
 
 // Ficha em inglês é "coin" (não "credit", que nos modos de jogo é o crédito do arcade).
 for (const [key, value] of Object.entries(ENGLISH)) {

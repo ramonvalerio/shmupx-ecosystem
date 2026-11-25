@@ -24,8 +24,9 @@ import { clearRoomSession, roomJoinedAt } from "../data/roomSession";
 import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
-import OpenGameBanner from "./OpenGameBanner";
+import PlayerStatus from "./PlayerStatus";
 import { visibleDialog } from "./navigationInput";
+import FirstRunTutorial, { useFirstRunTutorial } from "./FirstRunTutorial";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
@@ -52,11 +53,18 @@ interface ClientShellProps {
   profile: PlayerProfile;
   onProfile: (profile: PlayerProfile) => void;
   onSignOut: () => void;
+  /** Jogos abertos em treino neste PC (id do jogo -> pid), para o STOP do indicador global. */
+  practiceGames?: Record<string, number>;
 }
 
-export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, onSelectRoom, renderRoom, runs, profile, onProfile, onSignOut }: ClientShellProps) {
+export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, onSelectRoom, renderRoom, runs, profile, onProfile, onSignOut, practiceGames = {} }: ClientShellProps) {
   const { t, setLanguage } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
+  // Paleta também na raiz: janelas e o tutorial, abertos fora da área principal, seguem o tema.
+  useEffect(() => {
+    document.documentElement.dataset.theme = preferences.appearance;
+    return () => { delete document.documentElement.dataset.theme; };
+  }, [preferences.appearance]);
   // O app sempre abre na Coleção (a tela principal).
   const [section, setSection] = useState<Section>("collection");
   const [storageError, setStorageError] = useState(false);
@@ -113,11 +121,13 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const accountPlaying = useAccountPlaying();
   usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId,
     liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null, presenceMode === "away",
-    accountPlaying ? { gameId: accountPlaying.gameId, title: accountPlaying.title } : null);
+    accountPlaying ? { gameId: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : null);
   // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
   const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
   const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;
   const closeDialogRef = useDialogFocus(closingRoom !== null, () => setClosingRoomId(null));
+  // Tutorial da primeira vez (importar os jogos e jogar), uma vez por conta neste PC.
+  const tutorial = useFirstRunTutorial(profile.uid, rooms);
 
   // Um jogo despublicado sai do catálogo: a aba dele fecha. Catálogo ainda vazio (carregando) não
   // fecha nada: as abas guardadas voltariam vazias.
@@ -265,8 +275,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               return (
                 <li key={index}>
                   {crumb.current
-                    ? <span className="crumb" aria-current="page" title={crumb.label}><span className="crumb-label">{crumb.label}</span></span>
-                    : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label}><span className="crumb-label">{crumb.label}</span></button>}
+                    ? <span className="crumb" aria-current="page" title={crumb.label} data-tutorial={index === 0 ? "crumb-collection" : undefined}><span className="crumb-label">{crumb.label}</span></span>
+                    : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label} data-tutorial={index === 0 ? "crumb-collection" : undefined}><span className="crumb-label">{crumb.label}</span></button>}
                 </li>
               );
             })}
@@ -288,11 +298,11 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               <div className="client-status recording" role="status"><span className="status-dot" />{t("PREPARANDO LIVE")}</div>
               <span className="client-status-caption">{t("Conectando ao YouTube…")}</span>
             </>}
-          </> : recordingRoom && <>
-            {/* Parado não mostra nada; gravando, avisa que a run está sendo gravada. */}
-            <div className="client-status recording" role="status"><span className="status-dot" />{t("GRAVANDO RUN")}</div>
-            <span className="client-status-caption">{t("Gravando · {game}", { game: recordingRoom.title })}</span>
-          </>}
+          </> : (
+            // Estado global do jogador: gravando, jogando ou treinando (em qualquer aparelho, com
+            // STOP) ou disponível para jogar.
+            <PlayerStatus uid={profile.uid} recording={recordingRoom ? { title: recordingRoom.title } : null} practiceGames={practiceGames} />
+          )}
         </div>
         {notifications.version?.update_required && notifications.version.latest && <p className="update-required" role="alert">{t("Atualize o ShmupX Client para a versão {version} para continuar jogando.", { version: notifications.version.latest })}</p>}
         {!autoUpdateActive && !notifications.version?.update_required && notifications.version?.update_available && notifications.version.latest && <p className="update-available">{t("Versão {version} disponível.", { version: notifications.version.latest })}</p>}
@@ -311,8 +321,12 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </p>
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
+        {/* Dúvidas: o mesmo tutorial da primeira vez, a qualquer momento (começa pela importação). */}
+        <button type="button" className="how-to-use" disabled={tutorial.active} title={t("Ver o tutorial: importar os jogos e começar a jogar")}
+          onClick={() => { setSettingsOpen(false); showCollection(); tutorial.start(); }}>
+          <span aria-hidden="true">?</span>HOW TO USE
+        </button>
       </header>
-      <OpenGameBanner uid={profile.uid} />
       <div className="client-content">
       {bigPicture.error && <p className="mode-error" role="alert">{t(bigPicture.error)}</p>}
       {/* Telas do menu do perfil: voltar para a Coleção (a tela principal). */}
@@ -330,7 +344,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
             </header>
             <div className="controller-dialog-body">
               <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError}
-                onNavigate={(next) => { setSettingsOpen(false); setSection(next); }} profile={profile} onProfile={onProfile} />
+                onNavigate={(next) => { setSettingsOpen(false); setSection(next); }} profile={profile} onProfile={onProfile}
+                onReplayTutorial={() => { setSettingsOpen(false); showCollection(); tutorial.start(); }} />
             </div>
           </div>
         </div>
@@ -399,6 +414,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </div>
         </div>
       )}
+      {tutorial.active && <FirstRunTutorial rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
       <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );

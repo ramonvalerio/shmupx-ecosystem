@@ -1,0 +1,41 @@
+/*
+ * Tema Fashion (Configurações › Interface › Visual): o destaque ciano vira rosa e os cinzas das
+ * superfícies viram tons de vinho com a mesma luminosidade, então o contraste fica como no tema
+ * padrão (texto e rosa com contraste ≥ 6:1 nos painéis). Só redefine variáveis: o desenho é o mesmo
+ * dos outros temas. Vale no `.client-shell.theme-fashion` e na raiz (`data-theme`), para as janelas
+ * abertas fora da área principal (tutorial, diálogos) seguirem a mesma paleta.
+ */
+:root[data-theme="fashion"],
+.theme-fashion {
+  --cyan: #ff6eb4;
+  --cyan-2: #f39acb;
+  --cyan-deep: #5a2346;
+  --on-cyan: #2b0718;
+  --stroke: #ffd1e826;
+
+  --gray-101010: #150c12;
+  --gray-111111: #170d14;
+  --gray-141414: #1b1018;
+  --gray-1a1a1a: #22141e;
+  --gray-1c1c1c: #24161f;
+  --gray-1d1d1d: #251620;
+  --gray-1f1f1f: #281823;
+  --gray-212121: #2a1a25;
+  --gray-262626: #2f1e2a;
+  --gray-313131: #3b2534;
+  --gray-3a3a3a: #45293c;
+
+  --surface-base: #2f1e2a;
+  --surface-raised: #3b2534;
+  --surface-recessed: #281823;
+}
+
+/* Barra de cima e trilho lateral: o tom de vinho mais escuro, como o grafite do tema padrão. */
+.theme-fashion .client-topbar { background: #2a1a25; }
+.theme-fashion :is(.navigation-rail, .client-footer, .collection-search) { background: var(--surface-recessed); }
+
+/* Ranking da sala: painéis em vinho. */
+.theme-fashion .rk { --rk-panel: #281823; --rk-well: #1b1018; --rk-ink: #150c12; --rk-rule: #ffd1e826; --rk-rule-soft: #ffd1e814; }
+
+/* Amostra do tema na tela de Configurações. */
+.swatch-fashion { background: linear-gradient(#3b2534 25%, #2f1e2a 25%); box-shadow: inset 15px 0 #ff6eb455; }

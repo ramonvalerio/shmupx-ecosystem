@@ -7,8 +7,10 @@ import { installDesktopFeel } from "./desktopFeel";
 import "./index.css";
 import "./room.css";
 import "./ranking.css";
+import "./tutorial.css";
 import "./collection.css";
 import "./theme-light.css";
+import "./theme-fashion.css";
 
 installDesktopFeel();
 
