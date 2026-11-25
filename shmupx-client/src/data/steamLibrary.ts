@@ -17,6 +17,8 @@ export interface SteamLibrary {
 }
 
 const KEY = "shmupx.client.steamLibrary.v1";
+/** O jogador desconectou a Steam: o Client não importa sozinho até ele importar de novo. */
+const OFF_KEY = "shmupx.client.steamLibrary.off.v1";
 const EVENT = "shmupx:steam-library";
 
 export function readSteamLibrary(): SteamLibrary | null {
@@ -33,14 +35,17 @@ export function readSteamLibrary(): SteamLibrary | null {
 export function saveSteamLibrary(appIds: number[], total = appIds.length) {
   const unique = [...new Set(appIds)];
   const value: SteamLibrary = { appIds: unique, total: Math.max(total, unique.length), importedAt: Date.now() };
-  try { localStorage.setItem(KEY, JSON.stringify(value)); } catch { /* fica só nesta sessão */ }
+  try { localStorage.setItem(KEY, JSON.stringify(value)); localStorage.removeItem(OFF_KEY); } catch { /* fica só nesta sessão */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: value }));
   return value;
 }
 
-/** Desconecta a Steam: esquece a biblioteca importada (a coleção volta a "fora da biblioteca"). */
+/**
+ * Desconecta a Steam: esquece a biblioteca importada (a coleção volta a "fora da biblioteca") e
+ * para a importação automática ao abrir o Client, até o jogador importar de novo.
+ */
 export function clearSteamLibrary() {
-  try { localStorage.removeItem(KEY); } catch { /* nada a limpar */ }
+  try { localStorage.removeItem(KEY); localStorage.setItem(OFF_KEY, "1"); } catch { /* nada a limpar */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: null }));
 }
 
@@ -48,6 +53,16 @@ export function clearSteamLibrary() {
 export async function scanSteam(): Promise<{ found: boolean; games: SteamGame[] }> {
   if (!isTauri()) return { found: false, games: [] };
   return invoke<{ found: boolean; games: SteamGame[] }>("steam_biblioteca");
+}
+
+/**
+ * Ao abrir o Client: lê a Steam deste PC e importa os jogos instalados, sem o jogador pedir (a
+ * coleção já abre com eles em cor). Não faz nada se a Steam não está no PC ou foi desconectada.
+ */
+export async function autoImportSteam() {
+  try { if (localStorage.getItem(OFF_KEY)) return; } catch { /* segue */ }
+  const result = await scanSteam();
+  if (result.found) saveSteamLibrary(result.games.filter((g) => g.installed).map((g) => g.app_id), result.games.length);
 }
 
 /** Biblioteca importada, atualizada em todas as telas quando muda. */

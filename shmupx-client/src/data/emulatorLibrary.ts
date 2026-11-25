@@ -19,6 +19,8 @@ export interface EmulatorLibrary {
 }
 
 const KEY = "shmupx.client.emulatorLibrary.v1";
+/** O jogador desconectou o emulador: o Client não importa sozinho até ele importar de novo. */
+const OFF_KEY = "shmupx.client.emulatorLibrary.off.v1";
 const EVENT = "shmupx:emulator-library";
 
 export function readEmulatorLibrary(): EmulatorLibrary | null {
@@ -32,10 +34,20 @@ export function readEmulatorLibrary(): EmulatorLibrary | null {
 
 export function publish(value: EmulatorLibrary | null) {
   try {
-    if (value) localStorage.setItem(KEY, JSON.stringify(value));
+    if (value) { localStorage.setItem(KEY, JSON.stringify(value)); localStorage.removeItem(OFF_KEY); }
     else localStorage.removeItem(KEY);
   } catch { /* fica só nesta sessão */ }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: value }));
+}
+
+function emulatorOff() {
+  try { return localStorage.getItem(OFF_KEY) !== null; } catch { return false; }
+}
+
+/** Desconecta o emulador (botão Desconectar): esquece os ROMs e para a importação automática. */
+function disconnectEmulator() {
+  try { localStorage.setItem(OFF_KEY, "1"); } catch { /* vale só nesta sessão */ }
+  publish(null);
 }
 
 /** Resultado da leitura dos ROMs (Rust `BibliotecaEmulador`). */
@@ -75,11 +87,28 @@ export async function downloadMissingRoms(): Promise<RomDownload> {
   if (!isTauri()) return { baixados: [], falhas: [], em_andamento: false };
   const result = await invoke<RomDownload>("emulador_baixar_roms");
   if (result.falhas.length > 0) console.warn("ROMs: não deu para baixar:", result.falhas.join(", "));
-  if (result.baixados.length > 0) {
+  if (result.baixados.length > 0 && !emulatorOff()) {
     const scan = await scanEmulator(readEmulatorLibrary()?.root || undefined);
     if (scan.found) publish({ root: scan.root ?? "", roms: scan.roms, importedAt: Date.now() });
   }
   return result;
+}
+
+/**
+ * Ao abrir o Client: importa os ROMs deste PC (a pasta escolhida, a `roms` do Client e as do
+ * Fightcade), sem o jogador pedir, e depois baixa os ROMs da lista que faltam (o download lê de novo
+ * a pasta se baixou algum). Ler primeiro deixa a coleção em cor sem esperar o download. Com o
+ * emulador desconectado, só baixa. Pasta sem nenhum ROM não conecta a biblioteca (só atualiza a que
+ * já existia).
+ */
+export async function autoImportEmulator() {
+  if (!isTauri()) return;
+  if (!emulatorOff()) {
+    const current = readEmulatorLibrary();
+    const result = await scanEmulator(current?.root || undefined);
+    if (result.found && (result.roms.length > 0 || current)) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
+  }
+  await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
 }
 
 /**
@@ -128,7 +157,7 @@ export function useEmulatorLibrary() {
   }, []);
   /** Escolhe outra pasta de ROMs (janela do sistema); `null` = cancelou. */
   const chooseFolder = useCallback((title: string) => chooseEmulatorFolder(title), []);
-  const disconnect = useCallback(() => publish(null), []);
+  const disconnect = useCallback(() => disconnectEmulator(), []);
   const owns = useCallback((room: GameRoom) => Boolean(library && romsFor(room).some((rom) => library.roms.includes(rom))), [library]);
   return { library, owns, refresh, chooseFolder, disconnect };
 }

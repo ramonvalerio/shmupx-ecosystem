@@ -23,7 +23,8 @@ import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMister
 import { liveActive, useLive } from "./data/useLive";
 import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./data/misterLibrary";
 import { misterAuth, readMisterPlayer } from "./data/misterPlayer";
-import { downloadMissingRoms } from "./data/emulatorLibrary";
+import { autoImportEmulator } from "./data/emulatorLibrary";
+import { autoImportSteam } from "./data/steamLibrary";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -132,10 +133,12 @@ export default function App() {
       .catch((error) => console.warn("MiSTer: falha ao atualizar a biblioteca:", error));
   }, [signedUid, rooms]);
 
-  // ROMs dos jogos do catálogo (lista do Client): os que faltam são baixados ao abrir (ou recarregar) o Client.
+  // Ao abrir (ou recarregar) o Client, importa sozinho os jogos da Steam e os ROMs deste PC (a pasta
+  // escolhida, a `roms` do Client e as do Fightcade), baixando antes os ROMs da lista que faltam.
   useEffect(() => {
     if (!isTauri()) return;
-    downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
+    autoImportSteam().catch((error) => console.warn("Steam: falha na importação automática:", error));
+    autoImportEmulator().catch((error) => console.warn("ROMs: falha na importação automática:", error));
   }, []);
 
   usePlayingClaim(signedUid, ownGame
