@@ -199,3 +199,7 @@
 /* Tema claro: mesmas formas, superfícies claras. */
 .theme-light .rk { --rk-panel: #ecedea; --rk-well: #dadbd6; --rk-ink: #dadbd6; --rk-rule: #10233f25; --rk-rule-soft: #10233f18; --rk-text: #10233f; --rk-text-2: #10233f; --rk-muted: #475569; --rk-label: #475569; --rk-dim: #64748b; --rk-vacant: #94a3b8; --rk-cyan: #1f6feb; --rk-cyan-2: #0b7285; --rk-cyan-deep: #d6e4fb; }
 .theme-light .rk-plate { color: #fff; }
+/* Medalha de ouro na placa do recorde, à direita do 1ST (a mesma da lista de jogadores da sala). */
+.rk-plate { position: relative; }
+.rk-plate-medal { position: absolute; top: 50%; right: 32px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; transform: translateY(-50%); background: radial-gradient(circle at 35% 30%, #fff3b0, #f2c14e 55%, #b8862a); color: #1a1406; font-size: 15px; line-height: 1; box-shadow: inset 0 -2px 0 #0005, 0 0 0 2px #0006, 0 3px 8px #0006; }
+@media (max-width: 1100px) { .rk-plate-medal { right: 27px; width: 24px; height: 24px; font-size: 12px; } }

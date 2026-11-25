@@ -661,3 +661,14 @@
 .room-player-idle.is-available { color: #3fd98b; }
 .room-player-idle.is-away { color: #fd4851; }
 .room-player-idle.is-offline { color: #7d878e; }
+/* Sala: opções da partida (modo de jogo, plataforma e live) empilhadas à esquerda da ficha, e a
+   ficha com o saldo alinhada à direita. */
+.room-header-side:not(.is-compact) { justify-content: flex-end; align-items: center; }
+.room-side-stack { display: flex; flex-direction: column; gap: 10px; width: 300px; }
+.room-side-stack .room-coin-actions { width: 100%; }
+.room-side-stack .ranked-options { margin-top: 0; }
+/* Medalha do pódio do jogo da sala, ao lado do nome. */
+.room-player-medal { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 6px; border-radius: 50%; color: #1a1406; font-size: 9px; line-height: 1; vertical-align: 1px; box-shadow: inset 0 -1px 0 #0005, 0 0 0 1px #0006; }
+.room-player-medal.is-gold { background: radial-gradient(circle at 35% 30%, #fff3b0, #f2c14e 55%, #b8862a); }
+.room-player-medal.is-silver { background: radial-gradient(circle at 35% 30%, #ffffff, #c9d3d8 55%, #8a949a); }
+.room-player-medal.is-bronze { background: radial-gradient(circle at 35% 30%, #ffd2a8, #cd7f32 55%, #8a5220); }

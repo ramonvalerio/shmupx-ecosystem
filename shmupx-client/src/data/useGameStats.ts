@@ -7,6 +7,8 @@ export interface GameStats {
   credits: number;
   /** Tempo jogado nessas runs, em segundos (início ao fim registrados pelo servidor). */
   seconds: number;
+  /** Quando começou a última run valendo ranking (ms), ou `null` sem nenhuma. */
+  lastAt: number | null;
 }
 
 const millis = (value: unknown) => (value && typeof (value as Timestamp).toMillis === "function" ? (value as Timestamp).toMillis() : null);
@@ -23,19 +25,30 @@ export function useGameStats(uid: string | undefined, gameId: string): GameStats
       query(collection(db, "gameplays"), where("ownerId", "==", uid), where("gameId", "==", gameId)),
       (snapshot) => {
         let seconds = 0;
+        let lastAt: number | null = null;
         for (const item of snapshot.docs) {
           const capture = (item.data().capture ?? {}) as Record<string, unknown>;
           const start = millis(capture.serverStartedAt);
           const end = millis(capture.serverEndedAt) ?? millis(item.data().updatedAt);
           const max = typeof capture.maxDurationSeconds === "number" ? capture.maxDurationSeconds : Infinity;
           if (start !== null && end !== null && end > start) seconds += Math.min((end - start) / 1000, max);
+          const began = start ?? millis(item.data().createdAt) ?? millis(item.data().updatedAt);
+          if (began !== null && (lastAt === null || began > lastAt)) lastAt = began;
         }
-        setStats({ credits: snapshot.size, seconds: Math.round(seconds) });
+        setStats({ credits: snapshot.size, seconds: Math.round(seconds), lastAt });
       },
       () => setStats(null),
     );
   }, [uid, gameId]);
   return stats;
+}
+
+/** Último ranked: só a hora se foi hoje; senão a data e a hora ("24/11/2026 21:14"). */
+export function formatLastPlayed(timestamp: number, locale: string, now = new Date()): string {
+  const date = new Date(timestamp);
+  const time = date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (date.toDateString() === now.toDateString()) return time;
+  return `${date.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" })} ${time}`;
 }
 
 /** 0min, 12min, 1h 05min. */

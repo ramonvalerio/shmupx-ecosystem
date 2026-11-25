@@ -15,7 +15,8 @@ import { useAccountPlaying } from "../data/playing";
 import { stopGame as stopPlaying, useStoppingGame } from "../data/stopGame";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
-import { formatPlayTime, useGameStats } from "../data/useGameStats";
+import { formatLastPlayed, formatPlayTime, useGameStats } from "../data/useGameStats";
+import { useGameRanking } from "../data/useRanking";
 import { useRoomPlay } from "../data/roomPlay";
 import PlaySetup from "./PlaySetup";
 import { isSupported } from "../data/validation";
@@ -58,6 +59,15 @@ type SortBy = "score" | "name";
  *  mostra o jogo: só "Treinando". */
 const KIND_LABEL = { ranked: "Ranked", live: "Live" } as const;
 const ROBOTX = "RobotX";
+
+const MEDAL_LABEL = ["", "1º lugar no ranking deste jogo", "2º lugar no ranking deste jogo", "3º lugar no ranking deste jogo"];
+/** Medalha de ouro, prata ou bronze: 1º, 2º ou 3º lugar no ranking (Hi-Score) do jogo da sala. */
+function Medal({ place }: { place: number | undefined }) {
+  const { t } = useI18n();
+  if (!place || place > 3) return null;
+  const kind = place === 1 ? "gold" : place === 2 ? "silver" : "bronze";
+  return <span className={`room-player-medal is-${kind}`} role="img" aria-label={t(MEDAL_LABEL[place])} title={t(MEDAL_LABEL[place])}>{place}</span>;
+}
 
 /** Conversa reservada com o RobotX, por jogador e sala: continua ao sair e voltar à sala. */
 const robotxKey = (playerId: string | undefined, roomId: string) => `shmupx.client.robotx.v1.${playerId ?? "anon"}.${roomId}`;
@@ -123,7 +133,7 @@ const IconRobot = ({ size = 15 }: { size?: number }) => (
 
 /** Sala dedicada do jogo: cabeçalho compacto, chat no centro e HUD de jogadores à direita. */
 export default function RoomView({ room, messages, chatStatus, chatError, playerId, isRecording, playerName, onSendMessage, onOpenRanking, lastRun, startError, practicePid, others = [] }: RoomViewProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const presenceMode = usePresenceMode();
   const accountPlaying = useAccountPlaying();
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
@@ -131,6 +141,13 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const ranked = useRankedLive(room);
   const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const stats = useGameStats(playerId, room.id);
+  // Pódio do jogo da sala (Hi-Score): medalha de ouro, prata e bronze na lista de jogadores.
+  const podiumRanking = useGameRanking(room.id, "highscore", 3);
+  const podium = useMemo(() => {
+    const places = new Map<string, number>();
+    for (const entry of podiumRanking.data?.entradas ?? []) if (entry.posicao <= 3) places.set(entry.jogador_id, entry.posicao);
+    return places;
+  }, [podiumRanking.data]);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
   // Respostas do RobotX desta sessão (locais, por sala).
@@ -234,12 +251,12 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               <div>
                 <h1 title={room.title}>{room.title}</h1>
                 <dl className="game-room-stats">
-                  <div><dt>{t("Fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
+                  <div><dt>{t("Total de fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
                   <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
+                  <div><dt>{t("Último ranked")}</dt><dd>{stats?.lastAt ? formatLastPlayed(stats.lastAt, locale) : "—"}</dd></div>
                 </dl>
               </div>
             </div>
-            <PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} />
             {/* Jogar é pela ficha (Training ou Ranked); aqui só o Parar jogo, com um jogo aberto. */}
             {(gameOpen || stopping) && (
               <div className="game-room-actions">
@@ -251,7 +268,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Em breve")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
           </div>
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
-          <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping} />
+          <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping}
+            setup={<PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} compact />} />
         </header>
 
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}
@@ -313,7 +331,10 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
               onDoubleClick={player.live ? () => void openWatchWindow(room.id, player.id, player.name, t("{name} · ao vivo · {game}", { name: player.name, game: room.title })) : undefined}>
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src={avatarOf(avatars, player.you ? playerId : player.id)} alt="" /></span>
               <span className="room-player-info">
-                <strong>{player.name}{player.you && ` ${t("(você)")}`}</strong>
+                <strong>
+                  {player.name}{player.you && ` ${t("(você)")}`}
+                  <Medal place={podium.get(player.you ? playerId ?? "" : player.id)} />
+                </strong>
                 {player.game?.kind === "training"
                   ? <small className="room-player-game">▶ {t("Treinando")}</small>
                   : player.game

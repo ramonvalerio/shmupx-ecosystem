@@ -26,7 +26,8 @@ function readLivePrefs(): LivePrefs {
   let value: LivePrefs = { on: false, public: false };
   try {
     const saved = JSON.parse(raw ?? "{}") as Partial<LivePrefs>;
-    value = { on: saved.on === true, public: saved.public === true };
+    // "Quem pode assistir" saiu por enquanto: a live é sempre só com link (não listada).
+    value = { on: saved.on === true, public: false };
   } catch { /* valor inválido: padrões */ }
   cache = { raw, value };
   return value;
@@ -140,9 +141,10 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
 }
 
 /**
- * Play: a ficha (clique nela: ela gira e pergunta Training Mode ou Ranked Mode) com o saldo e, ao lado
- * ou abaixo, as opções da partida — live no YouTube e quem pode assistir.
- * Usado na sala (cabeçalho) e no painel da Coleção (`compact`).
+ * Play: a ficha (clique nela: ela gira e pergunta Training Mode ou Ranked Mode) com o saldo e as
+ * opções da partida (modo de jogo e plataforma em `setup`, e a live no YouTube). Na sala, as opções
+ * ficam empilhadas à esquerda e a ficha com o saldo alinhada à direita; no painel da Coleção
+ * (`compact`), tudo numa coluna, com a ficha em cima.
  */
 export default function RankedPanel({ room, uid, launcher, mode, platform, ranked, busy, compact = false, setup }: {
   room: GameRoom;
@@ -151,7 +153,7 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
   mode: GameMode;
   platform: PlayOn | null;
   ranked: ReturnType<typeof useRankedLive>;
-  /** Modo de jogo e plataforma logo abaixo da ficha (painel da Coleção). */
+  /** Modo de jogo e plataforma: na sala, em cima da live; na Coleção, logo abaixo da ficha. */
   setup?: ReactNode;
   /** Jogo aberto ou parando: sem Play Ranked e com as opções presas. */
   busy: boolean;
@@ -213,13 +215,13 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     : target === "mister" && !room.rankedMister ? t(RANKED_MISTER_OFF)
     : credits !== null && credits < 1 ? t("Sem fichas: o Ranked Mode precisa de 1 ficha.") : null;
 
-  return (
-    <div className={`room-header-side ${compact ? "is-compact" : ""}`}>
-      <CreditsBadge uid={uid} className="room-credits" spin={coinSpin} onPlay={insertCoin} live={withLive}
-        playDisabled={launcher.isLaunching || busy || liveOn}
-        playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t("Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
-      {setup}
-      {choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} onTraining={playTraining} onRanked={playRanked} onClose={() => setChoosing(false)} />}
+  const coin = (
+    <CreditsBadge uid={uid} className="room-credits" spin={coinSpin} onPlay={insertCoin} live={withLive}
+      playDisabled={launcher.isLaunching || busy || liveOn}
+      playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t("Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
+  );
+  const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} onTraining={playTraining} onRanked={playRanked} onClose={() => setChoosing(false)} />;
+  const options = (
       <div className="room-coin-actions">
         {liveHereOn && (
           <button type="button" className="room-action live-action is-on" onClick={() => void ranked.stop()} disabled={live.state.status === "ending"}>
@@ -237,19 +239,20 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
               </button>
             </div>
           </div>
-          <div className={`room-setup-group ${withLive || liveHereOn ? "" : "is-muted"}`}>
-            <span id={`${uidLabel}-public`}>{t("Quem pode assistir")}</span>
-            <div className="room-chips" role="radiogroup" aria-labelledby={`${uidLabel}-public`}>
-              <button type="button" role="radio" aria-checked={!(liveHereOn ? live.state.public : prefs.public)} disabled={optionsLocked || !withLive} onClick={() => setLivePrefs({ public: false })}
-                title={t("Só quem tem o link da live assiste.")}>{t("Só com link")}</button>
-              <button type="button" role="radio" aria-checked={liveHereOn ? live.state.public : prefs.public} disabled={optionsLocked || !withLive} onClick={() => setLivePrefs({ public: true })}
-                title={t("Qualquer pessoa encontra a live no YouTube.")}>{t("Pública")}</button>
-            </div>
-          </div>
           {/* "On" sem como transmitir (MiSTer ou sem canal): explica aqui, e o Play Ranked segue sem live. */}
           {liveUnavailable && !comingSoon && prefs.on && <p className="ranked-options-note" role="status">{liveUnavailable}</p>}
         </div>
       </div>
+  );
+
+  if (compact) {
+    return <div className="room-header-side is-compact">{coin}{setup}{dialog}{options}</div>;
+  }
+  return (
+    <div className="room-header-side">
+      <div className="room-side-stack">{setup}{options}</div>
+      {coin}
+      {dialog}
     </div>
   );
 }
