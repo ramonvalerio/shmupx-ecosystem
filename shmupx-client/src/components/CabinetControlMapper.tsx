@@ -203,7 +203,8 @@ export default function CabinetControlMapper() {
             ? t("O mapeamento usa o ShmupX Emulator, que não foi encontrado neste computador.")
             : waiting
               ? t("Aperte o botão, tecla ou direção para {control}. Esc cancela.", { control: labelOf(waiting) })
-              : flash?.text ?? t("Clique num botão do painel e aperte o botão do seu controle ou uma tecla. Grava na hora.")}
+              // Parado, sem texto: a explicação já está no título da seção.
+              : flash?.text ?? null}
         </p>
         <label className="settings-field cabinet-mapper-device">{t("Controle")}
           <select value={choiceValue(choice)} onChange={(event) => choose(parseChoice(event.target.value))}>

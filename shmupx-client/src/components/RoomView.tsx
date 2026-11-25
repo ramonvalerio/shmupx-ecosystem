@@ -12,6 +12,7 @@ import { useCountdown } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { usePresenceMode } from "../data/presenceMode";
 import { useAccountPlaying } from "../data/playing";
+import { useMyJoinedAt } from "../data/useRoomPresence";
 import { stopGame as stopPlaying, useStoppingGame } from "../data/stopGame";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
@@ -66,7 +67,7 @@ function Medal({ place }: { place: number | undefined }) {
   const { t } = useI18n();
   if (!place || place > 3) return null;
   const kind = place === 1 ? "gold" : place === 2 ? "silver" : "bronze";
-  return <span className={`room-player-medal is-${kind}`} role="img" aria-label={t(MEDAL_LABEL[place])} title={t(MEDAL_LABEL[place])}>{place}</span>;
+  return <img className={`room-player-medal is-${kind}`} src={`/img/medals/medal-${place}.png`} alt={t(MEDAL_LABEL[place])} title={t(MEDAL_LABEL[place])} draggable={false} />;
 }
 
 /** Conversa reservada com o RobotX, por jogador e sala: continua ao sair e voltar à sala. */
@@ -80,7 +81,6 @@ function readRobotxReplies(playerId: string | undefined, roomId: string): ChatMe
   }
 }
 
-const STATUS_ORDER: Record<PresenceStatus, number> = { live: 0, online: 1, away: 2, offline: 3 };
 const STATUS_LABEL: Record<PresenceStatus, string> = { live: "Ao vivo", online: "Online", away: "Ausente", offline: "Offline" };
 const MENCAO_ROBOTX = /@robotx\b/i;
 
@@ -141,6 +141,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const ranked = useRankedLive(room);
   const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
   const stats = useGameStats(playerId, room.id);
+  const myJoinedAt = useMyJoinedAt(room.id);
   // Pódio do jogo da sala (Hi-Score): medalha de ouro, prata e bronze na lista de jogadores.
   const podiumRanking = useGameRanking(room.id, "highscore", 3);
   const podium = useMemo(() => {
@@ -225,18 +226,21 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // menu; o agente registra o placar) ou treino no PC (fecha o jogo).
   const stopGame = gameOpen ? () => void handleStopGame() : null;
 
-  // Jogador conectado sempre primeiro, depois os outros presentes; o RobotX vem no fim e não conta
-  // como jogador. Hi-Score da sala ainda não existe: fica "—" em vez de um número inventado.
-  // Os outros: online, depois ausentes, depois offline; por nome quando essa é a ordem escolhida.
+  // Lista de jogadores (com o próprio jogador): pódio do ranking e depois a ordem de chegada; o
+  // RobotX vem no fim e não conta como jogador.
   const meLive = liveHere && live.state.status === "live";
   // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
   // O jogo aberto na conta (aqui, no MiSTer ou pelo celular) aparece na linha do jogador.
   const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : undefined;
   const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "invisible" ? "offline" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
   const rest = others
-    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false }))
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
-  const sorted = [me, ...rest];
+    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false, joinedAt: o.joinedAt }));
+  // Ranking: 1º, 2º e 3º do ranking do jogo da sala primeiro; os outros na ordem em que chegaram à
+  // sala (quem não tem a chegada gravada, de um Client antigo, vai para o fim). Nome: alfabética.
+  const place = (p: { id: string; you: boolean }) => podium.get(p.you ? playerId ?? "" : p.id) ?? 99;
+  const arrival = (p: { joinedAt?: number }) => p.joinedAt ?? Number.MAX_SAFE_INTEGER;
+  const sorted = [{ ...me, joinedAt: myJoinedAt }, ...rest].sort((a, b) =>
+    sortBy === "name" ? a.name.localeCompare(b.name) : place(a) - place(b) || arrival(a) - arrival(b) || a.name.localeCompare(b.name));
   const avatars = usePublicProfiles([playerId ?? "", ...others.map((o) => o.uid)]);
   const players = sorted;
 
@@ -320,7 +324,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         <label className="room-sort">
           <span>{t("Ordenar por")}</span>
           <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)}>
-            <option value="score">{t("Hi-Score")}</option>
+            <option value="score">{t("Ranking")}</option>
             <option value="name">{t("Nome")}</option>
           </select>
         </label>

@@ -312,7 +312,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
               <button type="button" className="rk-hit" aria-pressed={isSelected}
                 aria-label={t("{position}º lugar: {player}, {score} pontos", { position: 1, player: nick, score: score(leader.score, locale) })}
                 onClick={() => setSelected(leader.key)} />
-              <div className="rk-plate" aria-hidden="true"><span className="rk-plate-rank"><Ordinal n={1} /></span><small>{t("RECORDE")}</small><span className="rk-plate-medal">1</span></div>
+              <div className="rk-plate" aria-hidden="true"><span className="rk-plate-rank"><Ordinal n={1} /></span><small>{t("RECORDE")}</small><img className="rk-plate-medal" src="/img/medals/medal-1.png" alt="" draggable={false} /></div>
               <img className="rk-leader-avatar" src={avatarOf(profiles, leader.uid)} alt="" />
               <div className="rk-leader-who">
                 <span className="rk-kicker"><i aria-hidden="true" />{room.title} · {modeLabel} · {t("Online")}</span>

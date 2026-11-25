@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, type Timestamp } from "firebase/firestore";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, type Timestamp } from "firebase/firestore";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { db } from "../auth/firebase";
 
@@ -24,6 +24,8 @@ export interface RoomPresence {
   live?: { videoId: string; viewers: number };
   /** Jogo aberto na conta do jogador (em qualquer sala, modo ou plataforma). */
   game?: { id: string; title: string; kind?: PlayingKind };
+  /** Quando entrou na sala (ms do servidor); a lista de jogadores segue a ordem de chegada. */
+  joinedAt?: number;
 }
 
 /** Modo do jogo aberto: Training (sem ficha), Ranked (vale ranking) ou Live (Ranked ao vivo). */
@@ -63,7 +65,27 @@ function presenceFrom(uid: string, data: Record<string, unknown>, now: number): 
   const status: PresenceStatus = offline ? "offline" : live ? "live" : state === "away" ? "away" : "online";
   const game = !offline && typeof data.playingGameId === "string" && typeof data.playingTitle === "string"
     ? { id: data.playingGameId, title: data.playingTitle, kind: typeof data.playingKind === "string" && PLAYING_KINDS.includes(data.playingKind) ? data.playingKind as PlayingKind : undefined } : undefined;
-  return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && (state === "playing" || Boolean(game)), live, game };
+  const joinedAt = (data.joinedAt as Timestamp | null | undefined)?.toMillis?.();
+  return { uid, name: typeof data.name === "string" ? data.name : "Jogador", status, playing: !offline && (state === "playing" || Boolean(game)), live, game, joinedAt };
+}
+
+/**
+ * Chegada do próprio jogador em cada sala: o `joinedAt` gravado na primeira confirmação depois de
+ * abrir a sala (hora do servidor). As seguintes repetem o mesmo valor (as regras só aceitam a hora
+ * de agora ou o valor que já estava gravado).
+ */
+const joined = new Map<string, Timestamp>();
+const joinedListeners = new Set<() => void>();
+let joinedVersion = 0;
+function setJoined(roomId: string, value: Timestamp | null) {
+  if (value) joined.set(roomId, value); else joined.delete(roomId);
+  joinedVersion += 1;
+  joinedListeners.forEach((listener) => listener());
+}
+/** Quando o próprio jogador entrou na sala (ms), para a ordem de chegada da lista. */
+export function useMyJoinedAt(roomId: string): number | undefined {
+  useSyncExternalStore((listener) => { joinedListeners.add(listener); return () => joinedListeners.delete(listener); }, () => joinedVersion);
+  return joined.get(roomId)?.toMillis();
 }
 
 function presenceRef(roomId: string, uid: string) {
@@ -72,6 +94,7 @@ function presenceRef(roomId: string, uid: string) {
 
 /** Sair da sala pela aba: o jogador deixa a lista. Fechar o app ou cair a conexão não tira. */
 export function leaveRoomPresence(roomId: string, uid: string) {
+  setJoined(roomId, null);
   return deleteDoc(presenceRef(roomId, uid)).catch((failure) => console.warn("falha ao sair da sala:", failure));
 }
 
@@ -123,16 +146,30 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
           ? { ...base, state: "live", liveVideoId: liveVideo, liveViewers: viewers }
           : { ...base, state: recordingRoomId === roomId || playingId === roomId ? "playing" : !away && foreground && visibleRoomId === roomId ? "online" : "away" };
         const ref = presenceRef(roomId, me.uid);
-        if (playingId && playingTitle) {
-          // Regras antigas (sem os campos do jogo) recusam a gravação: tenta de novo sem o jogo.
-          setDoc(ref, { ...data, playingGameId: playingId, playingTitle, ...(playingKind ? { playingKind } : {}) })
-            // Regras antigas: sem o modo, depois sem o jogo.
-            .catch(() => setDoc(ref, { ...data, playingGameId: playingId, playingTitle }))
-            .catch(() => setDoc(ref, data))
-            .catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
-        } else {
-          setDoc(ref, data).catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
+        // Chegada na sala: hora do servidor na primeira confirmação, depois o valor gravado.
+        const known = joined.get(roomId);
+        const arrival = { joinedAt: known ?? serverTimestamp() };
+        const game = playingId && playingTitle ? { playingGameId: playingId, playingTitle } : null;
+        // Regras antigas recusam campos novos: tenta de novo sem a chegada, sem o modo e sem o jogo.
+        const attempts = [
+          { ...data, ...arrival, ...(game ?? {}), ...(game && playingKind ? { playingKind } : {}) },
+          { ...data, ...(game ?? {}), ...(game && playingKind ? { playingKind } : {}) },
+          ...(game ? [{ ...data, ...game }, data] : []),
+        ];
+        let saved = attempts.reduce<Promise<number>>(
+          (previous, attempt, index) => previous.catch(() => setDoc(ref, attempt).then(() => index)),
+          Promise.reject(new Error("início")),
+        );
+        if (!known) {
+          saved = saved.then(async (index) => {
+            if (index === 0) {
+              const stored = (await getDoc(ref)).get("joinedAt") as Timestamp | undefined;
+              if (stored) setJoined(roomId, stored);
+            }
+            return index;
+          });
         }
+        saved.catch((failure) => console.warn("falha ao registrar a presença na sala:", failure));
       }
     };
     void beat();

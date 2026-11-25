@@ -62,7 +62,7 @@ service cloud.firestore {
     // state 'live' traz o vídeo do YouTube e quantos assistem (só nesse estado).
     function validPresence(data) {
       return data.keys().hasAll(['name', 'state', 'lastSeen'])
-        && data.keys().hasOnly(['name', 'state', 'lastSeen', 'liveVideoId', 'liveViewers', 'playingGameId', 'playingTitle', 'playingKind'])
+        && data.keys().hasOnly(['name', 'state', 'lastSeen', 'liveVideoId', 'liveViewers', 'playingGameId', 'playingTitle', 'playingKind', 'joinedAt'])
         && data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
         && data.state in ['online', 'away', 'playing', 'live']
         && data.lastSeen == request.time
@@ -73,7 +73,11 @@ service cloud.firestore {
         && (!data.keys().hasAny(['playingGameId']) || (data.playingGameId is string && data.playingGameId.matches('^[A-Za-z0-9_-]{1,128}$')))
         && (!data.keys().hasAny(['playingTitle']) || (data.playingTitle is string && data.playingTitle.size() >= 1 && data.playingTitle.size() <= 80))
         // Modo do jogo aberto (Training, Ranked ou Live): só junto com o jogo.
-        && (!data.keys().hasAny(['playingKind']) || (data.keys().hasAll(['playingGameId']) && data.playingKind in ['training', 'ranked', 'live']));
+        && (!data.keys().hasAny(['playingKind']) || (data.keys().hasAll(['playingGameId']) && data.playingKind in ['training', 'ranked', 'live']))
+        // Chegada na sala (ordem da lista de jogadores): a hora de agora ou o valor já gravado, para
+        // ninguém se pôr antes de quem chegou primeiro.
+        && (!data.keys().hasAny(['joinedAt']) || (data.joinedAt is timestamp
+          && (data.joinedAt == request.time || (resource != null && resource.data.get('joinedAt', null) == data.joinedAt))));
     }
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;

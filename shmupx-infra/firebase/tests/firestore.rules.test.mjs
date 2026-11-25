@@ -215,6 +215,12 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "x/../y", playingTitle: "X" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "ketsui", playingTitle: "" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "ketsui", playingTitle: "K".repeat(81) })));
+  // Chegada na sala (ordem da lista): a hora de agora; depois, o mesmo valor; nunca uma hora antiga.
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ joinedAt: serverTimestamp() })));
+  const joinedAt = (await getDoc(doc(alice, "rooms/earthion/presence/alice"))).get("joinedAt");
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "away", joinedAt })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ joinedAt: now })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ joinedAt: "ontem" })));
   await assertFails(deleteDoc(doc(db("bob"), "rooms/earthion/presence/alice")));
   await assertSucceeds(deleteDoc(doc(alice, "rooms/earthion/presence/alice")));
 });
