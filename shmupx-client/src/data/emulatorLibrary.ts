@@ -101,14 +101,15 @@ export async function downloadMissingRoms(): Promise<RomDownload> {
  * emulador desconectado, só baixa. Pasta sem nenhum ROM não conecta a biblioteca (só atualiza a que
  * já existia).
  */
-export async function autoImportEmulator() {
-  if (!isTauri()) return;
+export async function autoImportEmulator(): Promise<number | null> {
+  if (!isTauri()) return null;
   if (!emulatorOff()) {
     const current = readEmulatorLibrary();
     const result = await scanEmulator(current?.root || undefined);
     if (result.found && (result.roms.length > 0 || current)) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
   }
   await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
+  return emulatorOff() ? null : readEmulatorLibrary()?.roms.length ?? null;
 }
 
 /**

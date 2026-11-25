@@ -173,6 +173,13 @@ for (const [key, value] of Object.entries(PLAYING_ENGLISH)) ENGLISH[key] ??= val
 // Menu ShmupX do MiSTer: jogos do Lab marcados com MiSTer entram ao sincronizar a biblioteca.
 const MISTER_MENU_ENGLISH: Record<string, string> = {
   "Menu ShmupX do MiSTer atualizado: {games}.": "MiSTer ShmupX menu updated: {games}.",
+  "Atualizando seus jogos…": "Updating your games…",
+  "Jogos atualizados às {time}": "Games updated at {time}",
+  "MiSTer não respondeu": "MiSTer did not respond",
+  "Steam: {count} jogos instalados": "Steam: {count} installed games",
+  "Emulador: {count} ROMs": "Emulator: {count} ROMs",
+  "MiSTer: {count} jogos": "MiSTer: {count} games",
+  "MiSTer: não respondeu (desligado ou fora da rede)": "MiSTer: did not respond (off or not on the network)",
   "Monitor dos jogos": "Game monitor",
   "O principal do Windows": "The Windows main display",
   "Monitor {number} · {width}×{height}": "Monitor {number} · {width}×{height}",

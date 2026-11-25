@@ -28,6 +28,7 @@ import PlayerStatus from "./PlayerStatus";
 import { visibleDialog } from "./navigationInput";
 import FirstRunTutorial, { useFirstRunTutorial, type TutorialTopic } from "./FirstRunTutorial";
 import HowToUseDialog from "./HowToUseDialog";
+import LibrarySyncStatus from "./LibrarySyncStatus";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
@@ -422,7 +423,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       )}
       {howToOpen && <HowToUseDialog onClose={() => setHowToOpen(false)} onPick={(topic: TutorialTopic) => { setHowToOpen(false); setSettingsOpen(false); showCollection(); tutorial.start(topic); }} />}
       {tutorial.active && <FirstRunTutorial key={tutorial.topic} topic={tutorial.topic} rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
-      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
+      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><LibrarySyncStatus /><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );
 }

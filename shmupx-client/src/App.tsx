@@ -21,10 +21,7 @@ import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
 import { useRemoteLaunch } from "./data/remoteLaunch";
 import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
-import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./data/misterLibrary";
-import { misterAuth, readMisterPlayer } from "./data/misterPlayer";
-import { autoImportEmulator } from "./data/emulatorLibrary";
-import { autoImportSteam } from "./data/steamLibrary";
+import { runLibrarySync } from "./data/librarySync";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -109,37 +106,16 @@ export default function App() {
     if (playing?.platform === "mister" && playing.gameId === clientMister.gameId) misterSeen.current = true;
     else if (misterSeen.current) { misterSeen.current = false; setClientMisterGame(null); }
   }, [accountRemote?.playing, clientMister]);
-  // MiSTer já conhecido (IP salvo): a biblioteca dele se atualiza sozinha ao abrir o Client (se nunca
-  // foi importada aqui ou tem mais de 6 h), e o menu ShmupX do MiSTer ganha os jogos do Lab que faltam.
-  const misterSynced = useRef(false);
+  // A cada login (inclusive ao abrir o Client já logado), importa sozinho os jogos da Steam, os ROMs
+  // deste PC (baixando os da lista que faltam) e o MiSTer já conhecido, que também ganha no menu
+  // ShmupX os jogos do Lab que faltam. Sair e entrar de novo lê tudo outra vez.
+  const librarySyncedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!isTauri() || !signedUid || rooms.length === 0 || misterSynced.current) return;
-    const library = readMisterLibrary();
-    const player = readMisterPlayer();
-    const host = library?.host || player?.host;
-    if (!host) return;
-    misterSynced.current = true;
-    // Agente do ShmupX no MiSTer: atualiza sozinho quando há versão nova publicada (só com o MiSTer
-    // no menu, para não cortar uma partida; mantém jogadores e tokens).
-    invoke<string | null>("mister_atualizar_agente", { host, ...misterAuth(player?.password) })
-      .then((version) => { if (version) console.info(`MiSTer: agente do ShmupX atualizado para ${version}`); })
-      .catch((error) => console.warn("MiSTer: falha ao atualizar o agente:", error));
-    if (library && Date.now() - library.importedAt < 6 * 60 * 60_000) return;
-    scanMister(host, player?.password)
-      .then((result) => {
-        saveMisterLibrary({ host: result.host, mras: result.mras, roms: result.roms, consoles: result.consoles, importedAt: Date.now() });
-        return syncMisterMenu(result.host, player?.password, rooms, result);
-      })
-      .catch((error) => console.warn("MiSTer: falha ao atualizar a biblioteca:", error));
+    if (!signedUid) { librarySyncedFor.current = null; return; }
+    if (!isTauri() || rooms.length === 0 || librarySyncedFor.current === signedUid) return;
+    librarySyncedFor.current = signedUid;
+    void runLibrarySync(rooms);
   }, [signedUid, rooms]);
-
-  // Ao abrir (ou recarregar) o Client, importa sozinho os jogos da Steam e os ROMs deste PC (a pasta
-  // escolhida, a `roms` do Client e as do Fightcade), baixando antes os ROMs da lista que faltam.
-  useEffect(() => {
-    if (!isTauri()) return;
-    autoImportSteam().catch((error) => console.warn("Steam: falha na importação automática:", error));
-    autoImportEmulator().catch((error) => console.warn("ROMs: falha na importação automática:", error));
-  }, []);
 
   usePlayingClaim(signedUid, ownGame
     ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? ownGame.gameId, device: "pc" }

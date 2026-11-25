@@ -170,9 +170,11 @@ pub async fn inicializar_jogo_emulador(
 /// Jogos instalados na Steam deste PC (`libraryfolders.vdf` + `appmanifest_*.acf`).
 #[tauri::command]
 pub async fn steam_biblioteca() -> super::biblioteca::Biblioteca {
-    tauri::async_runtime::spawn_blocking(super::biblioteca::ler)
+    let b = tauri::async_runtime::spawn_blocking(super::biblioteca::ler)
         .await
-        .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] })
+        .unwrap_or(super::biblioteca::Biblioteca { found: false, games: vec![] });
+    log::info!("biblioteca: Steam {} ({} jogos, {} instalados)", if b.found { "encontrada" } else { "não encontrada" }, b.games.len(), b.games.iter().filter(|g| g.installed).count());
+    b
 }
 
 /// ROMs deste PC para o ShmupX Emulator. Usa a pasta escolhida pelo jogador (guardada) ou a padrão
@@ -183,9 +185,11 @@ pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super
     let escolhida = super::emulador::pasta_escolhida(&app);
     let padrao = super::emulador::pasta_padrao_de_roms(&app);
     let emulador = super::emulador::motor(&app).is_some();
-    tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), emulador))
+    let b = tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), emulador))
         .await
-        .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada())
+        .unwrap_or_else(|_| super::emulador::BibliotecaEmulador::nao_encontrada());
+    log::info!("biblioteca: ROMs {} ({} ROMs em {})", if b.found { "lidos" } else { "não encontrados" }, b.roms.len(), b.root.as_deref().unwrap_or("-"));
+    b
 }
 
 /// Monitores ligados ao PC, para escolher onde o ShmupX Emulator abre os jogos (Configurações ›
@@ -337,9 +341,14 @@ pub async fn mister_procurar(usuario: Option<String>, senha: Option<String>) -> 
 /// Jogos do MiSTer FPGA na rede (FTP). `usuario`/`senha`: os do MiSTer, se não forem os padrão.
 #[tauri::command]
 pub async fn mister_biblioteca(host: String, usuario: Option<String>, senha: Option<String>) -> Result<super::mister::BibliotecaMister, String> {
-    tauri::async_runtime::spawn_blocking(move || super::mister::ler(&host, usuario.as_deref(), senha.as_deref()))
+    let resultado = tauri::async_runtime::spawn_blocking(move || super::mister::ler(&host, usuario.as_deref(), senha.as_deref()))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    match &resultado {
+        Ok(b) => log::info!("biblioteca: MiSTer {} com {} .mra, {} ROMs e {} jogos de console", b.host, b.mras.len(), b.roms.len(), b.consoles.len()),
+        Err(e) => log::warn!("biblioteca: MiSTer não lido: {e}"),
+    }
+    resultado
 }
 
 /// Jogos do Lab marcados com MiSTer que o MiSTer tem: entram no menu ShmupX dele (só acrescenta).

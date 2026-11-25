@@ -59,10 +59,11 @@ export async function scanSteam(): Promise<{ found: boolean; games: SteamGame[] 
  * Ao abrir o Client: lê a Steam deste PC e importa os jogos instalados, sem o jogador pedir (a
  * coleção já abre com eles em cor). Não faz nada se a Steam não está no PC ou foi desconectada.
  */
-export async function autoImportSteam() {
-  try { if (localStorage.getItem(OFF_KEY)) return; } catch { /* segue */ }
+export async function autoImportSteam(): Promise<number | null> {
+  try { if (localStorage.getItem(OFF_KEY)) return null; } catch { /* segue */ }
   const result = await scanSteam();
-  if (result.found) saveSteamLibrary(result.games.filter((g) => g.installed).map((g) => g.app_id), result.games.length);
+  if (!result.found) return null;
+  return saveSteamLibrary(result.games.filter((g) => g.installed).map((g) => g.app_id), result.games.length).appIds.length;
 }
 
 /** Biblioteca importada, atualizada em todas as telas quando muda. */
