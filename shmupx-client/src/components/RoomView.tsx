@@ -232,7 +232,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
   // O jogo aberto na conta (aqui, no MiSTer ou pelo celular) aparece na linha do jogador.
   const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : undefined;
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "invisible" ? "offline" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
   const rest = others
     .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false }))
     .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
@@ -244,12 +244,12 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
       <div className="game-room-column">
         <header className="game-room-header">
-          {/* Experimento: o gabinete arcade no lugar do card da arte. */}
-          <ArcadeCabinet room={room} className="game-room-cabinet" />
+          {/* O gabinete arcade no lugar do card da arte; como em Minhas coleções, o painel mexe com o
+              controle e o clique abre os controles do emulador. O nome do jogo já está no menu do topo. */}
+          <ArcadeCabinet room={room} className="game-room-cabinet" controls />
           <div className="game-room-main">
             <div className="game-room-title">
               <div>
-                <h1 title={room.title}>{room.title}</h1>
                 <dl className="game-room-stats">
                   <div><dt>{t("Total de fichas gastas")}</dt><dd>{stats ? stats.credits.toLocaleString() : "—"}</dd></div>
                   <div><dt>{t("Tempo de jogo")}</dt><dd>{stats ? formatPlayTime(stats.seconds) : "—"}</dd></div>
@@ -315,7 +315,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         />
       </div>
 
-      <aside className="game-room-players" aria-label={t("Jogadores na sala")}>
+      <aside className="game-room-players" aria-label={t("Jogadores na sala")} data-tutorial="room-players">
         <h2>{t("Jogadores na sala ({count})", { count: String(players.length) })}</h2>
         <label className="room-sort">
           <span>{t("Ordenar por")}</span>

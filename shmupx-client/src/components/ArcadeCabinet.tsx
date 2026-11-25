@@ -252,7 +252,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
       <g transform="translate(0 36)">
       {/* Painel de controle preto, largo e projetado à frente. Em Minhas coleções, o mouse em cima
           acende o contorno: é por aqui que se abrem os controles. */}
-      <g className="cabinet-panel">
+      <g className="cabinet-panel" data-tutorial={controls ? "cabinet-panel" : undefined}>
       <path className="cabinet-panel-face" d="M34 182 H286 Q294 182 294 191 L295 207 Q295 216 286 216 H34 Q25 216 25 207 L26 191 Q26 182 34 182 Z" fill="#16191c" stroke="#7d878e" strokeWidth="1.5" />
       <path d="M30 186 H290" stroke="#ffffff" strokeOpacity=".12" strokeWidth="1" />
       {/* Layout do painel do Astro City: joystick à esquerda, START pequeno em cima, entre os dois, e

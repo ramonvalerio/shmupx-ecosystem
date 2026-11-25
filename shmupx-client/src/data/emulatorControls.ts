@@ -73,7 +73,7 @@ export function readEmulatorControls(): { control: ControlId; code: string; devi
   });
 }
 
-/** Nome do que foi apertado para mostrar ao jogador: "REAL ARCADE Pro.V3 · Botão 3", "Tecla Z". */
+/** Nome do que foi apertado para mostrar ao jogador: "Botão 3", "Tecla Z" (o controle aparece na escolha acima da lista). */
 export function describeInput(item: MappedControl, t: (text: string, values?: Record<string, string | number>) => string): string {
   const joy = item.code.match(/^JOYCODE_\d+_(.+)$/);
   if (!joy) return t("Tecla {key}", { key: item.label });
@@ -88,7 +88,7 @@ export function describeInput(item: MappedControl, t: (text: string, values?: Re
     : /^(\w+AXIS|SLIDER\d)_(POS|NEG)_SWITCH$/.test(part)
       ? t("Eixo {axis} {dir}", { axis: part.replace(/AXIS_.*|_(POS|NEG)_SWITCH$/g, ""), dir: part.includes("_POS_") ? "+" : "−" })
     : part === "START" ? "Start" : part === "SELECT" ? "Select" : item.label;
-  return item.deviceName ? `${item.deviceName} · ${what}` : what;
+  return what;
 }
 
 /** Mapeamento atual, um só no Client: o gabinete da Coleção vê na hora o que a tela de controles grava. */

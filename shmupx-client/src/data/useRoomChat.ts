@@ -10,6 +10,9 @@ export const MUTED_MESSAGE = "Você está sem permissão para enviar mensagens n
 /** Aviso no lugar do chat para quem perdeu a visibilidade no chat (Users Manager do Lab). */
 export const OUT_OF_CHAT_MESSAGE = "O chat das salas não está disponível para a sua conta.";
 
+/** Aviso no lugar do chat no modo Invisível (status no avatar). */
+export const INVISIBLE_MESSAGE = "Você está invisível: o chat fica escondido. Para ver e participar do chat, mude o status para Online ou Ausente no seu avatar.";
+
 /** Mensagens mais recentes mantidas na tela. */
 const HISTORY = 100;
 /** Limite de `validMessage` em firestore.rules. */
@@ -25,7 +28,7 @@ const CLOCK_SLACK_MS = 30_000;
  * logados, em jogos publicados, postando com o próprio uid e nome). Funciona igual com várias
  * instâncias do backend, porque não passa por ele.
  */
-export function useRoomChat(roomId: string, author: { uid: string; displayName: string }, since?: number) {
+export function useRoomChat(roomId: string, author: { uid: string; displayName: string }, since?: number, enabled = true) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ChatStatus>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +37,8 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
     setMessages([]);
     setStatus("loading");
     setError(null);
+    // Modo Invisível: nem escuta as mensagens.
+    if (!enabled) return;
     // `since`: só as mensagens desde que o jogador entrou na sala (ver data/roomSession).
     const messages = collection(db, "rooms", roomId, "messages");
     const recent = since
@@ -67,7 +72,7 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         setError(failure.code === "permission-denied" ? "Sem permissão para ler o chat desta sala." : "Não foi possível conectar ao chat da sala.");
       },
     );
-  }, [roomId, since]);
+  }, [roomId, since, enabled]);
 
   // Moderação (Lab): quem perdeu a visibilidade no chat some para os outros; mutado não envia.
   const hidden = useHiddenChatAuthors();
@@ -80,6 +85,10 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
 
   const send = useCallback(
     async (text: string) => {
+      if (!enabled) {
+        setError(INVISIBLE_MESSAGE);
+        throw new Error(INVISIBLE_MESSAGE);
+      }
       if (silenced) {
         const message = chatHidden ? OUT_OF_CHAT_MESSAGE : MUTED_MESSAGE;
         setError(message);
@@ -102,10 +111,11 @@ export function useRoomChat(roomId: string, author: { uid: string; displayName: 
         throw failure;
       }
     },
-    [roomId, author.uid, author.displayName, silenced, chatHidden],
+    [roomId, author.uid, author.displayName, silenced, chatHidden, enabled],
   );
 
   // Fora do chat: as Rules recusam a leitura; no lugar das mensagens, o aviso.
+  if (!enabled) return { messages: [], status: "error" as ChatStatus, error: INVISIBLE_MESSAGE, send };
   if (chatHidden) return { messages: [], status: "error" as ChatStatus, error: OUT_OF_CHAT_MESSAGE, send };
   return { messages: visible, status, error: silenced ? MUTED_MESSAGE : error, send };
 }

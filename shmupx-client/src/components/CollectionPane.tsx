@@ -233,7 +233,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
 
       {selectionHidden && <p className="selection-notice">{selected.title} {t(" continua selecionado no painel de detalhes, mas está fora do filtro atual. ")}<button className="text-action" onClick={resetFilters}>{t("Limpar filtros")}</button></p>}
 
-      <div className={`game-grid ${view === "list" ? "collection-list" : ""}`}>
+      <div className={`game-grid ${view === "list" ? "collection-list" : ""}`} data-tutorial="collection-grid">
         {visible.map((room) => {
           const favorite = preferences.favorites.includes(room.id);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>

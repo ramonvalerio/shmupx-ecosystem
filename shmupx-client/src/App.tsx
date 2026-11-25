@@ -10,6 +10,7 @@ import AccountBlockedScreen from "./components/AccountBlockedScreen";
 import { useMyModeration } from "./data/useModeration";
 import { auth as firebaseAuth } from "./auth/firebase";
 import { useRoomChat } from "./data/useRoomChat";
+import { usePresenceMode } from "./data/presenceMode";
 import { useRoomPresence } from "./data/useRoomPresence";
 import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
@@ -273,7 +274,9 @@ type LiveRoomViewProps = Omit<RoomViewProps, "messages" | "onSendMessage" | "cha
 function LiveRoomView({ author, ...props }: LiveRoomViewProps) {
   // O chat mostra só desde a entrada na sala; sair pela aba recomeça (ClientShell.closeRoom).
   const since = useMemo(() => roomJoinedAt(author.uid, props.room.id), [author.uid, props.room.id]);
-  const chat = useRoomChat(props.room.id, author, since);
+  // Invisível: sem chat (nem ler nem escrever).
+  const invisible = usePresenceMode() === "invisible";
+  const chat = useRoomChat(props.room.id, author, since, !invisible);
   const others = useRoomPresence(props.room.id, author.uid);
   return (
     <RoomView

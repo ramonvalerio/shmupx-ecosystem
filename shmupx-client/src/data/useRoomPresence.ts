@@ -99,7 +99,7 @@ function useForeground() {
  * (online) ou com o Client aberto em outro lugar (away). Com um jogo aberto na conta (`playing`),
  * todas as salas mostram qual é.
  */
-export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null, away = false, playing: PresenceGame | null = null) {
+export function usePresenceHeartbeat(me: { uid: string; displayName: string }, openRoomIds: string[], visibleRoomId: string | null, recordingRoomId: string | null, live: MyLive | null, away = false, playing: PresenceGame | null = null, invisible = false) {
   const foreground = useForeground();
   const rooms = openRoomIds.join("\n");
   const liveRoom = live?.roomId ?? null;
@@ -115,6 +115,9 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
       // Quem transmite publica quantos assistem (a janela da live dos outros mostra o número).
       if (liveVideo && isTauri()) viewers = await invoke<number>("live_espectadores", { broadcastId: liveVideo }).catch(() => viewers);
       for (const roomId of ids) {
+        // Invisível: não confirma a presença, e em até 75 s os outros veem offline. A live é pública
+        // no YouTube: na sala dela continua aparecendo, para a janela da live funcionar.
+        if (invisible && !(liveVideo && liveRoom === roomId)) continue;
         const base = { name: me.displayName, lastSeen: serverTimestamp() };
         const data = liveVideo && liveRoom === roomId
           ? { ...base, state: "live", liveVideoId: liveVideo, liveViewers: viewers }
@@ -135,7 +138,7 @@ export function usePresenceHeartbeat(me: { uid: string; displayName: string }, o
     void beat();
     const timer = window.setInterval(() => void beat(), HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away, playingId, playingTitle, playingKind]);
+  }, [me.uid, me.displayName, rooms, visibleRoomId, recordingRoomId, foreground, liveRoom, liveVideo, away, playingId, playingTitle, playingKind, invisible]);
 }
 
 /** Presença de um jogador (a janela da live acompanha quem transmite). */

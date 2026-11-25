@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 
-/** Status escolhido no avatar: Online (o automático) ou Ausente (fica ausente em todas as salas). */
-export type PresenceMode = "online" | "away";
+/**
+ * Status escolhido no avatar: Online (o automático), Ausente (fica ausente em todas as salas) ou
+ * Invisível (aparece offline para os outros e continua jogando, mas sem ver nem usar o chat).
+ */
+export type PresenceMode = "online" | "away" | "invisible";
+const MODES: readonly string[] = ["online", "away", "invisible"];
 
 const KEY = "shmupx.client.presenceMode.v1";
 const EVENT = "shmupx:presence-mode";
 
 export function readPresenceMode(): PresenceMode {
-  try { return localStorage.getItem(KEY) === "away" ? "away" : "online"; } catch { return "online"; }
+  try {
+    const saved = localStorage.getItem(KEY);
+    return saved && MODES.includes(saved) ? saved as PresenceMode : "online";
+  } catch { return "online"; }
 }
 
 export function savePresenceMode(mode: PresenceMode) {

@@ -321,6 +321,8 @@
 .presence-dot.is-online { background: #3fd98b; box-shadow: 0 0 6px #3fd98b99; }
 .presence-dot.is-away { background: #fd4851; box-shadow: 0 0 6px #fd485199; }
 .presence-dot.is-offline { background: #6b757c; }
+/* Invisível (status escolhido no avatar): cinza vazado, como offline para os outros. */
+.presence-dot.is-invisible { background: transparent; box-shadow: inset 0 0 0 2px #6b757c; }
 .close-room-dialog { width: min(460px, 100%); }
 /* Limite de salas abertas: lista das abertas para escolher qual trocar pela nova. */
 .room-limit-dialog { width: min(480px, 100%); }
@@ -389,10 +391,10 @@
 .theme-light .room-banner.success { color: #15703f; background: #dff2e6; border-color: #15703f33; border-left-color: #15703f; }
 
 /* Sala: fichas gastas e tempo de jogo neste jogo */
-.game-room-stats { display: flex; gap: 18px; margin: 6px 0 0; }
-.game-room-stats div { display: flex; align-items: baseline; gap: 6px; }
-.game-room-stats dt { font-size: 11px; color: #8a9aa1; }
-.game-room-stats dd { margin: 0; font-size: 13px; font-weight: 700; color: var(--cyan); }
+.game-room-stats { display: flex; flex-wrap: wrap; gap: 10px 32px; margin: 0; }
+.game-room-stats div { display: flex; flex-direction: column; gap: 4px; }
+.game-room-stats dt { font-size: 15px; color: #8a9aa1; }
+.game-room-stats dd { margin: 0; font-size: 26px; font-weight: 400; line-height: 1.1; color: var(--cyan); }
 
 /* Play: modo de jogo e plataforma */
 .play-dialog { width: min(620px,100%); }

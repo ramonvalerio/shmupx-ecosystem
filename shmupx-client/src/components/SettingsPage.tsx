@@ -19,29 +19,28 @@ const GROUPS = [
   { id: "profile", title: "Perfil", detail: "Avatar, nome, nick e assinatura", icon: "◉" },
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas, plataformas e MiSTer FPGA", icon: "▦" },
   { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
-  { id: "emulator", title: "Emulador", detail: "Janela, scanlines e resolução", icon: "▶" },
+  { id: "emulator", title: "Emulador", detail: "Tela cheia e resolução", icon: "▶" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
   { id: "storage", title: "Armazenamento", detail: "Destino das gravações", icon: "▣" },
-  { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●" },
-  { id: "capture", title: "Captura", detail: "Fonte da imagem", icon: "▤" },
+  // Gravação e Captura fora do menu por enquanto (hidden); as telas continuam abaixo para voltar depois.
+  { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●", hidden: true },
+  { id: "capture", title: "Captura", detail: "Fonte da imagem", icon: "▤", hidden: true },
   { id: "interface", title: "Interface", detail: "Visual e abertura do cliente", icon: "◐" },
 ] as const;
 
-function SettingsCard({ title, detail, children }: { title: string; detail?: string; children: ReactNode }) {
+function SettingsCard({ title, detail, tutorial, children }: { title: string; detail?: string; tutorial?: string; children: ReactNode }) {
   const { t } = useI18n();
-  return <section className="dashboard-panel settings-card"><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
+  return <section className="dashboard-panel settings-card" data-tutorial={tutorial}><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
 }
 
 /** Como o ShmupX Emulator abre os jogos de arcade neste PC. Vale para a próxima vez que o jogo abrir. */
 function EmulatorSettingsCard() {
   const { t } = useI18n();
   const { settings, update, saved } = useEmulatorSettings();
-  const crt = settings.resolution === "crt15";
   const resolution = EMULATOR_RESOLUTIONS.find((r) => r.id === settings.resolution) ?? EMULATOR_RESOLUTIONS[0];
   return <>
     <SettingsCard title="Vídeo do emulador" detail="Como o ShmupX Emulator abre os jogos de arcade neste computador. Vale a partir do próximo jogo aberto.">
-      <label className="checkbox-field"><input type="checkbox" checked={settings.windowed} onChange={(event) => update({ ...settings, windowed: event.target.checked })} />{t("Abrir em janela")}</label>
-      <label className="checkbox-field"><input type="checkbox" checked={settings.scanlines && !crt} disabled={crt} onChange={(event) => update({ ...settings, scanlines: event.target.checked })} />{t("Scanlines (linhas de TV de tubo)")}</label>
+      <label className="checkbox-field"><input type="checkbox" checked={!settings.windowed} onChange={(event) => update({ ...settings, windowed: !event.target.checked, scanlines: true })} />{t("Abrir sempre em tela cheia")}</label>
       <label className="settings-field">{t("Resolução de vídeo")}<select value={settings.resolution} onChange={(event) => update({ ...settings, resolution: event.target.value as EmulatorResolution })}>{EMULATOR_RESOLUTIONS.map((r) => <option key={r.id} value={r.id}>{t(r.label)}</option>)}</select></label>
       <p className="muted">{t(resolution.detail)}</p>
     </SettingsCard>
@@ -179,13 +178,13 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
     {importOpen && <ImportGamesDialog rooms={rooms} onClose={()=>setImportOpen(false)} onViewCollection={()=>onNavigate("collection")} />}
     <PageHeading title={t("Configurações")} detail={t("Biblioteca, captura e preferências do cliente.")} />
     <div className="settings-layout">
-      <nav className="settings-menu" aria-label={t("Grupos de configurações")}>{GROUPS.map((item) => <button key={item.id} aria-current={group === item.id ? "page" : undefined} onClick={() => setGroup(item.id)}><span aria-hidden="true">{item.icon}</span><span><strong>{t(item.title)}</strong><small>{t(item.detail)}</small></span></button>)}</nav>
+      <nav className="settings-menu" aria-label={t("Grupos de configurações")}>{GROUPS.filter((item) => !("hidden" in item && item.hidden)).map((item) => <button key={item.id} data-tutorial={`settings-group-${item.id}`} aria-current={group === item.id ? "page" : undefined} onClick={() => setGroup(item.id)}><span aria-hidden="true">{item.icon}</span><span><strong>{t(item.title)}</strong><small>{t(item.detail)}</small></span></button>)}</nav>
       <div className="settings-panels">
         {group === "profile" && <SettingsCard title={t("Perfil")}><ProfileSettings profile={profile} onProfile={onProfile} /></SettingsCard>}
         {group === "interface" && <>
           <SettingsCard title={t("Idioma do sistema")} detail={t("O idioma muda na hora e fica salvo neste dispositivo.")}><label className="settings-field">{t("Idioma do sistema")}<select value={preferences.language} onChange={(event) => onPreferences({ ...preferences, language: event.target.value === "en" ? "en" : "pt-BR" })}><option value="pt-BR">{t("Português (Brasil)")}</option><option value="en">{t("English")}</option></select></label></SettingsCard>
           <SettingsCard title={t("Visual")} detail={t("Escolha a paleta do ShmupX. A mudança vale na hora e fica guardada para a próxima vez.")}>
-            <div className="theme-options" role="group" aria-label={t("Visual")}>{([{ id: "default", label: "Padrão" }, { id: "dark", label: "Escuro" }, { id: "light", label: "Claro" }, { id: "fashion", label: "Fashion" }] as const).map((theme) => <button key={theme.id} aria-pressed={preferences.appearance === theme.id} onClick={() => onPreferences({ ...preferences, appearance: theme.id })}><span className={`theme-swatch swatch-${theme.id}`} aria-hidden="true" />{t(theme.label)}</button>)}</div>
+            <div className="theme-options" role="group" aria-label={t("Visual")} data-tutorial="settings-theme">{([{ id: "default", label: "Padrão" }, { id: "dark", label: "Escuro" }, { id: "light", label: "Claro" }, { id: "fashion", label: "Fashion" }] as const).map((theme) => <button key={theme.id} aria-pressed={preferences.appearance === theme.id} onClick={() => onPreferences({ ...preferences, appearance: theme.id })}><span className={`theme-swatch swatch-${theme.id}`} aria-hidden="true" />{t(theme.label)}</button>)}</div>
             <label className="checkbox-field"><input type="checkbox" checked={preferences.compact} onChange={(event) => onPreferences({ ...preferences, compact: event.target.checked })} />{t("Coleção compacta")}</label>
           </SettingsCard>
           <SettingsCard title={t("Abrir ao iniciar")} detail={t("O cliente sempre abre na Coleção. Escolha o modo de apresentação.")}>
@@ -199,7 +198,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         {group === "integrations" && <YouTubeCard />}
         {group === "emulator" && <EmulatorSettingsCard />}
         {group === "controller" && <><SettingsCard title="Controles do emulador" detail="Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator."><CabinetControlMapper /></SettingsCard></>}
-        {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("Pasta onde os vídeos das runs são gravados.")}><StorageSettings /></SettingsCard>}
+        {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("Pasta onde os vídeos das runs são gravados.")} tutorial="settings-storage"><StorageSettings /></SettingsCard>}
         {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}
         {group === "capture" && <SettingsCard title={t("Fonte de captura")} detail={t("O gravador atual captura a tela inteira do Windows.")}><div className="capture-source-preview" aria-hidden="true"><span>{t("SHMUPX")}</span><span>{t("Captura da tela inteira")}</span></div><dl className="settings-facts"><dt>{t("Origem")}</dt><dd>{t("Tela inteira")}</dd><dt>{t("Início")}</dt><dd>{t("Após autorização da run")}</dd><dt>{t("Encerramento")}</dt><dd>{t("Manual ou pelo limite da ficha")}</dd></dl><p className="muted">{t("A seleção de janela do cliente original ainda não está disponível.")}</p></SettingsCard>}
       </div>

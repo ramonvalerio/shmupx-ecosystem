@@ -235,7 +235,7 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
             <div className="room-chips" role="radiogroup" aria-labelledby={`${uidLabel}-live`}>
               <button type="button" role="radio" aria-checked={liveHereOn ? false : !withLive} disabled={optionsLocked} onClick={() => setLivePrefs({ on: false })}>{t("Off")}</button>
               <button type="button" role="radio" aria-checked={liveHereOn ? true : withLive} disabled={optionsLocked} title={liveUnavailable ?? undefined} onClick={() => setLivePrefs({ on: true })}>
-                <span className="live-dot" aria-hidden="true" />{t("On")}
+                {t("On")}
               </button>
             </div>
           </div>

@@ -12,7 +12,7 @@ export default function EmulatorControlsDialog({ onClose }: { onClose: () => voi
   const ref = useDialogFocus(true, onClose);
   return (
     <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="emulator-controls-title" tabIndex={-1} className="controller-dialog emulator-controls-dialog">
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="emulator-controls-title" tabIndex={-1} className="controller-dialog emulator-controls-dialog" data-tutorial="controls-dialog">
         <header>
           <div>
             <h2 id="emulator-controls-title">{t("Controles do emulador")}</h2>

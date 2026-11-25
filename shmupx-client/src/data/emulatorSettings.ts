@@ -31,7 +31,8 @@ export function readEmulatorSettings(): EmulatorSettings {
     if (!saved || typeof saved !== "object") return fallback;
     return {
       windowed: typeof saved.windowed === "boolean" ? saved.windowed : fallback.windowed,
-      scanlines: typeof saved.scanlines === "boolean" ? saved.scanlines : fallback.scanlines,
+      // Sem opção na tela por enquanto: acima de 240p (fora da TV de tubo) as scanlines ficam sempre ligadas.
+      scanlines: true,
       resolution: EMULATOR_RESOLUTIONS.some((r) => r.id === saved.resolution) ? (saved.resolution as EmulatorResolution) : fallback.resolution,
     };
   } catch {

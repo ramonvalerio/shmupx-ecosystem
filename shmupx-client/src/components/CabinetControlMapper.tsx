@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import { CONTROLS, describeInput, useControlMapping, type ControlId, type MappedControl } from "../data/emulatorControls";
 import { useEngineCapture, type CaptureEvent } from "../data/engineCapture";
 import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
+import { acceptsInput, useConnectedControllers, useControllerChoice, type ControllerChoice } from "../data/connectedControllers";
 
 /**
  * Posição de cada controle no painel (coordenadas do SVG). O gabinete segue o desenho do
@@ -39,12 +40,17 @@ export default function CabinetControlMapper() {
   const [hover, setHover] = useState<ControlId | null>(null);
   const waitingRef = useRef<ControlId | null>(null);
   waitingRef.current = waiting;
+  const { choice, choose } = useControllerChoice();
+  const { controllers, seen } = useConnectedControllers(Object.values(mapping).map((item) => item?.deviceName));
 
   // Motor em modo captura enquanto a tela está aberta (o mesmo do gabinete da Coleção). Esperando
   // um aperto, ele vira o controle escolhido.
   const onInput = (data: CaptureEvent) => {
     const control = waitingRef.current;
+    if (data.code?.startsWith("JOYCODE_")) seen(data.deviceName);
     if (!control || !data.code) return;
+    // Aperto de outro aparelho que não o escolhido na lista: ignora e continua esperando.
+    if (!acceptsInput(choice, data.code, data.deviceName)) return;
     if (data.code === "KEYCODE_ESC") { setWaiting(null); return; }
     const item: MappedControl = { code: data.code, label: data.label ?? data.code, device: data.device, deviceName: data.deviceName };
     const moved = assign(control, item);
@@ -199,6 +205,16 @@ export default function CabinetControlMapper() {
               ? t("Aperte o botão, tecla ou direção para {control}. Esc cancela.", { control: labelOf(waiting) })
               : flash?.text ?? t("Clique num botão do painel e aperte o botão do seu controle ou uma tecla. Grava na hora.")}
         </p>
+        <label className="settings-field cabinet-mapper-device">{t("Controle")}
+          <select value={choiceValue(choice)} onChange={(event) => choose(parseChoice(event.target.value))}>
+            <option value="all">{t("Qualquer controle ou teclado")}</option>
+            <option value="keyboard">{t("Teclado")}</option>
+            {controllers.map((pad) => <option key={pad.name} value={`pad:${pad.name}`}>{`${pad.name} · ${pad.connected ? t("Conectado") : t("Desconectado")}`}</option>)}
+            {choice.kind === "pad" && !controllers.some((pad) => pad.name === choice.name) && <option value={`pad:${choice.name}`}>{`${choice.name} · ${t("Desconectado")}`}</option>}
+          </select>
+        </label>
+        {controllers.length === 0 && <p className="muted">{t("Nenhum controle conectado. Plugue o controle e aperte um botão para ele aparecer na lista.")}</p>}
+        {choice.kind === "pad" && !controllers.find((pad) => pad.name === choice.name)?.connected && <p className="mode-error" role="status">{t("{controller} está desconectado. Plugue o controle para mapear os botões.", { controller: choice.name })}</p>}
         <ul className="cabinet-mapper-list">
           {CONTROLS.map((control) => (
             <li key={control.id}>
@@ -223,4 +239,14 @@ export default function CabinetControlMapper() {
       </div>
     </div>
   );
+}
+
+function choiceValue(choice: ControllerChoice): string {
+  return choice.kind === "pad" ? `pad:${choice.name}` : choice.kind;
+}
+
+function parseChoice(value: string): ControllerChoice {
+  if (value === "keyboard") return { kind: "keyboard" };
+  if (value.startsWith("pad:")) return { kind: "pad", name: value.slice(4) };
+  return { kind: "all" };
 }

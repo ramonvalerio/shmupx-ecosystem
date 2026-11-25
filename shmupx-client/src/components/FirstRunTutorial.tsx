@@ -8,7 +8,8 @@ import { usePlatformOwnership } from "../data/platforms";
 import { useClientMisterGame } from "../data/playing";
 
 /**
- * Tutorial da primeira vez (passos 4 e 5 do site: importar os jogos e jogar). No estilo dos jogos de
+ * Tutorial da primeira vez (importar os jogos, configurar o controle e jogar) e os guias do HOW TO
+ * USE, um por dúvida (ver `TutorialTopic`). No estilo dos jogos de
  * celular: escurece a tela, abre um recorte em volta do botão certo, uma mão aponta onde tocar e só
  * o recorte recebe o clique. Cada passo avança sozinho quando o jogador chega lá (a janela abriu, os
  * jogos foram importados, o jogo abriu). Os alvos são marcados com `data-tutorial="…"` nas telas.
@@ -37,29 +38,90 @@ function playedBefore() {
  */
 export function useFirstRunTutorial(uid: string, rooms: GameRoom[]) {
   const playable = usePlatformOwnership();
-  const [active, setActive] = useState(false);
+  const [topic, setTopic] = useState<TutorialTopic | null>(null);
   const loaded = rooms.length > 0;
   useEffect(() => {
     if (!loaded || readTutorialStatus(uid) || (playable.anyLibrary && playedBefore())) return;
-    const timer = window.setTimeout(() => setActive(true), 700);
+    const timer = window.setTimeout(() => setTopic("full"), 700);
     return () => window.clearTimeout(timer);
     // Decide uma vez por login, quando o catálogo chega.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, loaded]);
-  const start = useCallback(() => setActive(true), []);
-  const finish = useCallback((status: TutorialStatus) => { saveTutorialStatus(uid, status); setActive(false); }, [uid]);
-  return { active, start, finish };
+  const start = useCallback((next: TutorialTopic = "full") => setTopic(next), []);
+  const finish = useCallback((status: TutorialStatus) => { saveTutorialStatus(uid, status); setTopic(null); }, [uid]);
+  return { active: topic !== null, topic: topic ?? "full", start, finish };
 }
 
-type StepId =
+/**
+ * O que o tutorial ensina: `full` é o da primeira vez (importar, controle e jogar); os outros são as
+ * dúvidas do HOW TO USE. `import` e `play` usam os passos do completo; os demais são guias curtos
+ * (`GUIDES`).
+ */
+export type TutorialTopic = "full" | "import" | "play" | "ranking" | "live" | "theme" | "storage";
+type GuideTopic = Exclude<TutorialTopic, "full" | "import" | "play">;
+
+/** Dúvidas do HOW TO USE, na ordem do modal. */
+export const TUTORIAL_TOPICS: { id: Exclude<TutorialTopic, "full">; title: string; detail: string }[] = [
+  { id: "import", title: "Como importar os jogos", detail: "Traga para a coleção os jogos da Steam, do emulador ou do MiSTer." },
+  { id: "play", title: "Como jogar", detail: "Configure o controle, escolha o modo e insira a ficha." },
+  { id: "ranking", title: "Como ver o ranking", detail: "Abra o ranking de um jogo e veja os placares e os detalhes de cada run." },
+  { id: "live", title: "Como assistir às lives", detail: "Entre na sala do jogo e assista a quem está transmitindo." },
+  { id: "theme", title: "Como mudar o tema do visual", detail: "Troque a paleta de cores do ShmupX Client." },
+  { id: "storage", title: "Como escolher a pasta dos vídeos", detail: "Escolha onde os vídeos das runs são gravados." },
+];
+
+type FlowStep =
   | "import-open" | "go-collection" | "import-source" | "import-run" | "import-scanning" | "import-folder" | "import-other" | "import-close"
+  | "controller-open" | "controller-map"
   | "pick-game" | "pick-mode" | "insert-coin" | "choose-mode" | "launch-problem" | "launching" | "done";
+type StepId = FlowStep | `guide-${number}`;
+/** Fase do tutorial completo em que o jogador está. */
+type Stage = "import" | "controller" | "play";
+
+interface GuideStep {
+  target: string;
+  title: string;
+  text: string;
+  hand: boolean;
+  /** Onde a mão aponta dentro do alvo. */
+  point?: string;
+}
+
+/**
+ * Guias curtos: vale o passo mais adiantado cujo alvo está na tela (a engrenagem, o grupo, a opção).
+ * O último passo não bloqueia a tela, para o jogador mexer, e termina no "Concluir".
+ */
+const GUIDES: Record<GuideTopic, { label: string; steps: GuideStep[] }> = {
+  ranking: { label: "Ver o ranking", steps: [
+    { target: "collection-grid", point: ".game-card", hand: true, title: "Escolha um jogo", text: "Toque num jogo da coleção para selecionar." },
+    { target: "crumb-ranking", hand: true, title: "Abra o Ranking", text: "Toque em Ranking, no menu do topo, para ver o ranking deste jogo." },
+    { target: "ranking-filters", hand: false, title: "Ranking do jogo", text: "No alto fica o recorde e, embaixo, o melhor placar de cada jogador. Troque o modo e a plataforma nos filtros e toque num jogador para ver os detalhes e o vídeo da run." },
+  ] },
+  live: { label: "Assistir às lives", steps: [
+    { target: "collection-grid", point: ".game-card", hand: true, title: "Escolha um jogo", text: "Toque num jogo da coleção para selecionar." },
+    { target: "crumb-room", hand: true, title: "Entre na sala", text: "Toque no nome do jogo, no menu do topo, para entrar na sala dele." },
+    { target: "room-players", hand: false, title: "Assista às lives", text: "Quem está transmitindo aparece ao vivo na lista de jogadores: toque duas vezes no jogador para assistir numa janela. No Ranking, o ícone do YouTube também abre a live ou o vídeo da run." },
+  ] },
+  theme: { label: "Mudar o tema", steps: [
+    { target: "settings-button", hand: true, title: "Abra as Configurações", text: "Toque na engrenagem, no menu da esquerda." },
+    { target: "settings-group-interface", hand: true, title: "Interface", text: "Toque em Interface." },
+    { target: "settings-theme", hand: false, title: "Escolha o visual", text: "Toque num dos temas: o ShmupX muda na hora e guarda a escolha neste computador." },
+  ] },
+  storage: { label: "Pasta dos vídeos", steps: [
+    { target: "settings-button", hand: true, title: "Abra as Configurações", text: "Toque na engrenagem, no menu da esquerda." },
+    { target: "settings-group-storage", hand: true, title: "Armazenamento", text: "Toque em Armazenamento." },
+    { target: "settings-storage", hand: false, title: "Escolha a pasta", text: "Toque em Escolher pasta… e selecione onde os vídeos das runs vão ficar. Abrir pasta mostra os vídeos já gravados." },
+  ] },
+};
+const isGuide = (topic: TutorialTopic): topic is GuideTopic => topic in GUIDES;
 
 interface StepInfo {
   code: string;
-  /** 1 = importar jogos, 2 = jogar e rankear. */
-  phase: 1 | 2;
-  /** Posição dentro do passo, para os marcadores. */
+  /** Nome da fase, no alto do balão. */
+  label: string;
+  /** Quantos passos a fase tem, para os marcadores. */
+  total: number;
+  /** Posição dentro da fase, para os marcadores. */
   index: number;
   title: string;
   text: string;
@@ -72,43 +134,77 @@ interface StepInfo {
   next?: boolean;
   /** Onde a mão aponta dentro do alvo (seletor CSS); sem isso, no meio dele. */
   point?: string;
+  /** Último passo de um guia: mostra o "Concluir". */
+  final?: boolean;
 }
 
-const PHASE_SIZE = { 1: 4, 2: 5 } as const;
-const PHASE_LABEL = { 1: "Passo 1 · Importar jogos", 2: "Passo 2 · Jogar e rankear" } as const;
+const PHASES: Record<Stage, { label: string; total: number }> = {
+  import: { label: "Passo 1 · Importar jogos", total: 4 },
+  controller: { label: "Passo 2 · Configurar o controle", total: 3 },
+  play: { label: "Passo 3 · Jogar e rankear", total: 5 },
+};
 
-function stepInfo(id: StepId, importing: boolean): StepInfo {
+function stepInfo(id: StepId, stage: Stage, topic: TutorialTopic): StepInfo {
+  if (id.startsWith("guide-") && isGuide(topic)) {
+    const guide = GUIDES[topic];
+    const index = Number(id.slice(6));
+    const step = guide.steps[index];
+    const final = index === guide.steps.length - 1;
+    return { code: String(index + 1), label: guide.label, total: guide.steps.length, index: index + 1, target: step.target, hand: step.hand, point: step.point,
+      block: !final, final, title: step.title, text: step.text };
+  }
+  const flow = id as FlowStep;
+  return { ...flowStep(flow, stage, topic), ...PHASES[flowStage(flow, stage)] };
+}
+
+/** Fase de cada passo (o "Volte para a coleção" e o "Escolha um jogo" servem a mais de uma). */
+function flowStage(id: FlowStep, stage: Stage): Stage {
+  if (id === "go-collection" || id === "pick-game") return stage;
+  if (id.startsWith("import-")) return "import";
+  if (id.startsWith("controller-")) return "controller";
+  return "play";
+}
+
+function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepInfo, "label" | "total"> {
+  const importing = stage === "import";
   switch (id) {
-    case "import-open": return { code: "1.1", phase: 1, index: 1, target: "import-button", hand: true, block: true,
+    case "import-open": return { code: "1.1", index: 1, target: "import-button", hand: true, block: true,
       title: "Importe seus jogos", text: "Toque em Importar jogos para trazer os jogos que você já tem neste computador." };
-    case "go-collection": return { code: importing ? "1.1" : "2.1", phase: importing ? 1 : 2, index: 1, target: "crumb-collection", hand: true, block: true,
+    case "go-collection": return { code: importing ? "1.1" : stage === "controller" ? "2.1" : "3.1", index: 1, target: "crumb-collection", hand: true, block: true,
       title: "Volte para a coleção", text: "Toque em Minhas coleções para ver os seus jogos." };
-    case "import-source": return { code: "1.2", phase: 1, index: 2, target: "import-sources", hand: true, block: true, point: ".import-source-row:nth-child(2) .import-source-option",
+    case "import-source": return { code: "1.2", index: 2, target: "import-sources", hand: true, block: true, point: ".import-source-row:nth-child(2) .import-source-option",
       title: "De onde vêm os seus jogos?", text: "Steam lê os jogos instalados, Emulador lê os seus ROMs (.zip) e MiSTer lê os jogos do MiSTer na rede. Toque numa opção." };
-    case "import-run": return { code: "1.3", phase: 1, index: 3, target: "import-run", hand: true, block: true,
+    case "import-run": return { code: "1.3", index: 3, target: "import-run", hand: true, block: true,
       title: "Leia a sua biblioteca", text: "Toque aqui. O ShmupX procura os jogos sozinho e marca na coleção os que você tem." };
-    case "import-scanning": return { code: "1.3", phase: 1, index: 3, target: "import-dialog", hand: false, block: true,
+    case "import-scanning": return { code: "1.3", index: 3, target: "import-dialog", hand: false, block: true,
       title: "Procurando os seus jogos…", text: "Aguarde um instante enquanto o ShmupX lê a biblioteca." };
-    case "import-folder": return { code: "1.3", phase: 1, index: 3, target: "import-pick-folder", hand: true, block: true,
+    case "import-folder": return { code: "1.3", index: 3, target: "import-pick-folder", hand: true, block: true,
       title: "Mostre onde estão os seus jogos", text: "Não achamos os ROMs sozinhos. Toque em Selecionar pasta de ROMs e escolha a pasta com os arquivos .zip (por exemplo, a pasta de ROMs do Fightcade)." };
-    case "import-other": return { code: "1.3", phase: 1, index: 3, target: "import-back", hand: true, block: true,
+    case "import-other": return { code: "1.3", index: 3, target: "import-back", hand: true, block: true,
       title: "Tente outra fonte", text: "Aqui não há jogos do ShmupX neste computador. Toque em Voltar e escolha outra fonte." };
-    case "import-close": return { code: "1.4", phase: 1, index: 4, target: "import-close", hand: true, block: true,
+    case "import-close": return { code: "1.4", index: 4, target: "import-close", hand: true, block: true,
       title: "Jogos importados!", text: "A coleção já mostra os jogos que você tem. Toque em Fechar para voltar a ela." };
-    case "pick-game": return { code: "2.1", phase: 2, index: 1, target: "game-owned", hand: true, block: true,
-      title: "Escolha um jogo", text: "Toque num jogo colorido: são os que você tem. Os detalhes e a ficha para jogar aparecem ao lado." };
-    case "pick-mode": return { code: "2.2", phase: 2, index: 2, target: "play-modes", hand: true, block: true, next: true,
+    case "controller-open": return { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true, next: true,
+      title: "Configure o seu controle", text: "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle. Se ele já está do seu jeito, toque em Próximo." };
+    case "controller-map": return { code: "2.3", index: 3, target: "controls-dialog", hand: false, block: true,
+      title: "Escolha os botões", text: "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque em Fechar." };
+    case "pick-game": return { code: stage === "controller" ? "2.1" : "3.1", index: 1, target: "game-owned", hand: true, block: true,
+      title: "Escolha um jogo", text: "Toque num jogo colorido: são os que você tem. Os detalhes, o gabinete e a ficha para jogar aparecem ao lado." };
+    case "pick-mode": return { code: "3.2", index: 2, target: "play-modes", hand: true, block: true, next: true,
       title: "Escolha o modo de pontuação", text: "Hi-Score: pontuação máxima; se zerar com 1 crédito, a run entra também no ranking 1CC. Caravan (em breve): pontuação em tempo limitado. Toque num modo ou em Próximo." };
-    case "insert-coin": return { code: "2.3", phase: 2, index: 3, target: "play-coin", hand: true, block: true,
+    case "insert-coin": return { code: "3.3", index: 3, target: "play-coin", hand: true, block: true,
       title: "Insira a ficha", text: "Toque na ficha para jogar." };
-    case "choose-mode": return { code: "2.4", phase: 2, index: 4, target: "play-mode-choices", hand: true, block: true, point: ".play-mode-choice.is-training",
+    case "choose-mode": return { code: "3.4", index: 4, target: "play-mode-choices", hand: true, block: true, point: ".play-mode-choice.is-training",
       title: "Como você quer jogar?", text: "Training Mode é grátis e não vale ranking: ótimo para começar. Ranked Mode gasta 1 ficha, grava a run e vale para o ranking." };
-    case "launch-problem": return { code: "2.5", phase: 2, index: 5, target: "launch-problem", hand: false, block: true,
+    case "launch-problem": return { code: "3.5", index: 5, target: "launch-problem", hand: false, block: true,
       title: "O jogo não abriu", text: "Siga as dicas da janela. Se os ROMs estão em outra pasta, toque em Selecionar pasta de ROMs e depois tente de novo." };
-    case "launching": return { code: "2.5", phase: 2, index: 5, target: null, hand: false, block: false,
+    case "launching": return { code: "3.5", index: 5, target: null, hand: false, block: false,
       title: "Abrindo o jogo…", text: "Quando a janela do jogo aparecer, é só jogar!" };
-    case "done": return { code: "✓", phase: 2, index: 5, target: null, hand: false, block: true,
-      title: "Tudo pronto!", text: "Você já sabe jogar no ShmupX. Faça o seu recorde e suba no ranking. Para ver este tutorial de novo, toque em HOW TO USE, no canto superior direito." };
+    case "done": return topic === "import"
+      ? { code: "✓", index: 4, target: null, hand: false, block: true,
+        title: "Jogos importados!", text: "Os seus jogos já estão na coleção. Para aprender a jogar, toque em HOW TO USE, no canto superior direito, e escolha Como jogar." }
+      : { code: "✓", index: 5, target: null, hand: false, block: true,
+        title: "Tudo pronto!", text: "Você já sabe jogar no ShmupX. Faça o seu recorde e suba no ranking. Para ver este tutorial de novo, toque em HOW TO USE, no canto superior direito." };
   }
 }
 
@@ -153,7 +249,9 @@ const sameSnapshot = (a: Snapshot, b: Snapshot) => JSON.stringify(a) === JSON.st
 const HOLE_PAD = 6;
 const LAUNCH_SLOW_MS = 25_000;
 
-export default function FirstRunTutorial({ rooms, currentRoomId, paused = false, onExit }: {
+export default function FirstRunTutorial({ topic = "full", rooms, currentRoomId, paused = false, onExit }: {
+  /** O que ensinar: o tutorial completo ou uma das dúvidas do HOW TO USE. */
+  topic?: TutorialTopic;
   rooms: GameRoom[];
   /** Jogo na tela (sala aberta ou o selecionado na Coleção): a ficha dele joga. */
   currentRoomId: string | null;
@@ -171,6 +269,8 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
   const [modeConfirmed, setModeConfirmed] = useState(false);
   /** Passou pela importação (a janela leu uma biblioteca com jogos do ShmupX): libera o passo 2. */
   const [imported, setImported] = useState(false);
+  /** Passou pelos controles do emulador (ou tocou em Próximo): libera o jogar. */
+  const [controllerDone, setControllerDone] = useState(false);
   const [launchRequested, setLaunchRequested] = useState<number | null>(null);
   const [launched, setLaunched] = useState(false);
   const [launchSlow, setLaunchSlow] = useState(false);
@@ -212,8 +312,18 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
     return () => window.clearTimeout(timer);
   }, [launchRequested]);
 
+  // Importar só no completo e no "Como importar"; no "Como jogar", só se ainda não há jogos.
+  const needImport = topic === "full" || topic === "import" ? !imported || ownedCount === 0 : ownedCount === 0;
+  const stage: Stage = needImport ? "import" : !controllerDone ? "controller" : "play";
+
   /** Em qual passo o jogador está, pelo que está na tela agora. */
   const resolve = useCallback((): StepId => {
+    if (isGuide(topic)) {
+      // O passo mais adiantado à mostra (os de antes continuam na tela, como a engrenagem).
+      const steps = GUIDES[topic].steps;
+      for (let i = steps.length - 1; i > 0; i--) if (findTarget(steps[i].target)) return `guide-${i}`;
+      return "guide-0";
+    }
     if (launched) return "done";
     if (findTarget("launch-problem")) return "launch-problem";
     if (findTarget("play-mode-choices")) return "choose-mode";
@@ -227,19 +337,27 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
       // Fonte escolhida e leitura concluída: com jogos do ShmupX, fecha; sem, tenta outra fonte.
       return ownedCount > 0 ? "import-close" : "import-other";
     }
+    if (findTarget("controls-dialog")) return "controller-map";
     if (launchRequested !== null) return "launching";
-    // Sempre começa pela importação, mesmo para quem já tem jogos na coleção.
-    if (!imported || ownedCount === 0) return findTarget("import-button") ? "import-open" : "go-collection";
+    // O completo sempre começa pela importação, mesmo para quem já tem jogos na coleção.
+    if (needImport) return findTarget("import-button") ? "import-open" : "go-collection";
+    if (topic === "import") return "done";
+    // Depois de importar, o controle: o painel do gabinete (na Coleção, com um jogo escolhido, ou na sala).
+    if (!controllerDone) {
+      if (findTarget("cabinet-panel")) return "controller-open";
+      if (!findTarget("game-owned") && findTarget("crumb-collection") && !findTarget("import-button")) return "go-collection";
+      return "pick-game";
+    }
     if (currentOwned && findTarget("play-coin")) return !modeConfirmed && findTarget("play-modes") ? "pick-mode" : "insert-coin";
     if (!findTarget("game-owned") && findTarget("crumb-collection") && !findTarget("import-button")) return "go-collection";
     return "pick-game";
-  }, [launched, ownedCount, launchRequested, currentOwned, modeConfirmed, imported]);
+  }, [topic, launched, ownedCount, launchRequested, currentOwned, modeConfirmed, needImport, controllerDone]);
 
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const missingSince = useRef<{ step: StepId; at: number } | null>(null);
   const measure = useCallback(() => {
     const step = resolve();
-    const info = stepInfo(step, !imported || ownedCount === 0);
+    const info = stepInfo(step, stage, topic);
     const element = info.target ? findTarget(info.target) : null;
     let rect: Box | null = null;
     let point: Box | null = null;
@@ -252,10 +370,12 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
     const missing = Boolean(info.target && !element && missingSince.current && Date.now() - missingSince.current.at > 1500);
     const next: Snapshot = { step, rect, point, missing, vw: window.innerWidth, vh: window.innerHeight };
     setSnap((current) => (current && sameSnapshot(current, next) ? current : next));
-  }, [resolve, ownedCount, imported]);
+  }, [resolve, stage, topic]);
 
   // Chegou ao "Jogos importados!": a importação está feita e o passo 2 fica liberado.
   useEffect(() => { if (snap?.step === "import-close") setImported(true); }, [snap?.step]);
+  // Abriu os controles do emulador: ao fechar a janela, segue para o jogar.
+  useEffect(() => { if (snap?.step === "controller-map") setControllerDone(true); }, [snap?.step]);
 
   // Alvos que aparecem depois (janelas, painel de detalhes), redimensionar e rolar: mede de novo.
   useEffect(() => {
@@ -283,7 +403,7 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
   const step = snap?.step;
   useEffect(() => {
     if (!step) return;
-    const name = stepInfo(step, ownedCount === 0).target;
+    const name = stepInfo(step, stage, topic).target;
     const element = name ? findTarget(name) : null;
     element?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     // Problema ao abrir: depois de resolver, o jogador insere a ficha de novo.
@@ -301,7 +421,7 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
   });
 
   if (paused || !snap) return null;
-  const info = stepInfo(snap.step, ownedCount === 0);
+  const info = stepInfo(snap.step, stage, topic);
   const { vw, vh } = snap;
   const hole = snap.rect && !snap.missing ? clampBox({ x: snap.rect.x - HOLE_PAD, y: snap.rect.y - HOLE_PAD, w: snap.rect.w + HOLE_PAD * 2, h: snap.rect.h + HOLE_PAD * 2 }, vw, vh) : null;
   const blocking = info.block && (hole !== null || info.target === null);
@@ -313,7 +433,7 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
   const showHand = info.hand && tip !== null;
   const bubble = placeBubble(hole, tip, handDown && showHand, showHand, bubbleSize, vw, vh);
   const block = (event: SyntheticEvent) => { event.preventDefault(); event.stopPropagation(); setNudge((n) => n + 1); };
-  const finishNow = () => onExit(snap.step === "done" ? "done" : "skipped");
+  const finishNow = () => onExit(snap.step === "done" || info.final ? "done" : "skipped");
 
   return createPortal(
     <div className={`tut-root ${blocking ? "is-blocking" : "is-passive"}`} role="dialog" aria-modal={blocking} aria-labelledby="tut-title" aria-describedby="tut-text">
@@ -333,20 +453,20 @@ export default function FirstRunTutorial({ rooms, currentRoomId, paused = false,
       <div ref={bubbleRef} className={`tut-bubble ${hole ? "" : "is-center"} ${snap.step === "done" ? "is-done" : ""}`} style={{ left: bubble.x, top: bubble.y }}>
         <header className="tut-head">
           <span className="tut-plate">{info.code}</span>
-          <span className="tut-kicker"><i aria-hidden="true" />{snap.step === "done" ? t("Tutorial concluído") : t(PHASE_LABEL[info.phase])}</span>
-          {snap.step !== "done" && <span className="tut-count">{t("{step} de {total}", { step: info.index, total: PHASE_SIZE[info.phase] })}</span>}
+          <span className="tut-kicker"><i aria-hidden="true" />{snap.step === "done" ? t("Tutorial concluído") : t(info.label)}</span>
+          {snap.step !== "done" && <span className="tut-count">{t("{step} de {total}", { step: info.index, total: info.total })}</span>}
         </header>
         <h2 id="tut-title" className="tut-title">{t(info.title)}</h2>
         <p id="tut-text" className="tut-text">{t(info.text)}</p>
         {snap.missing && <p className="tut-note" role="status">{t("Não encontramos este item na tela agora. Continue pela tela normalmente ou pule o tutorial.")}</p>}
         {snap.step === "launching" && launchSlow && <p className="tut-note" role="status">{t("Se o jogo já abriu, toque em Concluir.")}</p>}
         <footer className="tut-foot">
-          {snap.step !== "done" && <button type="button" className="tut-skip" onClick={() => onExit("skipped")}>{t("Pular tutorial")}</button>}
+          {snap.step !== "done" && !info.final && <button type="button" className="tut-skip" onClick={() => onExit("skipped")}>{t("Pular tutorial")}</button>}
           <span className="tut-pips" aria-hidden="true">
-            {Array.from({ length: PHASE_SIZE[info.phase] }, (_, i) => <i key={i} className={i + 1 < info.index || snap.step === "done" ? "is-past" : i + 1 === info.index ? "is-now" : ""} />)}
+            {Array.from({ length: info.total }, (_, i) => <i key={i} className={i + 1 < info.index || snap.step === "done" ? "is-past" : i + 1 === info.index ? "is-now" : ""} />)}
           </span>
-          {info.next && <button type="button" className="tut-next" onClick={() => setModeConfirmed(true)}>{t("Próximo")}</button>}
-          {(snap.step === "done" || (snap.step === "launching" && launchSlow)) && <button type="button" className="tut-next" onClick={() => onExit("done")}>{t("Concluir")}</button>}
+          {info.next && <button type="button" className="tut-next" onClick={() => (snap.step === "controller-open" ? setControllerDone(true) : setModeConfirmed(true))}>{t("Próximo")}</button>}
+          {(snap.step === "done" || info.final || (snap.step === "launching" && launchSlow)) && <button type="button" className="tut-next" onClick={() => onExit("done")}>{t("Concluir")}</button>}
           {snap.step === "launching" && !launchSlow && <button type="button" className="tut-skip is-quiet" onClick={() => setLaunchRequested(null)}>{t("Voltar")}</button>}
         </footer>
         <button type="button" className="tut-close" aria-label={t("Fechar tutorial")} title={t("Fechar tutorial")} onClick={finishNow}>×</button>

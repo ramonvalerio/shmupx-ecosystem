@@ -26,12 +26,15 @@ import { DEFAULT_AVATAR, useMyPublicProfile } from "../data/publicProfile";
 import { savePresenceMode, usePresenceMode } from "../data/presenceMode";
 import PlayerStatus from "./PlayerStatus";
 import { visibleDialog } from "./navigationInput";
-import FirstRunTutorial, { useFirstRunTutorial } from "./FirstRunTutorial";
+import FirstRunTutorial, { useFirstRunTutorial, type TutorialTopic } from "./FirstRunTutorial";
+import HowToUseDialog from "./HowToUseDialog";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
 /** Salas abertas ao mesmo tempo (abas e menu lateral). */
 const MAX_OPEN_ROOMS = 5;
+/** Alvos do tutorial no menu do topo: Minhas coleções, o jogo (sala) e o Ranking dele. */
+const CRUMB_TARGETS = ["crumb-collection", "crumb-room", "crumb-ranking"];
 
 function readOpenRooms(uid: string): string[] {
   try {
@@ -71,6 +74,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   // Configurações numa janela (engrenagem acima do avatar); o avatar só tem status e sair.
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** HOW TO USE aberto: o jogador escolhe a dúvida antes do tutorial. */
+  const [howToOpen, setHowToOpen] = useState(false);
   const settingsDialogRef = useDialogFocus(settingsOpen, () => setSettingsOpen(false));
   const presenceMode = usePresenceMode();
   const myPublic = useMyPublicProfile(profile.displayName);
@@ -121,7 +126,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const accountPlaying = useAccountPlaying();
   usePresenceHeartbeat(profile, openRoomIds, section === "collection" ? activeRoomId : null, recordingRoomId,
     liveVideoId && live.state.game_id ? { roomId: live.state.game_id, videoId: liveVideoId } : null, presenceMode === "away",
-    accountPlaying ? { gameId: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : null);
+    accountPlaying ? { gameId: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : null, presenceMode === "invisible");
   // Fechar a aba sai da sala (chat e lista de jogadores): pede confirmação, o × é fácil de clicar sem querer.
   const [closingRoomId, setClosingRoomId] = useState<string | null>(null);
   const closingRoom = rooms.find((room) => room.id === closingRoomId) ?? null;
@@ -250,7 +255,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           <div className="rail-tools">
             <NotificationBell items={notifications.items} unread={notifications.unread} error={notifications.error} onOpen={openNotification} onSeen={notifications.markSeen} />
           </div>
-          <button type="button" className="rail-settings" aria-label={t("Configurações")} title={t("Configurações")} aria-haspopup="dialog" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>
+          <button type="button" className="rail-settings" data-tutorial="settings-button" aria-label={t("Configurações")} title={t("Configurações")} aria-haspopup="dialog" onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
           </button>
           <button ref={profileButtonRef} className="rail-avatar" type="button" aria-label={t("Status de {name}", {name:profile.displayName})} aria-expanded={profileMenuOpen} aria-controls="profile-actions" onClick={() => setProfileMenuOpen(!profileMenuOpen)}>
@@ -259,7 +264,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </button>
           {profileMenuOpen && <div id="profile-actions" ref={profileMenuRef} className="profile-menu" role="menu" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setProfileMenuOpen(false); } }}>
             <strong>{profile.displayName}</strong><span className="muted">{myPublic.profile ? `@${myPublic.profile.handle}` : t("Conta Google")}</span>
-            {([["online", "Online"], ["away", "Ausente"]] as const).map(([mode, label]) => (
+            {([["online", "Online"], ["away", "Ausente"], ["invisible", "Invisível"]] as const).map(([mode, label]) => (
               <button key={mode} role="menuitemradio" aria-checked={presenceMode === mode} className="presence-option" onClick={() => { savePresenceMode(mode); setProfileMenuOpen(false); }}>
                 <span className={`presence-dot is-${mode}`} aria-hidden="true" /> {t(label)}{presenceMode === mode && <span aria-hidden="true"> ✓</span>}
               </button>
@@ -275,8 +280,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               return (
                 <li key={index}>
                   {crumb.current
-                    ? <span className="crumb" aria-current="page" title={crumb.label} data-tutorial={index === 0 ? "crumb-collection" : undefined}><span className="crumb-label">{crumb.label}</span></span>
-                    : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label} data-tutorial={index === 0 ? "crumb-collection" : undefined}><span className="crumb-label">{crumb.label}</span></button>}
+                    ? <span className="crumb" aria-current="page" title={crumb.label} data-tutorial={CRUMB_TARGETS[index]}><span className="crumb-label">{crumb.label}</span></span>
+                    : <button type="button" className="crumb" onClick={crumb.onClick} title={crumb.label} data-tutorial={CRUMB_TARGETS[index]}><span className="crumb-label">{crumb.label}</span></button>}
                 </li>
               );
             })}
@@ -321,9 +326,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </p>
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
-        {/* Dúvidas: o mesmo tutorial da primeira vez, a qualquer momento (começa pela importação). */}
-        <button type="button" className="how-to-use" disabled={tutorial.active} title={t("Ver o tutorial: importar os jogos e começar a jogar")}
-          onClick={() => { setSettingsOpen(false); showCollection(); tutorial.start(); }}>
+        {/* Dúvidas: escolhe o assunto (importar, jogar, ranking, lives, tema, pasta dos vídeos) e o
+            tutorial mostra só aquele caminho. */}
+        <button type="button" className="how-to-use" disabled={tutorial.active} title={t("Tire uma dúvida: o ShmupX mostra onde tocar")}
+          onClick={() => setHowToOpen(true)}>
           <span aria-hidden="true">?</span>HOW TO USE
         </button>
       </header>
@@ -345,7 +351,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
             <div className="controller-dialog-body">
               <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError}
                 onNavigate={(next) => { setSettingsOpen(false); setSection(next); }} profile={profile} onProfile={onProfile}
-                onReplayTutorial={() => { setSettingsOpen(false); showCollection(); tutorial.start(); }} />
+                onReplayTutorial={() => { setSettingsOpen(false); setHowToOpen(true); }} />
             </div>
           </div>
         </div>
@@ -414,7 +420,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </div>
         </div>
       )}
-      {tutorial.active && <FirstRunTutorial rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
+      {howToOpen && <HowToUseDialog onClose={() => setHowToOpen(false)} onPick={(topic: TutorialTopic) => { setHowToOpen(false); setSettingsOpen(false); showCollection(); tutorial.start(topic); }} />}
+      {tutorial.active && <FirstRunTutorial key={tutorial.topic} topic={tutorial.topic} rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
       <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );

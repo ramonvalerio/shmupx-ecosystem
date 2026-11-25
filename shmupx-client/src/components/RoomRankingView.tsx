@@ -269,7 +269,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   return (
     <section className="room-ranking rk" aria-label={t("Ranking de {game}", { game: room.title })}>
 
-      <div className="room-ranking-filters">
+      <div className="room-ranking-filters" data-tutorial="ranking-filters">
         <div className="filter-group">
           <span>{t("ESCOPO")}</span>
           <div className="segmented" role="group" aria-label={t("Escopo do ranking")}>
