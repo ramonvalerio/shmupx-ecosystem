@@ -76,8 +76,10 @@
 /* Emojis do chat: botão, grade e sugestões do :nome: */
 .chat-composer { position: relative; }
 .chat-emoji-anchor { position: relative; display: flex; }
-.chat-composer .chat-emoji-toggle { min-width: 0; padding: 6px 8px; background: transparent; border: 1px solid #ffffff26; color: inherit; font-size: 18px; line-height: 1; }
-.chat-composer .chat-emoji-toggle:hover:not(:disabled), .chat-composer .chat-emoji-toggle[aria-expanded=true] { border-color: color-mix(in srgb, var(--cyan) 60%, transparent); background: color-mix(in srgb, var(--cyan) 7.8%, transparent); }
+/* Botão dos emojis: só o rosto em contorno, sem borda; acende na cor do tema no hover e aberto. */
+.chat-composer .chat-emoji-toggle { display: grid; place-items: center; min-width: 0; padding: 6px 8px; background: transparent; border: 0; color: #fff; line-height: 1; transition: color .12s; }
+.chat-composer .chat-emoji-toggle:hover:not(:disabled), .chat-composer .chat-emoji-toggle[aria-expanded=true] { color: var(--cyan); background: transparent; }
+.theme-light .chat-composer .chat-emoji-toggle { color: #10233f; }
 .chat-emoji-picker { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; width: 300px; padding: 8px; background: var(--gray-1d1d1d); border: 1px solid color-mix(in srgb, var(--cyan) 33.3%, transparent); box-shadow: 0 12px 32px #000a; }
 .chat-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
 .chat-composer .chat-emoji-grid button { min-width: 0; padding: 4px 0; background: transparent; color: inherit; font-size: 20px; line-height: 1.2; border-radius: 4px; }

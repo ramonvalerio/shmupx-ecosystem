@@ -241,7 +241,12 @@ test("chat emoji shortcuts: :nome:, emoticons and suggestions", () => {
   // Emoticon só como palavra inteira: links e horários ficam como estão.
   assert.equal(emojify("https://a.com/:) 10:30 aaa:)"), "https://a.com/:) 10:30 aaa:)");
   assert.equal(emojifyTyping("oi :) "), "oi 🙂 ");
-  assert.equal(emojifyTyping("oi :)"), "oi :)");
+  // O emoticon aparece no campo assim que é digitado; :p e :o esperam o espaço (:pizza:, :ok:).
+  assert.equal(emojifyTyping("oi :)"), "oi 🙂");
+  assert.equal(emojifyTyping("<3"), "❤️");
+  assert.equal(emojifyTyping("vai :p"), "vai :p");
+  assert.equal(emojifyTyping("vai :p "), "vai 😛 ");
+  assert.equal(emojifyTyping("aaa:)"), "aaa:)");
   assert.equal(emojifyTyping("vai :gg:"), "vai 🏆");
   const s = emojiSuggestions("que :fo");
   assert.equal(s.query, "fo");

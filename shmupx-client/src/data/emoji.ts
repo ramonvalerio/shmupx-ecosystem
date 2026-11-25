@@ -81,13 +81,21 @@ export function emojify(text: string): string {
 }
 
 /**
- * Enquanto digita: troca um `:nome:` recém-fechado e o emoticon que acabou de ganhar um espaço
- * depois. Devolve o texto novo (o mesmo, se nada mudou).
+ * `:p` e `:o` começam atalhos por nome (`:pizza:`, `:ok:`): só viram emoji com um espaço depois.
+ * Os outros emoticons viram emoji assim que são digitados.
+ */
+const WAIT_FOR_SPACE = new Set([":p", ":o"]);
+
+/**
+ * Enquanto digita: troca um `:nome:` recém-fechado e o emoticon que acabou de ser digitado (já
+ * aparece no campo antes de enviar). Devolve o texto novo (o mesmo, se nada mudou).
  */
 export function emojifyTyping(text: string): string {
   let out = replaceNamed(text);
-  const match = out.match(/(^|\s)(\S+)(\s)$/);
-  if (match && EMOTICONS[match[2]]) out = out.slice(0, out.length - match[2].length - 1) + EMOTICONS[match[2]] + match[3];
+  const typed = out.match(/(^|\s)(\S+)$/);
+  if (typed && EMOTICONS[typed[2]] && !WAIT_FOR_SPACE.has(typed[2])) return out.slice(0, out.length - typed[2].length) + EMOTICONS[typed[2]];
+  const spaced = out.match(/(^|\s)(\S+)(\s)$/);
+  if (spaced && EMOTICONS[spaced[2]]) out = out.slice(0, out.length - spaced[2].length - 1) + EMOTICONS[spaced[2]] + spaced[3];
   return out;
 }
 
