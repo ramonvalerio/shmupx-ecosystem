@@ -143,9 +143,14 @@
 
 /* Importar jogos ao lado da busca, no tamanho dos botões de filtro. */
 /* Importar jogos: ação principal da barra, em azul como os filtros marcados. */
-.collection-layout .collection-import { height: 28px; padding: 0 12px; margin-bottom: 2px; border: 1px solid var(--cyan); border-radius: 0; background: var(--cyan); color: var(--on-cyan); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
-.collection-layout .collection-import:hover { filter: brightness(1.12); }
-.theme-light .collection-layout .collection-import { color: #fff; }
+/* Importar jogos: o botão de destaque da Coleção, no vermelho do "Minhas coleções" (room.css) em qualquer tema, com a altura da coluna dos filtros. */
+.collection-layout .collection-import { position: relative; display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 20px 0 15px; border: 0; border-radius: 9px; background: linear-gradient(180deg, #a3303a, #7a1f28); color: #fff; font-size: 15px; font-weight: 400; letter-spacing: .03em; white-space: nowrap; text-shadow: 0 1px 1px #3d0e1366; box-shadow: inset 0 1px 0 #ffffff33, inset 0 -2px 0 #4a121833, 0 6px 18px #a3303a59, 0 0 24px #a3303a2e; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, filter .12s ease; }
+.collection-layout .collection-import:hover { filter: brightness(1.12); transform: translateY(-1px); box-shadow: inset 0 1px 0 #ffffff40, inset 0 -2px 0 #4a121833, 0 9px 24px #a3303a73, 0 0 32px #a3303a47; }
+.collection-layout .collection-import:active { transform: translateY(0); filter: brightness(.96); box-shadow: inset 0 2px 4px #3d0e1359, 0 3px 10px #a3303a4d; }
+.collection-layout .collection-import:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.collection-import-icon { flex-shrink: 0; filter: drop-shadow(0 1px 1px #3d0e1359); }
+.collection-import-folder { fill: #fff; }
+.collection-import-plus { fill: none; stroke: #8f2731; stroke-width: 2.2; stroke-linecap: round; }
 /* Coming soon: jogo ainda sem script de validação. Não tenho ainda: fora das bibliotecas (capa em preto e branco). */
 .collection-layout .coming-soon { color: #f2c14e; white-space: nowrap; }
 .collection-layout .not-owned-chip { position: absolute; left: 8px; top: 8px; padding: 3px 7px; border: 1px solid #ffffff40; border-radius: 3px; background: #000000b8; color: #f0fcff; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; pointer-events: none; }
@@ -228,3 +233,51 @@
 /* Coming soon: adesivo no canto superior direito da arte do card (fica por cima da marca de seleção). */
 .collection-layout .coming-soon-sticker { position: absolute; top: 9px; right: 9px; z-index: 2; padding: 3px 8px; border-radius: 3px; background: #f2c14e; color: #1a1406; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; transform: rotate(3deg); box-shadow: 0 2px 6px #0009; }
 .collection-layout .collection-list .coming-soon-sticker { top: 4px; right: 4px; padding: 1px 5px; font-size: 8.5px; transform: none; }
+
+/* Importar jogos › escolher a origem: cartões lado a lado (ícone, nome, estado e ação). */
+.import-games-dialog.is-picker { width: min(960px, 100%); }
+.import-games-dialog.is-picker > header { position: relative; justify-content: center; text-align: center; padding: 28px 22px 16px; border-bottom: 0; }
+.import-games-dialog.is-picker > header h2 { font-size: 30px; font-weight: 400; letter-spacing: .02em; }
+.import-games-dialog.is-picker > header p { margin-top: 6px; font-size: 13px; }
+.import-games-dialog.is-picker .import-header-actions { position: absolute; top: 18px; right: 18px; }
+.import-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 10px 0 14px; }
+.import-card { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 16px 16px; text-align: center; background: var(--surface-recessed); border: 1px solid var(--stroke); border-radius: 10px; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.import-card:not(.is-soon):hover { border-color: color-mix(in srgb, var(--cyan) 55%, transparent); box-shadow: 0 10px 26px #0006, 0 0 0 1px color-mix(in srgb, var(--cyan) 18%, transparent); transform: translateY(-2px); }
+.import-card-icon { margin-bottom: 4px; color: #f2f5f7; }
+.import-card-icon .fill { fill: currentColor; }
+.import-card-icon .cut { fill: var(--surface-recessed); }
+.import-card-icon .cut-line { fill: none; stroke: var(--surface-recessed); stroke-width: 2.6; stroke-linecap: round; }
+.import-card-icon .line { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.import-card-icon .chip-text { fill: currentColor; font-family: inherit; font-size: 8.5px; letter-spacing: .04em; }
+.import-card.is-soon .import-card-icon { opacity: .55; }
+.import-card h3 { margin: 0; font-size: 20px; font-weight: 400; }
+.import-card p { min-height: 36px; margin: 0; color: #b9c4c9; font-size: 12.5px; line-height: 1.45; }
+.import-card-status { display: inline-flex; align-items: center; gap: 7px; height: 24px; padding: 0 12px; border: 1px solid color-mix(in srgb, currentColor 50%, transparent); border-radius: 5px; background: color-mix(in srgb, currentColor 8%, transparent); color: var(--cyan); font-size: 11px; letter-spacing: .1em; }
+.import-card-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.import-card.is-connected .import-card-status { color: #3fd98b; }
+.import-card.is-soon .import-card-status { color: #f2c14e; }
+.import-card.is-soon .import-card-status i { box-shadow: none; }
+.import-card-count { margin-top: -4px; color: #3fd98b; font-size: 11px; }
+.import-card-cta { width: 100%; height: 40px; border: 0; border-radius: 7px; background: var(--cyan); color: var(--on-cyan); font-size: 14px; letter-spacing: .02em; cursor: pointer; transition: filter .12s; }
+.import-card-cta:hover:not(:disabled) { filter: brightness(1.1); }
+.import-card-cta:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.import-card.is-soon .import-card-cta:disabled { background: var(--surface-raised); color: #8a9499; opacity: 1; }
+.import-card-cta:disabled, .import-card-secondary:disabled { cursor: default; }
+.import-card.is-connected .import-card-cta { background: #3fd98b; color: #06200f; }
+.import-card-foot { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: auto; padding-top: 4px; }
+.import-card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.import-card-secondary { height: 36px; padding: 0 8px; border: 1px solid var(--stroke); border-radius: 7px; background: var(--surface-raised); color: #e8eef0; font-size: 13px; white-space: nowrap; cursor: pointer; transition: border-color .12s, background .12s; }
+.import-card-secondary:hover:not(:disabled) { border-color: color-mix(in srgb, var(--cyan) 60%, transparent); }
+.import-card-secondary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.import-card-secondary:disabled, .import-card-cta:disabled { opacity: .6; }
+.import-card-path { max-width: 100%; overflow: hidden; color: #9aa5aa; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
+.import-card .import-card-error { min-height: 0; color: #ff8a8a; font-size: 11.5px; line-height: 1.4; }
+.import-cards-note { margin: 2px 0 4px; color: #9aa5aa; font-size: 11.5px; text-align: center; }
+.theme-light .import-card-icon { color: #10233f; }
+.theme-light .import-card p, .theme-light .import-cards-note, .theme-light .import-card-path { color: #475569; }
+.theme-light .import-card-secondary { color: #10233f; }
+.theme-light .import-card .import-card-error { color: #b91c1c; }
+.theme-light .import-card-cta:not(:disabled) { color: #fff; }
+.theme-light .import-card.is-connected .import-card-status, .theme-light .import-card-count { color: #15803d; }
+.theme-light .import-card.is-soon .import-card-status { color: #b45309; }
+.theme-light .import-card.is-connected .import-card-cta { background: #16a34a; }

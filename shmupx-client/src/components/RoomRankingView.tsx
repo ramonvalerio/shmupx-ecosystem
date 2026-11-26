@@ -381,7 +381,10 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
                       ? t("{position}º lugar: {player}, {score} pontos", { position: record.position, player: nick, score: score(record.score, locale) })
                       : t("Run de {when}: {status}", { when: when ?? "—", status: status.label })}
                     onClick={() => setSelected(record.key)} />
-                  <span className="rk-pos"><Ordinal n={record.position} /></span>
+                  <span className="rk-pos">
+                    <span><Ordinal n={record.position} /></span>
+                    {online_ && record.position <= 3 && <img className="rk-pos-medal" src={`/img/medals/medal-${record.position}.png`} alt="" draggable={false} />}
+                  </span>
                   <span className="rk-player">
                     <img src={avatarOf(profiles, record.uid)} alt="" />
                     <span className="rk-who">

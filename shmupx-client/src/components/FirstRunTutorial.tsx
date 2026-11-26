@@ -54,15 +54,16 @@ export function useFirstRunTutorial(uid: string, rooms: GameRoom[]) {
 
 /**
  * O que o tutorial ensina: `full` é o da primeira vez (importar, controle e jogar); os outros são as
- * dúvidas do HOW TO USE. `import` e `play` usam os passos do completo; os demais são guias curtos
- * (`GUIDES`).
+ * dúvidas do HOW TO USE. `import`, `controller` e `play` usam os passos do completo; os demais são
+ * guias curtos (`GUIDES`).
  */
-export type TutorialTopic = "full" | "import" | "play" | "ranking" | "live" | "theme" | "storage";
-type GuideTopic = Exclude<TutorialTopic, "full" | "import" | "play">;
+export type TutorialTopic = "full" | "import" | "controller" | "play" | "ranking" | "live" | "theme" | "storage";
+type GuideTopic = Exclude<TutorialTopic, "full" | "import" | "controller" | "play">;
 
 /** Dúvidas do HOW TO USE, na ordem do modal. */
 export const TUTORIAL_TOPICS: { id: Exclude<TutorialTopic, "full">; title: string; detail: string }[] = [
   { id: "import", title: "Como importar os jogos", detail: "Traga para a coleção os jogos da Steam, do emulador ou do MiSTer." },
+  { id: "controller", title: "Como configurar o controle", detail: "Escolha o controle e ligue cada botão ao do gabinete arcade." },
   { id: "play", title: "Como jogar", detail: "Configure o controle, escolha o modo e insira a ficha." },
   { id: "ranking", title: "Como ver o ranking", detail: "Abra o ranking de um jogo e veja os placares e os detalhes de cada run." },
   { id: "live", title: "Como assistir às lives", detail: "Entre na sala do jogo e assista a quem está transmitindo." },
@@ -154,12 +155,13 @@ function stepInfo(id: StepId, stage: Stage, topic: TutorialTopic): StepInfo {
       block: !final, final, title: step.title, text: step.text };
   }
   const flow = id as FlowStep;
-  return { ...flowStep(flow, stage, topic), ...PHASES[flowStage(flow, stage)] };
+  return { ...flowStep(flow, stage, topic), ...PHASES[flowStage(flow, stage, topic)] };
 }
 
 /** Fase de cada passo (o "Volte para a coleção" e o "Escolha um jogo" servem a mais de uma). */
-function flowStage(id: FlowStep, stage: Stage): Stage {
+function flowStage(id: FlowStep, stage: Stage, topic: TutorialTopic): Stage {
   if (id === "go-collection" || id === "pick-game") return stage;
+  if (id === "done" && topic === "controller") return "controller";
   if (id.startsWith("import-")) return "import";
   if (id.startsWith("controller-")) return "controller";
   return "play";
@@ -172,8 +174,8 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
       title: "Importe seus jogos", text: "Toque em Importar jogos para trazer os jogos que você já tem neste computador." };
     case "go-collection": return { code: importing ? "1.1" : stage === "controller" ? "2.1" : "3.1", index: 1, target: "crumb-collection", hand: true, block: true,
       title: "Volte para a coleção", text: "Toque em Minhas coleções para ver os seus jogos." };
-    case "import-source": return { code: "1.2", index: 2, target: "import-sources", hand: true, block: true, point: ".import-source-row:nth-child(2) .import-source-option",
-      title: "De onde vêm os seus jogos?", text: "Steam lê os jogos instalados, Emulador lê os seus ROMs (.zip) e MiSTer lê os jogos do MiSTer na rede. Toque numa opção." };
+    case "import-source": return { code: "1.2", index: 2, target: "import-sources", hand: true, block: true, point: ".import-card:nth-child(2) .import-card-cta",
+      title: "De onde vêm os seus jogos?", text: "Em Steam, toque em Importar agora. Em Emulador, escolha a pasta onde estão os seus ROMs (.zip). O ShmupX importa na hora." };
     case "import-run": return { code: "1.3", index: 3, target: "import-run", hand: true, block: true,
       title: "Leia a sua biblioteca", text: "Toque aqui. O ShmupX procura os jogos sozinho e marca na coleção os que você tem." };
     case "import-scanning": return { code: "1.3", index: 3, target: "import-dialog", hand: false, block: true,
@@ -184,8 +186,12 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
       title: "Tente outra fonte", text: "Aqui não há jogos do ShmupX neste computador. Toque em Voltar e escolha outra fonte." };
     case "import-close": return { code: "1.4", index: 4, target: "import-close", hand: true, block: true,
       title: "Jogos importados!", text: "A coleção já mostra os jogos que você tem. Toque em Fechar para voltar a ela." };
-    case "controller-open": return { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true, next: true,
-      title: "Configure o seu controle", text: "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle. Se ele já está do seu jeito, toque em Próximo." };
+    // Na dúvida "Como configurar o controle" não há Próximo: configurar é o assunto.
+    case "controller-open": return topic === "controller"
+      ? { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true,
+        title: "Configure o seu controle", text: "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle." }
+      : { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true, next: true,
+        title: "Configure o seu controle", text: "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle. Se ele já está do seu jeito, toque em Próximo." };
     case "controller-map": return { code: "2.3", index: 3, target: "controls-dialog", hand: false, block: true,
       title: "Escolha os botões", text: "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque em Fechar." };
     case "pick-game": return { code: stage === "controller" ? "2.1" : "3.1", index: 1, target: "game-owned", hand: true, block: true,
@@ -203,6 +209,9 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
     case "done": return topic === "import"
       ? { code: "✓", index: 4, target: null, hand: false, block: true,
         title: "Jogos importados!", text: "Os seus jogos já estão na coleção. Para aprender a jogar, toque em HOW TO USE, no canto superior direito, e escolha Como jogar." }
+      : topic === "controller"
+      ? { code: "✓", index: 3, target: null, hand: false, block: true,
+        title: "Controle configurado!", text: "Os botões que você escolheu valem para os jogos do emulador. Para aprender a jogar, toque em HOW TO USE, no canto superior direito, e escolha Como jogar." }
       : { code: "✓", index: 5, target: null, hand: false, block: true,
         title: "Tudo pronto!", text: "Você já sabe jogar no ShmupX. Faça o seu recorde e suba no ranking. Para ver este tutorial de novo, toque em HOW TO USE, no canto superior direito." };
   }
@@ -329,7 +338,8 @@ export default function FirstRunTutorial({ topic = "full", rooms, currentRoomId,
     if (findTarget("play-mode-choices")) return "choose-mode";
     const dialog = findTarget("import-dialog");
     if (dialog) {
-      if (!dialog.dataset.tutorialSource) return "import-source";
+      // Escolha das origens: Steam e Emulador importam direto no cartão.
+      if (!dialog.dataset.tutorialSource) return dialog.dataset.tutorialImported && ownedCount > 0 ? "import-close" : "import-source";
       if (findTarget("import-pick-folder")) return "import-folder";
       if (findTarget("import-not-found")) return "import-other";
       if (findTarget("import-scanning")) return "import-scanning";
@@ -348,6 +358,8 @@ export default function FirstRunTutorial({ topic = "full", rooms, currentRoomId,
       if (!findTarget("game-owned") && findTarget("crumb-collection") && !findTarget("import-button")) return "go-collection";
       return "pick-game";
     }
+    // "Como configurar o controle": fechou a janela dos botões, terminou.
+    if (topic === "controller") return "done";
     if (currentOwned && findTarget("play-coin")) return !modeConfirmed && findTarget("play-modes") ? "pick-mode" : "insert-coin";
     if (!findTarget("game-owned") && findTarget("crumb-collection") && !findTarget("import-button")) return "go-collection";
     return "pick-game";
@@ -385,7 +397,7 @@ export default function FirstRunTutorial({ topic = "full", rooms, currentRoomId,
     const schedule = () => { if (!pending) pending = window.setTimeout(() => { pending = 0; measure(); }, 16); };
     schedule();
     const observer = new MutationObserver(schedule);
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "hidden", "disabled", "aria-checked", "aria-pressed", "data-tutorial-source", "style"] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "hidden", "disabled", "aria-checked", "aria-pressed", "data-tutorial-source", "data-tutorial-imported", "style"] });
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
     // Animações (a ficha girando, janelas abrindo) não mudam o DOM: confere a posição de tempos em tempos.

@@ -220,7 +220,13 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Buscar seus jogos…")} aria-label={t("Buscar jogos")} />
           <span aria-hidden="true">⌕</span>
         </label>
-        <button type="button" className="collection-import" data-tutorial="import-button" onClick={() => setImportOpen(true)}>{t("Importar jogos")}</button>
+        <button type="button" className="collection-import" data-tutorial="import-button" onClick={() => setImportOpen(true)}>
+          <svg className="collection-import-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path className="collection-import-folder" d="M2.5 6.5A2 2 0 0 1 4.5 4.5h4.6l2 2.2h8.4a2 2 0 0 1 2 2v9.8a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2Z" />
+            <path className="collection-import-plus" d="M12 10.2v6.6M8.7 13.5h6.6" />
+          </svg>
+          <span>{t("Importar jogos")}</span>
+        </button>
         <MultiSegmented label="Plataforma" allLabel="Todas" value={platformFilter} options={PLATFORM_FILTERS} onChange={setPlatformFilter} />
         {playable.anyLibrary && <MultiSegmented label="Biblioteca" allLabel="Todos" value={libraryFilter} options={LIBRARY_FILTERS} onChange={setLibraryFilter} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
