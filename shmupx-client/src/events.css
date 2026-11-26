@@ -13,7 +13,8 @@
 /* Carrossel: um banner por vez, com PARTICIPAR e a navegação embaixo. */
 .events-carousel { position: relative; align-self: stretch; min-width: 260px; display: flex; flex-direction: column; gap: 6px; margin-left: 12px; }
 .events-carousel.is-empty { justify-content: center; align-items: center; border: 1px dashed var(--stroke); border-radius: 6px; }
-.events-carousel-empty { margin: 0; padding: 12px; font-size: 13px; color: #8a9aa1; text-align: center; }
+.events-carousel-empty { margin: 0; padding: 12px 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.4; color: #8a9aa1; text-align: center; }
+.events-carousel-empty strong { font-size: 17px; font-weight: 400; color: #f0fcff; }
 .event-banner { position: relative; flex: 1; min-height: 150px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 14px 16px; overflow: hidden; border: 1px solid var(--stroke); border-radius: 6px; background: radial-gradient(120% 140% at 100% 0%, #3b2a0e 0%, #14181b 55%, #0d1013 100%) center / cover no-repeat; animation: event-banner-in .45s ease; }
 .event-banner.has-image { background-color: #0d1013; }
 .event-banner-shade { position: absolute; inset: 0; background: linear-gradient(to right, #05090df2 0%, #05090dcc 45%, #05090d33 100%); pointer-events: none; }

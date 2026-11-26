@@ -49,7 +49,7 @@ export function reloadEvents(): Promise<void> {
   set({ loading: true });
   inFlight = invoke<ClientEvent[]>("eventos_listar")
     .then((events) => set({ events, error: null, loadedAt: Date.now() }))
-    .catch((error) => set({ error: describe(error) }))
+    .catch((error) => { console.warn("Eventos: falha ao carregar:", error); set({ error: describe(error) }); })
     .finally(() => { set({ loading: false }); inFlight = null; });
   return inFlight;
 }

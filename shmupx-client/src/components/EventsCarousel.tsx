@@ -47,7 +47,12 @@ export default function EventsCarousel({ room, uid }: { room: GameRoom; uid: str
 
   if (!current) {
     return <section className="events-carousel is-empty" aria-label={t("Eventos")}>
-      <p className="events-carousel-empty">{loading ? t("Carregando os eventos…") : error ? t("Não foi possível carregar os eventos agora.") : t("Nenhum evento aberto no momento.")}</p>
+      {loading && !error
+        ? <p className="events-carousel-empty">{t("Procurando eventos…")}</p>
+        : <div className="events-carousel-empty">
+            <strong>{t("Nenhum evento de {game} no momento", { game: room.title })}</strong>
+            <span>{t("Quando um torneio ou desafio começar, ele aparece aqui para você participar.")}</span>
+          </div>}
     </section>;
   }
 
