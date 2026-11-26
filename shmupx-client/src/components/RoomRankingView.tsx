@@ -33,6 +33,12 @@ function formatDuration(ms: number): string {
 }
 
 /** "18/11/2026 · 21:14" (no idioma do app). */
+/** Tempo sobrevivido no Caravan: 300000 -> 05:00. */
+function formatSurvival(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 function formatWhen(timestamp: number, locale: string): string {
   const date = new Date(timestamp);
   const day = date.toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -85,6 +91,9 @@ interface RankRecord {
   /** Rota (ABDHLQV) e bombas usadas, quando o motor lê do jogo. */
   rota?: string | null;
   bombs?: number | null;
+  /** Nave/personagem e, no Caravan, o tempo vivido (ms). */
+  ship?: string | null;
+  survivalMs?: number | null;
   runs?: number;
   rating?: number;
   verified?: boolean;
@@ -164,7 +173,13 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
       return true;
     };
     const list = localAll.filter(matches);
-    if (mode === "caravan") list.sort((a, b) => a.vidas_perdidas - b.vidas_perdidas || b.score - a.score || a.quando - b.quando);
+    // Regra padrão do Caravan (a mesma do servidor): placar, tempo vivido, menos mortes, menos bombas e
+    // quem registrou primeiro.
+    if (mode === "caravan") {
+      const last = (value: number | null | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+      list.sort((a, b) => b.score - a.score || (b.sobrevivencia_ms ?? -1) - (a.sobrevivencia_ms ?? -1)
+        || a.vidas_perdidas - b.vidas_perdidas || last(a.bombas) - last(b.bombas) || a.quando - b.quando);
+    }
     return list;
   }, [localAll, mode]);
 
@@ -201,6 +216,8 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
       livesLost: entry.vidas_perdidas,
       rota: entry.rota,
       bombs: entry.bombas_usadas,
+      ship: entry.nave,
+      survivalMs: entry.sobrevivencia_ms,
       runs: entry.runs,
       rating: entry.nota,
       verified: entry.verificada,
@@ -234,6 +251,8 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
     livesLost: entry.vidas_perdidas,
     rota: entry.rota,
     bombs: entry.bombas,
+    ship: entry.nave,
+    survivalMs: entry.sobrevivencia_ms,
     localStatus: (entry.online ? "online" : "local") as RankRecord["localStatus"],
   }))], [localRuns, localRanking, uid, playerName, myLiveId, t]);
 
@@ -284,11 +303,10 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
   }
 
   const online_ = scope === "online";
-  /** Coluna de data: início da gameplay quando o backend mandar; senão, quando o placar foi enviado. */
-  const anyStarted = !online_ || records.some((record) => record.startedAt !== undefined);
-  const dateLabel = anyStarted ? t("Início da run") : t("Enviado em");
+  /** Coluna FINALIZADO EM: quando a partida terminou e o resultado foi registrado (o 5º critério: quem registrou primeiro). */
+  const dateLabel = t("Finalizado em");
   function dateOf(record: RankRecord) {
-    const time = anyStarted ? record.startedAt : record.submittedAt;
+    const time = record.submittedAt ?? record.startedAt;
     return time !== undefined ? formatWhen(time, locale) : undefined;
   }
   const showSlots = online_ && !term && ranking.status === "ready" && online.length > 0;
@@ -298,15 +316,28 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
   // Colunas extras: a Rota no Darius Gaiden e as Bombas onde o motor lê (sempre no Darius Gaiden).
   const showRoute = room.id === "darius-gaiden" || records.some((record) => Boolean(record.rota));
   const showBombs = room.id === "darius-gaiden" || records.some((record) => typeof record.bombs === "number");
-  const extraColumns = { "--rk-route": showRoute ? "150px" : undefined, "--rk-bombs": showBombs ? "84px" : undefined } as React.CSSProperties;
+  // Sobrevivência só existe no Caravan (tempo vivido dentro do limite). No Espgaluda II a coluna é a do Barrier.
+  const showSurvival = mode === "caravan";
+  const bombsLabel = room.id === "espgaluda-ii" ? t("Barrier") : t("Bombas");
+  const extraColumns = {
+    "--rk-surv": showSurvival ? "124px" : undefined,
+    "--rk-route": showRoute ? "130px" : undefined,
+    "--rk-bombs": showBombs ? "100px" : undefined,
+  } as React.CSSProperties;
 
   function platformText(record: RankRecord) {
     return record.platform ? t(PLATFORM_LABEL[record.platform]) : undefined;
   }
 
-  /** Vidas perdidas na run (no Caravan, quem perdeu menos fica na frente). */
+  /** MORTES: vidas perdidas na run; 0 é o selo No Miss. */
   function livesLostCell(record: RankRecord) {
-    return typeof record.livesLost === "number" ? <>{record.livesLost}</> : dash;
+    if (typeof record.livesLost !== "number") return dash;
+    return record.livesLost === 0 ? <span className="rk-chip is-clean">{t("No Miss")}</span> : <>{record.livesLost}</>;
+  }
+  /** BOMBAS (Barrier no Espgaluda II): 0 é o selo No Bomb. */
+  function bombsCell(record: RankRecord) {
+    if (typeof record.bombs !== "number") return dash;
+    return record.bombs === 0 ? <span className="rk-chip is-clean">{t("No Bomb")}</span> : <>{record.bombs}</>;
   }
 
   /** Ícone do vídeo na tabela: LIVE (vermelho), VOD (botão) ou apagado quando a run não tem vídeo. */
@@ -399,13 +430,14 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
           </header>
           <div className="rk-row is-head" aria-hidden="true">
             <span className="rk-pos">{t("Pos.")}</span><span>{t("Jogador")}</span>
-            <span className="rk-r">{online_ ? modeLabel : t("Placar")}</span>
-            <span className="rk-c">{online_ ? t("Modo") : t("Status")}</span>
-            <span className="rk-c">{t("Vidas perdidas")}</span>
-            {showRoute && <span className="rk-c">{t("Rota")}</span>}
-            {showBombs && <span className="rk-c">{t("Bombas")}</span>}
-            <span className="rk-c">{online_ ? t("Plataforma") : t("Duração")}</span>
-            <span>{dateLabel}</span>
+            <span className="rk-r">{t("Score")}</span>
+            <span className="rk-c rk-x">{t("Nave / Tipo")}</span>
+            {showSurvival && <span className="rk-c rk-x">{t("Sobrevivência")}</span>}
+            <span className="rk-c rk-x">{t("Mortes")}</span>
+            {showRoute && <span className="rk-c rk-x">{t("Rota")}</span>}
+            {showBombs && <span className="rk-c rk-x">{bombsLabel}</span>}
+            <span className="rk-c rk-x">{t("Plataforma")}</span>
+            <span className="rk-x">{dateLabel}</span>
             <span className="rk-c">{t("Vídeo")}</span>
           </div>
           {scope === "local" && localRecords.length === 0 && <p className="empty-state">{events ? t("Nenhuma participação em eventos de {game} neste PC ainda.", { game: room.title }) : t("Nenhuma run deste jogo neste PC ainda. As runs válidas do Ranked ficam guardadas aqui.")}</p>}
@@ -451,20 +483,17 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
                     {record.you && online_ && <span className="rk-tag is-you">{t("Você")}</span>}
                   </span>
                   <span className="rk-r rk-score">{score(record.score, locale)}</span>
-                  <span className="rk-c">
-                    {online_
-                      ? record.mode ? <span className="rk-chip">{t(MODE_LABEL[record.mode])}</span> : dash
-                      : <span className={`run-badge run-${status.tone}`}>{status.label}</span>}
+                  <span className="rk-c rk-x">{record.ship ?? dash}</span>
+                  {showSurvival && <span className="rk-c rk-x rk-cc">{typeof record.survivalMs === "number" ? formatSurvival(record.survivalMs) : dash}</span>}
+                  <span className="rk-c rk-x rk-cc">{livesLostCell(record)}</span>
+                  {showRoute && <span className="rk-c rk-x rk-route">{record.rota ?? dash}</span>}
+                  {showBombs && <span className="rk-c rk-x rk-cc">{bombsCell(record)}</span>}
+                  <span className="rk-c rk-x">
+                    {platformText(record) ?? <span className="rk-none" title={t("Plataforma ainda não informada pelo servidor")}>—</span>}
                   </span>
-                  <span className="rk-c rk-cc">{livesLostCell(record)}</span>
-                  {showRoute && <span className="rk-c rk-route">{record.rota ?? dash}</span>}
-                  {showBombs && <span className="rk-c rk-cc">{typeof record.bombs === "number" ? record.bombs : dash}</span>}
-                  <span className="rk-c">
-                    {online_
-                      ? platformText(record) ?? <span className="rk-none" title={t("Plataforma ainda não informada pelo servidor")}>—</span>
-                      : record.inProgress ? t("Em andamento") : record.durationMs !== undefined ? formatDuration(record.durationMs) : dash}
+                  <span className="rk-when rk-x">
+                    {when ?? (online_ ? dash : <span className={`run-badge run-${status.tone}`}>{record.inProgress ? t("Em andamento") : status.label}</span>)}
                   </span>
-                  <span className="rk-when">{when ?? dash}</span>
                   <span className="rk-c">{videoCell(record)}</span>
                 </li>
               );
@@ -476,10 +505,12 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
                   <span className="rk-pos"><Ordinal n={position} /></span>
                   <span className="rk-initials" aria-hidden="true">_ _ _</span>
                   <span className="rk-r rk-score" aria-hidden="true">· · · · · ·</span>
-                  <span className="rk-c" aria-hidden="true">—</span><span className="rk-c" aria-hidden="true">—</span>
-                  {showRoute && <span className="rk-c" aria-hidden="true">—</span>}
-                  {showBombs && <span className="rk-c" aria-hidden="true">—</span>}
-                  <span className="rk-c" aria-hidden="true">—</span><span aria-hidden="true">—</span><span className="rk-c" aria-hidden="true">—</span>
+                  <span className="rk-c rk-x" aria-hidden="true">—</span>
+                  {showSurvival && <span className="rk-c rk-x" aria-hidden="true">—</span>}
+                  <span className="rk-c rk-x" aria-hidden="true">—</span>
+                  {showRoute && <span className="rk-c rk-x" aria-hidden="true">—</span>}
+                  {showBombs && <span className="rk-c rk-x" aria-hidden="true">—</span>}
+                  <span className="rk-c rk-x" aria-hidden="true">—</span><span className="rk-x" aria-hidden="true">—</span><span className="rk-c" aria-hidden="true">—</span>
                 </li>
               );
             })}
@@ -507,10 +538,12 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
             { label: t("Posição"), value: current.position > 0 ? t("{position}º de {total}", { position: current.position, total }) : dash },
             { label: t("Modo"), value: current.mode ? t(MODE_LABEL[current.mode]) : dash },
             { label: t("Continues"), value: current.continues === undefined ? dash : current.continues === 0 ? t("0 · 1CC") : current.continues },
-            { label: t("Vidas perdidas"), value: current.livesLost ?? dash },
+            { label: t("Nave / Tipo"), value: current.ship ?? dash },
+            ...(showSurvival ? [{ label: t("Sobrevivência"), value: typeof current.survivalMs === "number" ? formatSurvival(current.survivalMs) : dash }] : []),
+            { label: t("Mortes"), value: current.livesLost ?? dash },
             { label: t("Runs"), value: current.runs ?? dash },
             ...(showRoute ? [{ label: t("Rota"), value: current.rota ?? dash }] : []),
-            ...(showBombs ? [{ label: t("Bombas usadas"), value: typeof current.bombs === "number" ? current.bombs : dash }] : []),
+            ...(showBombs ? [{ label: room.id === "espgaluda-ii" ? t("Barrier usado") : t("Bombas usadas"), value: typeof current.bombs === "number" ? current.bombs : dash }] : []),
             { label: t("Nota normalizada"), value: current.rating !== undefined ? current.rating.toFixed(2) : dash },
             { label: t("Status"), value: status.label, tone: status.tone },
             { label: t("Plataforma"), value: platformText(current) ?? dash },

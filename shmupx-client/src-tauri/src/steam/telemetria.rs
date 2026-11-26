@@ -64,6 +64,9 @@ pub struct Telemetria {
     pub rota: String,
     /// Bombas usadas na run (o motor conta as bombas que o jogador gastou).
     pub bombas_usadas: Option<i64>,
+    /// Caravan: tempo vivido na partida em ms (o tempo todo do modo se o relógio zerou), vindo do
+    /// evento `result` do motor.
+    pub sobrevivencia_ms: Option<i64>,
     pub fim: Option<Fim>,
     /// O jogador zerou o jogo (evento `cleared` do motor, pelo `cleared` do mapa do jogo).
     pub zerou: bool,
@@ -95,6 +98,8 @@ struct Evento {
     speed: Option<f64>,
     #[serde(default)]
     cleared: Option<bool>,
+    #[serde(default)]
+    survival_ms: Option<i64>,
 }
 
 impl Telemetria {
@@ -105,6 +110,7 @@ impl Telemetria {
         let Ok(evento) = serde_json::from_str::<Evento>(json) else { return };
         if evento.ev == "result" {
             self.resultado_mostrado = true;
+            self.sobrevivencia_ms = evento.survival_ms;
             return;
         }
         if self.fim.is_some() {
@@ -157,6 +163,8 @@ pub struct ResultadoMemoria {
     /// Rota percorrida (letras maiúsculas seguidas) e bombas usadas, nos jogos que o motor lê.
     pub rota: Option<String>,
     pub bombas_usadas: Option<i32>,
+    /// Caravan: tempo vivido em ms.
+    pub sobrevivencia_ms: Option<i32>,
     /// Zerou o jogo: com 0 continues (o Ranked não tem continue), a run entra também na tabela 1CC.
     pub zerou: bool,
 }
@@ -195,6 +203,7 @@ pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
         nave: t.nave.clone(),
         rota: Some(t.rota.clone()).filter(|r| !r.is_empty()),
         bombas_usadas: t.bombas_usadas.and_then(|b| i32::try_from(b).ok()),
+        sobrevivencia_ms: t.sobrevivencia_ms.and_then(|ms| i32::try_from(ms).ok()),
         zerou: t.zerou,
     }))
 }
@@ -260,6 +269,19 @@ mod tests {
     }
 
     #[test]
+    fn sobrevivencia_e_nave_vem_do_motor() {
+        let t = run(&[
+            r#"SHMUPX {"ev":"run_start","frame":1}"#,
+            r#"SHMUPX {"ev":"field","name":"ship","value":2,"label":"Type-A (Laser)","frame":30}"#,
+            r#"SHMUPX {"ev":"abort","frame":18001,"speed":100.0}"#,
+            r#"SHMUPX {"ev":"result","title":"tempo_esgotado","survival_ms":300000}"#,
+        ]);
+        assert_eq!(t.nave.as_deref(), Some("Type-A (Laser)"));
+        assert_eq!(t.sobrevivencia_ms, Some(300_000));
+        assert!(t.resultado_mostrado);
+    }
+
+    #[test]
     fn rota_e_bombas_vem_do_motor() {
         let t = run(&[
             INICIO,
@@ -293,7 +315,7 @@ mod tests {
         ]);
         assert_eq!(
             resultado(&t),
-            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), rota: None, bombas_usadas: None, zerou: false }))
+            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), rota: None, bombas_usadas: None, sobrevivencia_ms: None, zerou: false }))
         );
     }
 

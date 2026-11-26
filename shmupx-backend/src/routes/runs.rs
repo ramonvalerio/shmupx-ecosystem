@@ -122,6 +122,11 @@ struct SubmeterRunPayload {
     rota: Option<String>,
     #[serde(default)]
     bombas_usadas: Option<i32>,
+    /// Opcionais: nave/personagem escolhido e, no Caravan, o tempo vivido em ms.
+    #[serde(default)]
+    nave: Option<String>,
+    #[serde(default)]
+    sobrevivencia_ms: Option<i32>,
     /// Opcional: o jogo foi zerado (o fim do jogo). Sem ele, a run não entra na tabela 1CC.
     #[serde(default)]
     zerou: Option<bool>,
@@ -153,9 +158,16 @@ async fn submeter_run(
         continues_usados: payload.continues_usados,
         rota: payload.rota,
         bombas_usadas: payload.bombas_usadas,
+        nave: payload.nave,
+        sobrevivencia_ms: payload.sobrevivencia_ms,
         zerou: payload.zerou,
     };
-    let (score, vidas) = (resultado.score_bruto, resultado.vidas_perdidas);
+    let marca = (
+        resultado.score_bruto,
+        resultado.sobrevivencia_ms.map(i64::from),
+        resultado.vidas_perdidas.map(i64::from),
+        resultado.bombas_usadas.map(i64::from),
+    );
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
     // O modo da run, lido antes da poda: uma run abaixo do recorde sai do banco.
     let modo = firestore
@@ -174,7 +186,7 @@ async fn submeter_run(
     let mut depois = destaques::depois_do_envio(&firestore, youtube.as_deref(), &usuario.uid, &payload.run_id, &payload.jogo_id).await;
     // Run abaixo do recorde do jogador: sem registro no ranking, mas com o RANK que o placar teria.
     if depois.posicao.is_none() && !online {
-        depois.posicao = destaques::posicao_fora_do_recorde(&firestore, &usuario.uid, &payload.jogo_id, modo.as_deref(), score, vidas).await;
+        depois.posicao = destaques::posicao_fora_do_recorde(&firestore, &usuario.uid, &payload.jogo_id, modo.as_deref(), marca).await;
     }
     Ok(Json(RespostaEnvio { run, online, depois }))
 }

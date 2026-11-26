@@ -363,6 +363,8 @@ for (const [key, value] of Object.entries(LAUNCH_PROBLEM_ENGLISH)) ENGLISH[key] 
 
 // Tela de ranking da sala (pódio do Top 3, classificação completa e detalhes do registro).
 const RANKING_SCREEN_ENGLISH: Record<string, string> = {
+  "Score": "Score", "Nave / Tipo": "Ship / Type", "Sobrevivência": "Survival", "Mortes": "Deaths", "Barrier": "Barrier", "Barrier usado": "Barrier used",
+  "Finalizado em": "Finished at", "No Miss": "No Miss", "No Bomb": "No Bomb",
   "Top 3 · {mode}": "Top 3 · {mode}", "Classificação completa": "Full standings", "Runs desta sessão": "Runs this session",
   "{count} jogadores": "{count} players", "{count} runs nesta sessão": "{count} runs this session", "Atualizado às {time}": "Updated at {time}",
   "Lugar vago": "Open spot", "Jogue Ranked Mode para entrar no pódio.": "Play Ranked Mode to take this spot.",

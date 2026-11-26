@@ -29,6 +29,9 @@ pub struct Partida {
     /// Rota percorrida (Darius Gaiden: `ABDHLQV`) e bombas usadas, quando o mapa de memória lê.
     pub rota: Option<String>,
     pub bombas_usadas: Option<i32>,
+    /// Nave ou personagem escolhida (o rótulo do mapa de memória) e, no Caravan, o tempo vivido em ms.
+    pub nave: Option<String>,
+    pub sobrevivencia_ms: Option<i32>,
     /// O jogador zerou o jogo (`result.cleared`).
     pub zerou: bool,
     pub modo: Option<String>,
@@ -50,6 +53,8 @@ pub struct EntradaJogo {
     pub vidas_perdidas: Option<i32>,
     pub rota: Option<String>,
     pub bombas_usadas: Option<i32>,
+    pub nave: Option<String>,
+    pub sobrevivencia_ms: Option<i32>,
     pub runs: usize,
     pub modo: Option<String>,
     pub versao: Option<String>,
@@ -131,13 +136,26 @@ fn arredondar(valor: f64) -> f64 {
     (valor * 100.0).round() / 100.0
 }
 
-/// Qual partida fica na frente: no Caravan, quem perdeu menos vidas, com o placar desempatando
-/// (partida sem vidas lidas fica depois das que têm); nos outros modos, o maior placar.
-/// `Ordering::Less` = `a` na frente de `b`.
+/// O que decide a posição no Caravan: placar, tempo sobrevivido (ms), mortes (vidas perdidas) e bombas.
+/// Campo não lido (run antiga, jogo sem o dado) fica depois de quem tem o valor.
+pub type MarcaCaravan = (i64, Option<i64>, Option<i64>, Option<i64>);
+
+/// Regra padrão do Caravan Mode: 1º maior placar (mesmo que tenha morrido antes), 2º mais tempo
+/// sobrevivido dentro do limite, 3º menos mortes, 4º menos bombas. O 5º critério é quem registrou a
+/// marca primeiro (`enviada_em`), aplicado por quem chama. `Ordering::Less` = `a` na frente de `b`.
+pub fn ordem_caravan(a: &MarcaCaravan, b: &MarcaCaravan) -> std::cmp::Ordering {
+    let menos = |v: Option<i64>| v.unwrap_or(i64::MAX);
+    b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(menos(a.2).cmp(&menos(b.2))).then(menos(a.3).cmp(&menos(b.3)))
+}
+
+fn marca(p: &Partida) -> MarcaCaravan {
+    (p.score, p.sobrevivencia_ms.map(i64::from), p.vidas_perdidas.map(i64::from), p.bombas_usadas.map(i64::from))
+}
+
+/// Qual partida fica na frente: no Caravan, a regra de `ordem_caravan`; nos outros modos, o maior
+/// placar. `Ordering::Less` = `a` na frente de `b`.
 pub fn ordem_no_ranking(a: &Partida, b: &Partida, caravana: bool) -> std::cmp::Ordering {
-    let vidas = |p: &Partida| p.vidas_perdidas.unwrap_or(i32::MAX);
-    let principal = if caravana { vidas(a).cmp(&vidas(b)) } else { std::cmp::Ordering::Equal };
-    principal.then(b.score.cmp(&a.score))
+    if caravana { ordem_caravan(&marca(a), &marca(b)) } else { b.score.cmp(&a.score) }
 }
 
 /// Classificação de um jogo: o melhor de cada jogador (`ordem_no_ranking`: no Caravan, menos vidas
@@ -165,7 +183,7 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
     let mut entradas: Vec<EntradaJogo> = Vec::with_capacity(lista.len());
     for (indice, (p, runs)) in lista.into_iter().enumerate() {
         let posicao = match entradas.last() {
-            Some(anterior) if anterior.score == p.score && (!caravana || anterior.vidas_perdidas == p.vidas_perdidas) => anterior.posicao,
+            Some(anterior) if anterior.score == p.score && (!caravana || (anterior.sobrevivencia_ms, anterior.vidas_perdidas, anterior.bombas_usadas) == (p.sobrevivencia_ms, p.vidas_perdidas, p.bombas_usadas)) => anterior.posicao,
             _ => indice + 1,
         };
         entradas.push(EntradaJogo {
@@ -178,6 +196,8 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
             vidas_perdidas: p.vidas_perdidas,
             rota: p.rota.clone(),
             bombas_usadas: p.bombas_usadas,
+            nave: p.nave.clone(),
+            sobrevivencia_ms: p.sobrevivencia_ms,
             runs,
             modo: p.modo.clone(),
             versao: p.versao.clone(),
@@ -250,6 +270,8 @@ mod tests {
             vidas_perdidas: None,
             rota: None,
             bombas_usadas: None,
+            nave: None,
+            sobrevivencia_ms: None,
             zerou: false,
             modo: None,
             versao: None,
@@ -266,18 +288,46 @@ mod tests {
     }
 
     #[test]
-    fn caravan_ordena_por_menos_vidas_perdidas_e_depois_pelo_placar() {
-        let caravan = |jogador: &str, score: i64, vidas: Option<i32>| Partida {
+    fn caravan_ordena_por_placar_sobrevivencia_mortes_e_bombas() {
+        let caravan = |jogador: &str, score: i64, tempo: Option<i32>, vidas: Option<i32>, bombas: Option<i32>| Partida {
             modo: Some("caravan-classic".into()),
             vidas_perdidas: vidas,
+            sobrevivencia_ms: tempo,
+            bombas_usadas: bombas,
             ..partida(jogador, "j", score)
         };
-        let partidas = [caravan("ana", 900, Some(3)), caravan("bia", 500, Some(0)), caravan("caio", 700, Some(0)), caravan("dani", 999, None)];
+        let partidas = [
+            caravan("ana", 900, Some(300_000), Some(3), Some(0)),
+            caravan("bia", 500, Some(300_000), Some(0), Some(0)),
+            // Mesmo placar da ana: mais tempo vivido vence, mesmo com mais mortes.
+            caravan("caio", 900, Some(222_000), Some(0), Some(0)),
+            caravan("dani", 900, Some(300_000), Some(1), Some(2)),
+            caravan("edu", 900, Some(300_000), Some(1), Some(0)),
+            // Sem tempo lido (run antiga): depois de quem tem o tempo, no mesmo placar.
+            caravan("fabi", 900, None, Some(0), Some(0)),
+        ];
         let ordem: Vec<String> = ranking_do_jogo(&partidas, "j", Some("caravan"), None).into_iter().map(|e| e.jogador_id).collect();
-        assert_eq!(ordem, vec!["caio", "bia", "ana", "dani"]);
-        // No Hi-Score continua o placar.
-        let hs: Vec<String> = ranking_do_jogo(&partidas.map(|p| Partida { modo: None, ..p }), "j", Some("highscore"), None).into_iter().map(|e| e.jogador_id).collect();
-        assert_eq!(hs, vec!["dani", "ana", "caio", "bia"]);
+        // Placar 900: tempo 300s (edu 1 morte/0 bombas, dani 1/2, ana 3 mortes), depois caio (222s), fabi
+        // (sem tempo); por fim a bia, de placar menor.
+        assert_eq!(ordem, vec!["edu", "dani", "ana", "caio", "fabi", "bia"]);
+        // No Hi-Score continua só o placar.
+        let hs: Vec<String> = ranking_do_jogo(&partidas.clone().map(|p| Partida { modo: None, ..p }), "j", Some("highscore"), None).into_iter().map(|e| e.jogador_id).collect();
+        assert_eq!(hs.last().map(String::as_str), Some("bia"));
+    }
+
+    #[test]
+    fn caravan_empatado_em_tudo_divide_a_posicao_e_o_primeiro_a_registrar_fica_na_frente() {
+        use chrono::TimeZone;
+        let caravan = |jogador: &str, minuto: u32| Partida {
+            modo: Some("caravan-classic".into()),
+            vidas_perdidas: Some(0),
+            sobrevivencia_ms: Some(300_000),
+            bombas_usadas: Some(0),
+            enviada_em: Some(Utc.with_ymd_and_hms(2026, 11, 26, 10, minuto, 0).unwrap()),
+            ..partida(jogador, "j", 500)
+        };
+        let r = ranking_do_jogo(&[caravan("depois", 9), caravan("antes", 1)], "j", Some("caravan"), None);
+        assert_eq!(r.iter().map(|e| (e.jogador_id.as_str(), e.posicao)).collect::<Vec<_>>(), vec![("antes", 1), ("depois", 1)]);
     }
 
     #[test]

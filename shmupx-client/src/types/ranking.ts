@@ -10,6 +10,10 @@ export interface GameRankingEntry {
   /** Rota percorrida, uma letra maiúscula por zona (Darius Gaiden: ABDHLQV) e bombas usadas. */
   rota?: string | null;
   bombas_usadas?: number | null;
+  /** Nave/personagem (e tipo de tiro) escolhido, como o mapa de memória do jogo nomeia. */
+  nave?: string | null;
+  /** Caravan: tempo vivido na partida, em ms (o tempo todo do modo se o relógio zerou). */
+  sobrevivencia_ms?: number | null;
   runs: number;
   modo: string | null;
   versao: string | null;

@@ -32,6 +32,11 @@ pub struct EntradaLocal {
     pub rota: Option<String>,
     #[serde(default)]
     pub bombas: Option<i32>,
+    /// Nave/personagem escolhido e, no Caravan, o tempo vivido em ms.
+    #[serde(default)]
+    pub nave: Option<String>,
+    #[serde(default)]
+    pub sobrevivencia_ms: Option<i32>,
     /// `highscore`, `caravan-sprint`...; `None` nas runs sem modo escolhido.
     #[serde(default)]
     pub modo: Option<String>,
@@ -105,7 +110,7 @@ mod tests {
     use super::*;
 
     fn e(run: &str, uid: &str, quando: u64) -> EntradaLocal {
-        EntradaLocal { run_id: run.into(), jogo_id: "aero".into(), uid: Some(uid.into()), score: 10, vidas_perdidas: 0, continues: 0, zerou: false, rota: None, bombas: None, modo: None, quando, online: false }
+        EntradaLocal { run_id: run.into(), jogo_id: "aero".into(), uid: Some(uid.into()), score: 10, vidas_perdidas: 0, continues: 0, zerou: false, rota: None, bombas: None, nave: None, sobrevivencia_ms: None, modo: None, quando, online: false }
     }
 
     #[test]

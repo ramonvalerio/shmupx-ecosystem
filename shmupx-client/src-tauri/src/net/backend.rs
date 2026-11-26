@@ -115,6 +115,11 @@ struct SubmeterRunPayload<'a> {
     rota: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bombas_usadas: Option<i32>,
+    /// Nave/personagem escolhido e, no Caravan, o tempo vivido (ms): os campos NAVE / TIPO e SOBREVIVÊNCIA.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nave: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sobrevivencia_ms: Option<i32>,
 }
 
 /// Um dos 3 primeiros do Hi-Score do jogo (o pódio da sala), já com a run enviada.
@@ -200,6 +205,8 @@ pub async fn submeter_run(
     zerou: Option<bool>,
     rota: Option<&str>,
     bombas_usadas: Option<i32>,
+    nave: Option<&str>,
+    sobrevivencia_ms: Option<i32>,
 ) -> Result<SubmeterRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs"))
@@ -213,6 +220,8 @@ pub async fn submeter_run(
             zerou,
             rota,
             bombas_usadas,
+            nave,
+            sobrevivencia_ms,
         })
         .send()
         .await

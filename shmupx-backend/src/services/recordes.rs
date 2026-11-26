@@ -3,8 +3,8 @@
 //! ninguém, e as leituras do ranking não crescem com o número de partidas jogadas.
 //!
 //! Depois do envio de uma run, as gameplays com resultado do jogador naquele jogo são comparadas:
-//! fica só o recorde de cada tabela (maior placar; no Caravan, menos vidas perdidas e depois o
-//! placar), e as outras saem do banco (o lançamento da ficha na
+//! fica só o recorde de cada tabela (maior placar; no Caravan, o maior placar e depois o tempo
+//! vivido, as mortes e as bombas), e as outras saem do banco (o lançamento da ficha na
 //! carteira continua). A comparação é sempre da run atual com o que está no banco: mexer no
 //! ranking local não muda nada aqui.
 //!
@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use crate::error::AppError;
 use crate::firestore::valor::{ler_booleano, ler_data, ler_inteiro, ler_mapa, ler_texto};
 use crate::firestore::{Campos, Firestore};
+use crate::services::placar;
 
 /// Estados de uma gameplay com resultado (os do ranking).
 const COM_RESULTADO: [&str; 2] = ["needs_review", "approved"];
@@ -36,8 +37,11 @@ struct Registro {
     evento: Option<String>,
     zerou: bool,
     continues: i64,
-    /// Vidas perdidas (`result.livesLost`): no Caravan, quem perdeu menos fica na frente.
+    /// Vidas perdidas (`result.livesLost`): o 3º critério do Caravan.
     vidas_perdidas: Option<i64>,
+    /// Caravan: tempo vivido (ms) e bombas usadas, os critérios depois do placar e das mortes.
+    sobrevivencia_ms: Option<i64>,
+    bombas_usadas: Option<i64>,
     enviada_em: Option<DateTime<Utc>>,
 }
 
@@ -55,12 +59,16 @@ fn tabelas(r: &Registro) -> Vec<String> {
     lista
 }
 
-/// A run `a` é melhor que `b` na tabela: no Caravan, menos vidas perdidas e depois o maior placar
-/// (sem vidas lidas, depois das que têm); nos outros modos, o maior placar. Empate: a mais antiga.
+/// A run `a` é melhor que `b` na tabela: no Caravan, a regra de `placar::ordem_caravan` (placar, tempo
+/// vivido, mortes, bombas); nos outros modos, o maior placar. Empate: a mais antiga.
 fn melhor_que(a: &Registro, b: &Registro, tabela: &str) -> bool {
-    let vidas = |r: &Registro| r.vidas_perdidas.unwrap_or(i64::MAX);
-    let principal = if tabela.starts_with("caravan") { vidas(a).cmp(&vidas(b)) } else { std::cmp::Ordering::Equal };
-    principal.then(b.score.cmp(&a.score)).then((a.enviada_em, &a.id).cmp(&(b.enviada_em, &b.id))).is_lt()
+    let principal = if tabela.starts_with("caravan") {
+        let marca = |r: &Registro| (r.score, r.sobrevivencia_ms, r.vidas_perdidas, r.bombas_usadas);
+        placar::ordem_caravan(&marca(a), &marca(b))
+    } else {
+        b.score.cmp(&a.score)
+    };
+    principal.then((a.enviada_em, &a.id).cmp(&(b.enviada_em, &b.id))).is_lt()
 }
 
 /// Ids que ficam: o recorde de cada tabela.
@@ -91,6 +99,8 @@ fn registro(id: String, campos: &Campos) -> Option<Registro> {
         zerou: ler_booleano(&resultado, "cleared") == Some(true),
         continues: ler_inteiro(&resultado, "continuesUsed").unwrap_or(0),
         vidas_perdidas: ler_inteiro(&resultado, "livesLost"),
+        sobrevivencia_ms: ler_inteiro(&resultado, "survivalMs"),
+        bombas_usadas: ler_inteiro(&resultado, "bombsUsed"),
         enviada_em: ler_data(&resultado, "submittedAt"),
     })
 }
@@ -131,6 +141,8 @@ mod tests {
             zerou,
             continues: 0,
             vidas_perdidas: None,
+            sobrevivencia_ms: None,
+            bombas_usadas: None,
             enviada_em: Some(Utc.with_ymd_and_hms(2026, 11, 26, 10, minuto, 0).unwrap()),
         }
     }
@@ -158,14 +170,22 @@ mod tests {
     }
 
     #[test]
-    fn no_caravan_fica_quem_perdeu_menos_vidas() {
-        let vidas = |id: &str, score: i64, perdidas: Option<i64>, minuto: u32| {
-            Registro { vidas_perdidas: perdidas, ..r(id, score, Some("caravan-classic"), false, minuto) }
+    fn no_caravan_fica_o_maior_placar_e_depois_tempo_mortes_e_bombas() {
+        let marca = |id: &str, score: i64, tempo: Option<i64>, mortes: Option<i64>, bombas: Option<i64>, minuto: u32| Registro {
+            vidas_perdidas: mortes,
+            sobrevivencia_ms: tempo,
+            bombas_usadas: bombas,
+            ..r(id, score, Some("caravan-classic"), false, minuto)
         };
-        // Menos vidas vence mesmo com placar menor; com as mesmas vidas, o placar desempata.
-        let ficam = recordes(&[vidas("mais-pontos", 900, Some(2), 1), vidas("menos-vidas", 500, Some(0), 2), vidas("sem-vidas", 999, None, 3)]);
-        assert_eq!(ficam, HashSet::from(["menos-vidas".to_string()]));
-        let ficam = recordes(&[vidas("a", 400, Some(1), 1), vidas("b", 700, Some(1), 2)]);
+        // O maior placar vence, mesmo com mais mortes.
+        let ficam = recordes(&[marca("mais-pontos", 900, Some(100_000), Some(2), Some(0), 1), marca("menos-vidas", 500, Some(300_000), Some(0), Some(0), 2)]);
+        assert_eq!(ficam, HashSet::from(["mais-pontos".to_string()]));
+        // Mesmo placar: mais tempo vivido, depois menos mortes, depois menos bombas.
+        let ficam = recordes(&[marca("a", 400, Some(200_000), Some(0), Some(0), 1), marca("b", 400, Some(300_000), Some(2), Some(5), 2)]);
+        assert_eq!(ficam, HashSet::from(["b".to_string()]));
+        let ficam = recordes(&[marca("a", 400, Some(300_000), Some(1), Some(0), 1), marca("b", 400, Some(300_000), Some(0), Some(3), 2)]);
+        assert_eq!(ficam, HashSet::from(["b".to_string()]));
+        let ficam = recordes(&[marca("a", 400, Some(300_000), Some(0), Some(2), 1), marca("b", 400, Some(300_000), Some(0), Some(1), 2)]);
         assert_eq!(ficam, HashSet::from(["b".to_string()]));
     }
 
