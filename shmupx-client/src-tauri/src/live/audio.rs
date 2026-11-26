@@ -411,4 +411,66 @@ mod neste_pc {
         tom.join().unwrap();
         assert!(pico > 0.1);
     }
+
+    /// Volume e mudo das sessões de áudio do processo `SHMUPX_PID` (mixer do Windows), em todas as saídas:
+    /// `cargo test -- --ignored volume_do_motor --nocapture`.
+    #[test]
+    #[ignore = "depende do ShmupX Emulator aberto tocando"]
+    fn volume_do_motor() {
+        use windows::core::Interface;
+        use windows::Win32::Media::Audio::{
+            eRender, IAudioSessionControl2, IAudioSessionManager2, IMMDeviceEnumerator, ISimpleAudioVolume, MMDeviceEnumerator,
+            DEVICE_STATE_ACTIVE,
+        };
+        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+        let pid: u32 = std::env::var("SHMUPX_PID").expect("SHMUPX_PID").parse().unwrap();
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let enumerador: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).unwrap();
+            let saidas = enumerador.EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE).unwrap();
+            for i in 0..saidas.GetCount().unwrap() {
+                let saida = saidas.Item(i).unwrap();
+                let id = saida.GetId().unwrap().to_string().unwrap();
+                let gerente: IAudioSessionManager2 = saida.Activate(CLSCTX_ALL, None).unwrap();
+                let sessoes = gerente.GetSessionEnumerator().unwrap();
+                for j in 0..sessoes.GetCount().unwrap() {
+                    let controle: IAudioSessionControl2 = sessoes.GetSession(j).unwrap().cast().unwrap();
+                    if controle.GetProcessId().ok() != Some(pid) {
+                        continue;
+                    }
+                    let volume: ISimpleAudioVolume = controle.cast().unwrap();
+                    println!("saída {id}: volume {:.2} mudo {:?} estado {:?}", volume.GetMasterVolume().unwrap(), volume.GetMute().unwrap().as_bool(), controle.GetState().unwrap());
+                }
+            }
+        }
+    }
+
+    /// Mede, por 8 s, o som do ShmupX Emulator aberto (`SHMUPX_PID`, ou o primeiro achado; loopback do
+    /// processo) e o da saída padrão:
+    /// `cargo test -- --ignored som_do_motor --nocapture`.
+    #[test]
+    #[ignore = "depende do ShmupX Emulator aberto tocando"]
+    fn som_do_motor() {
+        let pid = std::env::var("SHMUPX_PID").ok().and_then(|p| p.parse().ok()).unwrap_or_else(|| *crate::steam::detector::processos_por_nome("shmupx-engine.exe").first().expect("motor aberto"));
+        let do_processo = processo::iniciar(pid);
+        println!("loopback do processo {pid}: {}", do_processo.as_ref().map(|_| "aberto".to_string()).unwrap_or_else(|e| e.clone()));
+        let da_saida = iniciar_saida();
+        println!("loopback da saída: {}", da_saida.as_ref().map(|l| format!("aberto ({} Hz)", l.taxa)).unwrap_or_else(|e| e.clone()));
+        fn pico(lb: &Result<Loopback, String>) -> String {
+            match lb {
+                Ok(l) => {
+                    let mut b = travar(&l.amostras);
+                    let (n, p) = (b.len(), b.iter().fold(0f32, |m, s| m.max(s.abs())));
+                    b.clear();
+                    format!("{n} amostras, pico {p:.4}")
+                }
+                Err(_) => "-".to_string(),
+            }
+        }
+        let segundos: u64 = std::env::var("SHMUPX_SEGUNDOS").ok().and_then(|s| s.parse().ok()).unwrap_or(8);
+        for s in 1..=segundos {
+            std::thread::sleep(Duration::from_secs(1));
+            println!("{s}s  processo: {:?}  saída: {:?}", pico(&do_processo), pico(&da_saida));
+        }
+    }
 }

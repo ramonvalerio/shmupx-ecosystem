@@ -14,6 +14,7 @@
 - A duração máxima da run é de **45 a 60 min** (definida por jogo no servidor).
 - O timer vive em **Rust** (relógio monotônico, `Instant`), não em JS. O servidor guarda `server_started_at` como referência soberana.
 - Ao estourar o limite: o Rust **encerra o FFmpeg imediatamente**, marca a run como `expired` e só o trecho gravado até então é elegível.
+- Só os jogos validados pelo vídeo gravam; os validados pela memória no ShmupX Emulator não têm FFmpeg (ver [ADR 009](../adr/009-gravacao-da-run.md)).
 - Verificações antifraude:
   - Metadados do vídeo: duração gravada ≤ limite + tolerância; timestamps coerentes com `server_started_at`.
   - Se o FFmpeg morrer fora do esperado, a run é `invalid`.

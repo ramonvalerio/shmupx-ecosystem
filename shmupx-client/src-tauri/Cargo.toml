@@ -44,10 +44,13 @@ shmupx-mister-link = { path = "../../shmupx-mister-link" }
 # Captura da janela do jogo para a live (Windows Graphics Capture).
 [target.'cfg(windows)'.dependencies]
 windows-capture = "2.0.1"
-# Área interna da janela (sem a barra de título) e som só do processo do jogo.
+# Área interna da janela (sem a barra de título), redução na placa de vídeo (gravação da run) e
+# som só do processo do jogo.
 windows = { version = "0.62.2", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Media_Audio",

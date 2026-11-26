@@ -137,9 +137,10 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauri()) return;
-    // Jogo aberto (Steam ou emulador): começa a run, vigiando o processo dele.
-    const startRun = (roomId: string, pid: number, steamAppId: number | null) => {
-      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId, modo: takePendingRunMode(roomId), evento: takePendingRunEvent(roomId) })
+    // Jogo aberto (Steam ou emulador): começa a run, vigiando o processo dele. `rom`: o aberto no
+    // ShmupX Emulator (os validados pela memória não gravam vídeo).
+    const startRun = (roomId: string, pid: number, steamAppId: number | null, rom: string | null = null) => {
+      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId, modo: takePendingRunMode(roomId), evento: takePendingRunEvent(roomId), rom })
         .then((nativePid) => {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: roomId, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);
@@ -168,7 +169,7 @@ export default function App() {
       const room = roomsRef.current.find((candidate) => candidate.id === event.payload.game_id);
       if (room) setLaunchPlatforms((current) => ({ ...current, [room.id]: "emulator" }));
       if (room && event.payload.treino) setPracticeGames((current) => ({ ...current, [room.id]: event.payload.pid }));
-      else if (room) startRun(room.id, event.payload.pid, null);
+      else if (room) startRun(room.id, event.payload.pid, null, event.payload.rom);
     });
 
     const unlistenPractice = listen<{ pid: number }>("treino://encerrado", (event) => {

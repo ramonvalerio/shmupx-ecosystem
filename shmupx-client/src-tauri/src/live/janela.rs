@@ -32,7 +32,7 @@ pub use windows_capture::window::Window;
 pub const LARGURA: usize = 1280;
 pub const ALTURA: usize = 720;
 pub const QUADROS_POR_SEGUNDO: u32 = 60;
-const BYTES: usize = LARGURA * ALTURA * 4;
+pub(crate) const BYTES: usize = LARGURA * ALTURA * 4;
 
 /// Janela visível do processo (a maior, se houver várias), entre os `pids` dados.
 pub fn janela_dos_processos(pids: &[u32]) -> Option<Window> {
@@ -53,7 +53,7 @@ pub fn janela_dos_processos(pids: &[u32]) -> Option<Window> {
 
 /// Encaixa o quadro BGRA `origem` (l×a) no quadro fixo, mantendo a proporção. Cada pixel de saída
 /// é a média de 2×2 pixels da origem (suaviza a redução sem custar muito).
-fn encaixar(origem: &[u8], l: usize, a: usize, destino: &mut [u8]) {
+pub(crate) fn encaixar(origem: &[u8], l: usize, a: usize, destino: &mut [u8]) {
     destino.fill(0);
     if l == 0 || a == 0 || origem.len() < l * a * 4 {
         return;
@@ -85,7 +85,7 @@ fn encaixar(origem: &[u8], l: usize, a: usize, destino: &mut [u8]) {
 /// Recorte `(x0, y0, x1, y1)` da área interna da janela dentro do quadro capturado (`l`×`a`).
 /// O quadro do Windows Graphics Capture cobre a moldura visível (`DWMWA_EXTENDED_FRAME_BOUNDS`);
 /// a área interna começa onde o canto do cliente cai nela. `None`: usar o quadro inteiro.
-fn area_interna(hwnd: isize, l: u32, a: u32) -> Option<(u32, u32, u32, u32)> {
+pub(crate) fn area_interna(hwnd: isize, l: u32, a: u32) -> Option<(u32, u32, u32, u32)> {
     let hwnd = HWND(hwnd as *mut std::ffi::c_void);
     let mut moldura = RECT::default();
     let mut cliente = RECT::default();
@@ -200,8 +200,8 @@ pub fn iniciar(janela: Window, tela: Tela) -> Result<CapturaJanela, String> {
     })
 }
 
-/// Escreve o quadro atual no FFmpeg (BGRA 1280×720) a 60 quadros/s pelo relógio, repetindo o
-/// último quando não chega um novo, até `parar` ou erro de escrita. Roda numa thread própria: o
+/// Escreve o quadro atual no FFmpeg (do tamanho que estiver na `tela`: BGRA 1280×720 na live, NV12
+/// na gravação da run) a 60 quadros/s pelo relógio, repetindo o último quando não chega um novo, até `parar` ou erro de escrita. Roda numa thread própria: o
 /// `sleep` do Rust no Windows usa timer de alta resolução (o do tokio anda em degraus de ~15 ms,
 /// o que fazia o vídeo engasgar).
 pub fn alimentar(mut destino: std::fs::File, tela: Tela, parar: Arc<AtomicBool>) {
@@ -209,7 +209,7 @@ pub fn alimentar(mut destino: std::fs::File, tela: Tela, parar: Arc<AtomicBool>)
         let inicio = Instant::now();
         let fps = f64::from(QUADROS_POR_SEGUNDO);
         let mut escritos: u64 = 0;
-        let mut quadro = vec![0u8; BYTES];
+        let mut quadro = Vec::with_capacity(BYTES);
         while !parar.load(Ordering::SeqCst) {
             let alvo = inicio + Duration::from_secs_f64(escritos as f64 / fps);
             let agora = Instant::now();
@@ -217,7 +217,11 @@ pub fn alimentar(mut destino: std::fs::File, tela: Tela, parar: Arc<AtomicBool>)
                 std::thread::sleep(alvo - agora);
             }
             let devidos = (inicio.elapsed().as_secs_f64() * fps) as u64 + 1;
-            quadro.copy_from_slice(&tela.lock().unwrap_or_else(|p| p.into_inner()));
+            {
+                let atual = tela.lock().unwrap_or_else(|p| p.into_inner());
+                quadro.clear();
+                quadro.extend_from_slice(&atual);
+            }
             // Um quadro por quadro devido, para o vídeo acompanhar o relógio (e o áudio). Um atraso
             // longo (o FFmpeg ainda abrindo, máquina travada) é pulado, não despejado de uma vez.
             let atraso = devidos.saturating_sub(escritos).max(1);

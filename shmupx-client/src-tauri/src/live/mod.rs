@@ -13,7 +13,7 @@
 //! essa cópia vai para o canal oficial da ShmupX (`destaque`); senão, é apagada.
 //! O endereço RTMP leva a chave da transmissão: nunca vai para log (FFmpeg em `-loglevel error`).
 
-mod audio;
+pub(crate) mod audio;
 pub mod commands;
 pub mod destaque;
 #[cfg(windows)]
@@ -299,7 +299,7 @@ fn spawn_ffmpeg_janela(ingest: &str, copia: &Path, porta_audio: u16, log: &PathB
 }
 
 /// Porta livre em 127.0.0.1 (para o FFmpeg escutar o áudio).
-fn porta_livre() -> Result<u16, String> {
+pub(crate) fn porta_livre() -> Result<u16, String> {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map(|a| a.port())

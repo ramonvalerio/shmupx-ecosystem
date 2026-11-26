@@ -7,7 +7,7 @@ use crate::analysis;
 use crate::net::backend;
 use crate::session::SessionState;
 
-use super::ffmpeg::{self, RecordingConfig};
+use super::ffmpeg;
 use super::pendentes::{self, RunPendente};
 use super::state::{AnalysisQueue, RunHandle, RunState};
 
@@ -17,10 +17,13 @@ struct RunExpiredPayload {
     pid: u32,
 }
 
-/// Inicia uma corrida: começa a captura e confirma que o FFmpeg está gravando; só então debita
-/// a ficha no backend (`POST /api/runs/start`) e usa a `max_duration_segundos` devolvida para o
-/// timer seguro. Uma captura que não inicia não custa ficha.
+/// Inicia uma corrida. Jogo do ShmupX Emulator validado pela memória (`rom` em
+/// `jogos-pela-memoria.json`): não grava nada, a telemetria do motor decide a run. Os outros: começa
+/// a gravar a janela do jogo e confirma que o FFmpeg está gravando. Só então debita a ficha no
+/// backend (`POST /api/runs/start`) e usa a `max_duration_segundos` devolvida para o timer seguro.
+/// Uma gravação que não inicia não custa ficha.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn iniciar_corrida_safe(
     app: AppHandle,
     state: State<'_, RunState>,
@@ -34,11 +37,16 @@ pub async fn iniciar_corrida_safe(
     modo: Option<String>,
     // Evento em que a partida vale (o jogador se inscreveu): o backend confere e grava o `eventId`.
     evento: Option<String>,
+    // ROM aberto no ShmupX Emulator (`emulator://game-launched`): decide se a run vale pela memória.
+    rom: Option<String>,
 ) -> Result<u32, String> {
     // Uma live no ar só transmite a run ranked do jogo dela (Play Ranked com live): a run sai
     // ligada à live, para o destaque do top 3. Live de outro jogo barra a run.
     let live_broadcast = live.broadcast_para_run(&jogo_id)?;
-    if !ffmpeg::is_ffmpeg_available() {
+    let pela_memoria = steam_app_id.is_none()
+        && jogo_pid.is_some()
+        && rom.as_deref().is_some_and(crate::steam::telemetria::rom_pela_memoria);
+    if !pela_memoria && !ffmpeg::is_ffmpeg_available() {
         return Err("FFmpeg não encontrado: reinstale o ShmupX Client".into());
     }
 
@@ -54,42 +62,49 @@ pub async fn iniciar_corrida_safe(
         "sem sessão: entre com sua conta Google antes de iniciar uma run".to_string()
     })?;
 
-    // Pasta escolhida em Configurações › Armazenamento (padrão: dados do app).
-    let data_dir = super::destino::pasta_das_gravacoes(&app)?;
-
-    // Cada run preserva seu vídeo mesmo se outra começar durante a análise. O nome é local (a
-    // captura começa antes de o backend devolver o id da run).
-    let carimbo = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or_default();
-    let output_path = data_dir.join(format!("shmupx_run_{carimbo}.mp4"));
-    let mut config = RecordingConfig::new(output_path.clone());
-
-    let mut child =
-        ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
-    if let Err(erro) = ffmpeg::confirmar_inicio(&mut child, &config).await {
-        // ddagrab indisponível (área de trabalho remota, driver antigo): tenta a captura por GDI.
-        log::warn!("captura pelo monitor principal falhou ({erro}); usando a área de trabalho");
-        config.captura = ffmpeg::Captura::AreaDeTrabalho;
-        child =
-            ffmpeg::spawn_ffmpeg(&config).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
-        if let Err(erro) = ffmpeg::confirmar_inicio(&mut child, &config).await {
-            let _ = std::fs::remove_file(&output_path);
-            return Err(erro.to_string());
+    let (gravacao, video_path, pid) = match jogo_pid.filter(|_| pela_memoria) {
+        Some(jogo_pid) => {
+            log::info!("run de {jogo_id} pela memória ({}): sem gravação", rom.as_deref().unwrap_or_default());
+            (None, None, jogo_pid)
         }
-    }
-    let pid = child
-        .id()
-        .ok_or_else(|| "processo FFmpeg sem PID (já finalizado?)".to_string())?;
+        None => {
+            // Pasta escolhida em Configurações › Armazenamento (padrão: dados do app). Cada run
+            // preserva seu vídeo mesmo se outra começar durante a análise. O nome é local (a
+            // gravação começa antes de o backend devolver o id da run).
+            let data_dir = super::destino::pasta_das_gravacoes(&app)?;
+            let carimbo = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or_default();
+            let output_path = data_dir.join(format!("shmupx_run_{carimbo}.mp4"));
+            let gravacao = match iniciar_gravacao(&output_path, jogo_pid, steam_app_id).await {
+                Ok(g) => g,
+                Err(erro) => {
+                    let _ = std::fs::remove_file(&output_path);
+                    return Err(erro);
+                }
+            };
+            let Some(pid) = gravacao.pid() else {
+                let _ = gravacao.cortar().await;
+                let _ = std::fs::remove_file(&output_path);
+                return Err("a gravação parou logo depois de começar".into());
+            };
+            (Some(gravacao), Some(output_path), pid)
+        }
+    };
 
-    // Débito de ficha + abertura da "ficha ativa" no backend com a captura já confirmada. Se o
-    // backend recusar (sem saldo, jogo não publicado, token inválido), a captura é descartada.
+    // Débito de ficha + abertura da "ficha ativa" no backend com a gravação já confirmada. Se o
+    // backend recusar (sem saldo, jogo não publicado, token inválido), a gravação é descartada.
     let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref(), live_broadcast.as_deref(), evento.as_deref()).await {
         Ok(inicio) => inicio,
         Err(e) => {
-            let _ = child.kill().await;
-            let _ = std::fs::remove_file(&output_path);
+            if let Some(gravacao) = gravacao {
+                let _ = gravacao.cortar().await;
+            }
+            if let Some(video) = &video_path {
+                let _ = std::fs::remove_file(video);
+                let _ = std::fs::remove_file(super::gravacao::caminho_do_log(video));
+            }
             return Err(format!("backend recusou iniciar a run: {e}"));
         }
     };
@@ -99,12 +114,12 @@ pub async fn iniciar_corrida_safe(
     }
 
     *guard = Some(RunHandle {
-        child,
+        gravacao,
         pid,
         jogo_id: jogo_id.clone(),
         run_id: inicio.run_id,
         token: token.clone(),
-        video_path: output_path,
+        video_path,
         jogo_pid,
     });
     drop(guard);
@@ -120,7 +135,42 @@ pub async fn iniciar_corrida_safe(
     Ok(pid)
 }
 
-/// Para a captura, avisa o backend do fim da gameplay e põe a análise na fila. Retorna logo:
+/// Começa a gravação de um jogo validado pelo vídeo: espera a janela dele (até 1 min no ShmupX
+/// Emulator; até 3 min na Steam, que pode estar abrindo ou atualizando) e grava só ela, com o som.
+#[cfg(windows)]
+async fn iniciar_gravacao(video: &std::path::Path, jogo_pid: Option<u32>, steam_app_id: Option<u32>) -> Result<super::gravacao::Gravacao, String> {
+    // Na Steam, quem abriu pode ter sido um launcher: vale também qualquer processo da pasta do jogo.
+    let pasta = match steam_app_id {
+        Some(app_id) => tauri::async_runtime::spawn_blocking(move || crate::steam::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten(),
+        None => None,
+    };
+    let pids = move || {
+        let mut pids: Vec<u32> = jogo_pid.into_iter().filter(|pid| crate::steam::detector::processo_vivo(*pid)).collect();
+        if let Some(pasta) = &pasta {
+            pids.extend(crate::steam::detector::processos_na_pasta(pasta));
+        }
+        pids
+    };
+    let prazo = std::time::Duration::from_secs(if steam_app_id.is_some() { 180 } else { 60 });
+    let janela = super::gravacao::esperar_janela(pids, prazo).await?;
+    super::gravacao::iniciar(video, janela).await
+}
+
+#[cfg(not(windows))]
+async fn iniciar_gravacao(video: &std::path::Path, _jogo_pid: Option<u32>, _steam_app_id: Option<u32>) -> Result<super::gravacao::Gravacao, String> {
+    super::gravacao::iniciar_tela_inteira(video).await
+}
+
+/// Fecha a gravação da run (se houver) com o vídeo completo.
+async fn parar_gravacao(app: &AppHandle, handle: &mut RunHandle) -> Result<(), String> {
+    let Some(gravacao) = handle.gravacao.take() else { return Ok(()) };
+    gravacao.parar().await.map_err(|error| {
+        emit_analysis(app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao encerrar a gravação: {error}")));
+        error.to_string()
+    })
+}
+
+/// Para a gravação, avisa o backend do fim da gameplay e põe a análise na fila. Retorna logo:
 /// o jogador pode iniciar outra run enquanto esta é analisada em segundo plano.
 #[tauri::command]
 pub async fn finalizar_corrida_manual(
@@ -134,17 +184,8 @@ pub async fn finalizar_corrida_manual(
     let mut handle = guard
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
-    if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
-        emit_analysis(
-            &app,
-            &handle.jogo_id,
-            handle.pid,
-            "failed",
-            Some(format!("falha ao encerrar captura: {error}")),
-        );
-        return Err(error.to_string());
-    }
-    // Com a captura fechada, a próxima run já pode começar.
+    parar_gravacao(&app, &mut handle).await?;
+    // Com a gravação fechada, a próxima run já pode começar.
     drop(guard);
     encerrar_e_enfileirar(&app, handle).await;
     Ok(())
@@ -215,7 +256,8 @@ struct AnaliseJob {
     jogo_id: String,
     run_id: String,
     token: String,
-    video_path: PathBuf,
+    /// `None`: run pela memória, sem vídeo.
+    video_path: Option<PathBuf>,
     jogo_pid: Option<u32>,
 }
 
@@ -310,10 +352,16 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
         return;
     }
 
+    // Run pela memória (sem vídeo) cuja telemetria não chegou: não há o que analisar.
+    let Some(video_path) = job.video_path.clone() else {
+        log::warn!("capture: run {} sem telemetria do motor e sem vídeo", job.run_id);
+        emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some("não foi possível ler o resultado da partida no ShmupX Emulator".into()), None);
+        return;
+    };
     let fila = app.state::<AnalysisQueue>().0.clone();
     let _vez = fila.lock().await;
     let result = async {
-        let result = analysis::analisar_run(app, &job.video_path, &job.jogo_id).await?;
+        let result = analysis::analisar_run(app, &video_path, &job.jogo_id).await?;
         let resposta = backend::submeter_run(
             &token_atual(app, &job.token),
             &job.run_id,
@@ -336,10 +384,10 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             pendentes::guardar(app, RunPendente {
                 run_id: job.run_id.clone(),
                 jogo_id: job.jogo_id.clone(),
-                video_path: job.video_path.clone(),
                 uid: pendentes::uid_do_token(&job.token),
-                iniciada_em: pendentes::inicio_pelo_video(&job.video_path),
-                encerrada_em: pendentes::fim_pelo_video(&job.video_path),
+                iniciada_em: pendentes::inicio_pelo_video(&video_path),
+                encerrada_em: pendentes::fim_pelo_video(&video_path),
+                video_path,
                 erro: error.clone(),
             });
             emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(error), None);
@@ -367,7 +415,7 @@ pub fn reanalisar_run(app: AppHandle, run_id: String) -> Result<(), String> {
         .snapshot()
         .token
         .ok_or("sem sessão: entre com sua conta Google")?;
-    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: run.video_path, jogo_pid: None };
+    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: Some(run.video_path), jogo_pid: None };
     emit_run(&app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
     tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
     Ok(())
@@ -448,10 +496,9 @@ fn spawn_game_watcher(
         }
         let Some(mut handle) = guard.take() else { return };
         drop(guard);
-        log::info!("o jogo fechou: encerrando a gravação da run {run_id}");
+        log::info!("o jogo fechou: encerrando a run {run_id}");
         let _ = app.emit("run://game-closed", GameClosedPayload { jogo_id, pid: handle.pid });
-        if let Err(error) = ffmpeg::graceful_stop(&mut handle.child).await {
-            emit_analysis(&app, &handle.jogo_id, handle.pid, "failed", Some(format!("falha ao encerrar captura: {error}")));
+        if parar_gravacao(&app, &mut handle).await.is_err() {
             return;
         }
         encerrar_e_enfileirar(&app, handle).await;
@@ -474,15 +521,17 @@ fn spawn_safe_timer(
         }
         if let Some(mut handle) = guard.take() {
             drop(guard);
-            if let Err(error) = handle.child.kill().await {
-                emit_analysis(
-                    &app,
-                    &handle.jogo_id,
-                    handle.pid,
-                    "failed",
-                    Some(format!("falha ao cortar captura: {error}")),
-                );
-                return;
+            if let Some(gravacao) = handle.gravacao.take() {
+                if let Err(error) = gravacao.cortar().await {
+                    emit_analysis(
+                        &app,
+                        &handle.jogo_id,
+                        handle.pid,
+                        "failed",
+                        Some(format!("falha ao cortar a gravação: {error}")),
+                    );
+                    return;
+                }
             }
             let _ = app.emit(
                 "run://expired",

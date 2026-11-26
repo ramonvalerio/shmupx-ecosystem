@@ -27,7 +27,8 @@ pub async fn extrair_frames_finais(
 
     let padrao_saida = output_dir.join("frame_%03d.png");
 
-    let status = Command::new(crate::capture::ffmpeg::programa())
+    let mut comando = Command::new(crate::capture::ffmpeg::programa());
+    comando
         .args(["-y", "-sseof", &format!("-{JANELA_FINAL_SEGUNDOS}")])
         .arg("-i")
         .arg(video_path)
@@ -35,7 +36,12 @@ pub async fn extrair_frames_finais(
         .arg(&padrao_saida)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    // Sem janela de console (ela tomaria o foco do jogo da run seguinte, que pode estar em tela
+    // cheia) e abaixo do normal, como o motor de validação.
+    #[cfg(windows)]
+    comando.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS
+    let status = comando
         .status()
         .await
         .map_err(|e| format!("falha ao executar o ffmpeg para extrair frames: {e}"))?;

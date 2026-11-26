@@ -349,12 +349,14 @@ pub fn monitores(app: &AppHandle) -> Vec<MonitorDoPc> {
 /// Cadeia de efeitos (bgfx) das scanlines, publicada junto do motor em `bgfx/chains/`.
 const CADEIA_SCANLINES: &str = "shmupx-scanlines";
 
-/// Argumentos de vídeo do motor para as preferências do jogador. `janela` (gravação que precisa
-/// da janela) força o modo janela. Scanlines só com a cadeia presente; numa TV de tubo, nunca (a
-/// TV já desenha as linhas).
-fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool) -> Vec<String> {
+/// Argumentos de vídeo do motor para as preferências do jogador. `janela` força o modo janela.
+/// Scanlines só com a cadeia presente; numa TV de tubo, nunca (a TV já desenha as linhas).
+/// `gravada` (run ranked validada pelo vídeo): a tela cheia sem scanlines vai pelo bgfx, e não pela
+/// tela cheia exclusiva do Direct3D 9, que a captura da janela vê preta.
+fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, gravada: bool) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
-    args.push(if janela || video.windowed { "-window" } else { "-nowindow" }.into());
+    let tela_cheia = !(janela || video.windowed);
+    args.push(if tela_cheia { "-nowindow" } else { "-window" }.into());
     let crt = video.resolution == "crt15";
     // O GroovyMAME vem configurado para TV de tubo (generic_15); num monitor comum isso trocaria o
     // monitor para 640x480. `lcd` mantém a resolução nativa do monitor.
@@ -363,6 +365,8 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
     }
     if video.scanlines && !crt && scanlines_disponiveis {
         args.extend(["-video".into(), "bgfx".into(), "-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
+    } else if gravada && tela_cheia && !crt {
+        args.extend(["-video".into(), "bgfx".into()]);
     }
     // Monitor escolhido pelo jogador (em janela e em tela cheia).
     if monitor_valido(&video.monitor) {
@@ -471,7 +475,9 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     if motor.video.scanlines && !scanlines_disponiveis {
         log::warn!("emulador: scanlines pedidas, mas o ShmupX Engine não tem bgfx/chains/{CADEIA_SCANLINES}.json; abrindo sem");
     }
-    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis));
+    // Run ranked validada pelo vídeo (o ROM não tem mapa de memória): o Client grava a janela.
+    let gravada = motor.ranking && !super::telemetria::rom_pela_memoria(rom) && pasta_do_motor.join("bgfx").is_dir();
+    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, gravada));
     // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
     // abre com os controles padrão.
     match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
@@ -512,23 +518,27 @@ mod tests {
     fn video_do_motor_vira_argumentos() {
         let padrao = VideoDoMotor::default();
         assert_eq!(
-            argumentos_de_video(&padrao, false, true),
+            argumentos_de_video(&padrao, false, true, false),
             ["-window", "-monitor", "lcd", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
         );
         // Sem a cadeia no pacote, abre sem scanlines em vez de falhar.
-        assert_eq!(argumentos_de_video(&padrao, false, false), ["-window", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&padrao, false, false, false), ["-window", "-monitor", "lcd"]);
         let tela_cheia = VideoDoMotor { windowed: false, scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true), ["-nowindow", "-monitor", "lcd"]);
-        // A gravação que precisa da janela vence a tela cheia.
-        assert_eq!(argumentos_de_video(&tela_cheia, true, true)[0], "-window");
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, false), ["-nowindow", "-monitor", "lcd"]);
+        // A janela forçada vence a tela cheia.
+        assert_eq!(argumentos_de_video(&tela_cheia, true, true, false)[0], "-window");
+        // Run gravada em tela cheia sem scanlines: bgfx, não a tela cheia exclusiva do Direct3D 9.
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true), ["-nowindow", "-monitor", "lcd", "-video", "bgfx"]);
+        // Em janela, ou com scanlines, nada muda.
+        assert_eq!(argumentos_de_video(&VideoDoMotor { scanlines: false, ..padrao.clone() }, false, true, true), ["-window", "-monitor", "lcd"]);
         // TV de tubo: resolução do GroovyMAME (15 kHz) e nada de scanlines por cima.
         let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&crt, false, true), ["-window"]);
+        assert_eq!(argumentos_de_video(&crt, false, true, false), ["-window"]);
         // Monitor escolhido vai no -screen; nome estranho é ignorado (abre no principal).
         let segundo = VideoDoMotor { monitor: r"\\.\DISPLAY2".into(), scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&segundo, false, true), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
+        assert_eq!(argumentos_de_video(&segundo, false, true, false), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
         let estranho = VideoDoMotor { monitor: r"\\.\DISPLAY2 -x".into(), scanlines: false, ..padrao };
-        assert_eq!(argumentos_de_video(&estranho, false, true), ["-window", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&estranho, false, true, false), ["-window", "-monitor", "lcd"]);
     }
 
     #[test]
