@@ -65,6 +65,9 @@ pub struct Telemetria {
     pub zerou: bool,
     /// O motor fechou (fim da saída padrão).
     pub encerrado: bool,
+    /// O motor pausou o jogo e mostrou o resultado (game over ou fim do tempo do Caravan): a partida
+    /// já foi colhida, e a janela fica aberta para o jogador fechar.
+    pub resultado_mostrado: bool,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +99,10 @@ impl Telemetria {
     pub fn aplicar(&mut self, linha: &str) {
         let Some(json) = linha.trim().strip_prefix("SHMUPX ") else { return };
         let Ok(evento) = serde_json::from_str::<Evento>(json) else { return };
+        if evento.ev == "result" {
+            self.resultado_mostrado = true;
+            return;
+        }
         if self.fim.is_some() {
             return;
         }
@@ -196,6 +203,11 @@ pub fn acompanhar(pid: u32, saida: impl Read + Send + 'static) {
             mapa.entry(pid).or_default().encerrado = true;
         }
     });
+}
+
+/// O motor do processo `pid` mostrou o resultado e pausou o jogo.
+pub fn resultado_mostrado(pid: u32) -> bool {
+    registro().lock().ok().and_then(|mapa| mapa.get(&pid).map(|t| t.resultado_mostrado)).unwrap_or(false)
 }
 
 /// Telemetria do processo `pid` (e a retira do registro). Espera até `espera` o motor terminar de

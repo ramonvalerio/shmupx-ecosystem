@@ -173,6 +173,21 @@ pub async fn inicializar_jogo_emulador(
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
     let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
+    if !treino {
+        // Partida ranked: quando o motor pausar o jogo e mostrar o resultado, a run se encerra.
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if !super::detector::processo_vivo(pid) {
+                    return;
+                }
+                if super::telemetria::resultado_mostrado(pid) && crate::capture::commands::encerrar_run_pelo_resultado(&app, pid).await {
+                    return;
+                }
+            }
+        });
+    }
     if treino {
         super::treino::acompanhar(app.clone(), pid, None);
     }

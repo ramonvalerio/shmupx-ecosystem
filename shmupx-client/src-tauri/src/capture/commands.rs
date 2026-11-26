@@ -140,13 +140,12 @@ pub async fn iniciar_corrida_safe(
     if let Some(jogo_pid) = jogo_pid {
         spawn_game_watcher(app.clone(), state.0.clone(), jogo_id.clone(), run_id.clone(), jogo_pid, steam_app_id);
     }
-    // Caravan: o jogo fecha no tempo do Caravan, como o PARAR JOGO, e o placar feito até ali vale.
-    // No ShmupX Emulator quem fecha é o motor (o contador conta do início da partida, depois do
-    // Start); aqui fica só uma garantia, com folga. Na Steam, o tempo conta daqui.
-    if let Some(segundos) = inicio.caravan_segundos.filter(|s| *s > 0) {
-        let folga = if steam_app_id.is_none() { FOLGA_CARAVAN_NO_MOTOR } else { 0 };
+    // Caravan na Steam: o jogo fecha no tempo do Caravan, como o PARAR JOGO, e o placar feito até
+    // ali vale. No ShmupX Emulator o tempo é do motor (contador, pausa e resultado), que avisa o
+    // Client; aqui não há timer.
+    if let Some(segundos) = inicio.caravan_segundos.filter(|s| *s > 0).filter(|_| steam_app_id.is_some()) {
         log::info!("run {run_id}: Caravan de {segundos}s");
-        spawn_caravan_timer(app.clone(), state.0.clone(), run_id.clone(), std::time::Duration::from_secs(segundos as u64 + folga));
+        spawn_caravan_timer(app.clone(), state.0.clone(), run_id.clone(), std::time::Duration::from_secs(segundos as u64));
     }
     spawn_safe_timer(app, state.0.clone(), jogo_id, run_id, limite);
 
@@ -205,9 +204,22 @@ fn spawn_caravan_timer(app: AppHandle, run_state: std::sync::Arc<tokio::sync::Mu
     });
 }
 
-/// Caravan no ShmupX Emulator: o motor fecha o jogo no fim do contador, que começa quando a partida
-/// começa; o Client só fecha se o motor não fechar até esta folga depois do tempo.
-const FOLGA_CARAVAN_NO_MOTOR: u64 = 120;
+/// O motor pausou o jogo e mostrou o resultado (game over ou fim do tempo do Caravan): a partida já
+/// foi colhida, então a run se encerra (a análise e o envio seguem) e a janela do jogo continua
+/// aberta com o resultado, para o jogador fechar à mão. Devolve `false` se a run ainda não existe.
+pub async fn encerrar_run_pelo_resultado(app: &AppHandle, jogo_pid: u32) -> bool {
+    let state = app.state::<RunState>();
+    let mut guard = state.0.lock().await;
+    if guard.as_ref().is_none_or(|handle| handle.jogo_pid != Some(jogo_pid)) {
+        return false;
+    }
+    let Some(mut handle) = guard.take() else { return false };
+    drop(guard);
+    log::info!("o motor mostrou o resultado: encerrando a run {} sem fechar a janela", handle.run_id);
+    let _ = parar_gravacao(app, &mut handle).await;
+    encerrar_e_enfileirar(app, handle).await;
+    true
+}
 
 /// Quanto o jogo tem para fechar sozinho no PARAR JOGO antes de o processo ser encerrado.
 const PRAZO_PARA_FECHAR: std::time::Duration = std::time::Duration::from_secs(5);
