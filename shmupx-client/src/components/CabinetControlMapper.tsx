@@ -122,7 +122,7 @@ export default function CabinetControlMapper() {
   return (
     <div className={`cabinet-mapper ${engine !== "ready" ? "is-busy" : ""}`}>
       <div className="cabinet-mapper-artbox">
-      <svg className="cabinet-mapper-art" viewBox="44 0 552 654" preserveAspectRatio="xMidYMid meet" role="img" aria-label={t("Gabinete do ShmupX")}>
+      <svg className="cabinet-mapper-art" viewBox="44 0 552 654" preserveAspectRatio="xMidYMin meet" role="img" aria-label={t("Gabinete do ShmupX")}>
         <defs>
           <linearGradient id="mapper-body" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#b9c0c6" /><stop offset=".18" stopColor="#e9ecef" /><stop offset=".82" stopColor="#e9ecef" /><stop offset="1" stopColor="#b9c0c6" /></linearGradient>
           <linearGradient id="mapper-marquee" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#123038" /><stop offset="1" stopColor="#081418" /></linearGradient>
@@ -205,14 +205,6 @@ export default function CabinetControlMapper() {
       </div>
 
       <div className="cabinet-mapper-side">
-        <p className="muted cabinet-mapper-help" role="status">
-          {engine === "unavailable"
-            ? t("O mapeamento usa o ShmupX Emulator, que não foi encontrado neste computador.")
-            : waiting
-              ? t("Aperte o botão, tecla ou direção para {control}. Esc cancela.", { control: labelOf(waiting) })
-              // Parado, sem texto: a explicação já está no título da seção.
-              : flash?.text ?? null}
-        </p>
         <label className="settings-field cabinet-mapper-device">{t("Controle")}
           <select value={choiceValue(choice)} onChange={(event) => choose(parseChoice(event.target.value))}>
             <option value="all">{t("Qualquer controle ou teclado")}</option>
@@ -240,6 +232,14 @@ export default function CabinetControlMapper() {
             </li>
           ))}
         </ul>
+        <p className="muted cabinet-mapper-help" role="status">
+          {engine === "unavailable"
+            ? t("O mapeamento usa o ShmupX Emulator, que não foi encontrado neste computador.")
+            : waiting
+              ? t("Aperte o botão, tecla ou direção para {control}. Esc cancela.", { control: labelOf(waiting) })
+              // Parado, sem texto: a explicação já está no título da seção.
+              : flash?.text ?? null}
+        </p>
         <div className="cabinet-mapper-actions">
           <button type="button" className="secondary-action" disabled={shownKeys.length === 0} onClick={() => { setWaiting(null); reset(choice.kind === "all" ? undefined : shownKeys); }}>{t(choice.kind === "all" ? "Restaurar controles padrão" : "Restaurar o padrão deste controle")}</button>
           {!saved && <span className="muted">{t("Não foi possível salvar neste dispositivo.")}</span>}

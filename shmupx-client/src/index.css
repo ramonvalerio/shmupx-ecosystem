@@ -654,7 +654,9 @@ button:disabled { opacity: .5; cursor: default; }
 .mapper-screen text { fill: var(--cyan); font-size: 26px; letter-spacing: .14em; }
 .mapper-screen.is-waiting text { animation: mapper-blink 1s steps(2, start) infinite; }
 @keyframes mapper-blink { to { opacity: .35; } }
-.cabinet-mapper-help { min-height: 2.6em; margin: 0 0 12px; }
+/* Ajuda do mapeamento ("Aperte o botão…"), embaixo da lista: só ocupa espaço quando tem texto. */
+.cabinet-mapper-help { margin: 12px 0 0; }
+.cabinet-mapper-help:empty { display: none; }
 .cabinet-mapper-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .cabinet-mapper-row { width: 100%; display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--gray-1d1d1d); color: #ddd; font-size: 13px; text-align: left; cursor: pointer; }
 .cabinet-mapper-row:disabled { cursor: progress; opacity: .6; }

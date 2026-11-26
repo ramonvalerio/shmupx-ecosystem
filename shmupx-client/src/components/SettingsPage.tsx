@@ -14,13 +14,15 @@ import { clearSteamLibrary, useSteamLibrary } from "../data/steamLibrary";
 import { publish as saveEmulatorLibrary, romsFor, useEmulatorLibrary } from "../data/emulatorLibrary";
 import type { GameRoom } from "../types/room";
 import { defaultEmulatorSettings, useEmulatorSettings } from "../data/emulatorSettings";
-import { EmulatorVideoFields } from "./EmulatorVideoSettings";
+import GameVideoPanel from "./GameVideoPanel";
+import { ArcadeCabinet } from "./ArcadeCabinet";
+import { useGameArt } from "../data/gameArt";
 
 const GROUPS = [
   { id: "profile", title: "Perfil", detail: "Avatar, nome, nick e assinatura", icon: "◉" },
   { id: "connections", title: "Importar jogos", detail: "Bibliotecas, plataformas e MiSTer FPGA", icon: "▦" },
   { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
-  { id: "emulator", title: "Emulador", detail: "Tela cheia e resolução", icon: "▶" },
+  { id: "emulator", title: "Emulador", detail: "Vídeo do jogo", icon: "▶" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
   { id: "storage", title: "Armazenamento", detail: "Gravação de gameplays", icon: "▣" },
   // Gravação e Captura fora do menu por enquanto (hidden); as telas continuam abaixo para voltar depois.
@@ -32,16 +34,28 @@ function SettingsCard({ title, detail, tutorial, children }: { title: string; de
   return <section className="dashboard-panel settings-card" data-tutorial={tutorial}><h2>{t(title)}</h2>{detail && <p className="muted">{t(detail)}</p>}{children}</section>;
 }
 
-/** Como o ShmupX Emulator abre os jogos de arcade neste PC. Vale para a próxima vez que o jogo abrir. */
-function EmulatorSettingsCard() {
+/**
+ * Vídeo do jogo: como o ShmupX Emulator abre os jogos de arcade neste PC, no mesmo layout da modal
+ * Vídeo do jogo (o gabinete com a prévia e as opções). Vale para a próxima vez que o jogo abrir.
+ */
+function EmulatorSettingsCard({ rooms }: { rooms: GameRoom[] }) {
   const { t } = useI18n();
   const { settings, update, saved } = useEmulatorSettings();
+  const emulator = useEmulatorLibrary();
+  // Na prévia, o gabinete de um jogo que o jogador tem no emulador (ou o primeiro do catálogo).
+  const room = rooms.find((candidate) => emulator.owns(candidate)) ?? rooms[0];
   return <>
-    <SettingsCard title="Vídeo do emulador" detail="Como o ShmupX Emulator abre os jogos de arcade neste computador. Vale a partir do próximo jogo aberto.">
-      <EmulatorVideoFields settings={settings} update={update} />
+    <SettingsCard title="Vídeo do jogo" detail="Como os jogos de arcade abrem neste computador. Vale a partir do próximo jogo aberto.">
+      {room ? <GameVideoWithCabinet room={room} settings={settings} update={update} /> : <GameVideoPanel settings={settings} update={update} />}
     </SettingsCard>
     <SettingsCard title="Preferências do emulador"><p className="muted" role="status">{saved ? t("As alterações são salvas automaticamente neste computador.") : t("Preferências aplicadas nesta sessão. Não foi possível salvar neste dispositivo.")}</p><button className="secondary-action" onClick={() => update(defaultEmulatorSettings())}>{t("Restaurar padrão do emulador")}</button></SettingsCard>
   </>;
+}
+
+function GameVideoWithCabinet({ room, settings, update }: { room: GameRoom } & Pick<Parameters<typeof GameVideoPanel>[0], "settings" | "update">) {
+  const art = useGameArt(room);
+  return <GameVideoPanel settings={settings} update={update} art={art.src} game={room.title}
+    cabinet={(screen) => <ArcadeCabinet room={room} className="am-cabinet" screen={screen} />} />;
 }
 
 /** YouTube do jogador: conectar o canal para transmitir ao vivo (START LIVE na sala). */
@@ -192,7 +206,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         </>}
         {group === "connections" && <><ConnectedLibraries rooms={rooms} onImport={() => setImportOpen(true)} /><SettingsCard title={t("MiSTer FPGA")} detail={t("Jogue no MiSTer e as partidas entram no seu perfil e no ranking, como as do PC.")}><MisterConnect rooms={rooms} /></SettingsCard></>}
         {group === "integrations" && <YouTubeCard />}
-        {group === "emulator" && <EmulatorSettingsCard />}
+        {group === "emulator" && <EmulatorSettingsCard rooms={rooms} />}
         {group === "controller" && <><SettingsCard title="Controles do emulador" detail="Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator."><CabinetControlMapper /></SettingsCard></>}
         {group === "storage" && <SettingsCard title={t("Gravação de gameplays")} detail={t("Grave suas partidas em vídeo e escolha onde guardar.")} tutorial="settings-storage"><StorageSettings /></SettingsCard>}
       </div>

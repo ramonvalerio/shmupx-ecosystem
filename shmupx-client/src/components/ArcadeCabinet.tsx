@@ -9,7 +9,7 @@ import { useControlMapping, type ControlId } from "../data/emulatorControls";
 import { useEngineCapture } from "../data/engineCapture";
 import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
 import EmulatorControlsDialog from "./EmulatorControlsDialog";
-import MonitorSettingsDialog from "./MonitorSettingsDialog";
+import GameVideoDialog from "./GameVideoDialog";
 import DialogClose from "./DialogClose";
 
 /**
@@ -149,7 +149,7 @@ function CabinetVideo({ src, paused, resume, onFail, onExpand, onClick }: { src:
   };
   return (
     <div className={`cabinet-video ${onClick ? "is-clickable" : ""}`} onClick={click} onDoubleClick={expand}
-      title={t(onClick ? "Clique para configurar o monitor · duplo clique para ver o vídeo grande" : "Duplo clique para ver o vídeo grande")}>
+      title={t(onClick ? "Clique para configurar o vídeo do jogo · duplo clique para ver o vídeo grande" : "Duplo clique para ver o vídeo grande")}>
       {/* O trailer inteiro, recomeçando ao terminar. */}
       <video ref={ref} src={src} loop playsInline preload="auto" onError={onFail} />
       <div className="cabinet-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
@@ -201,9 +201,9 @@ function VideoModal({ title, src, start, onClose }: { title: string; src: string
  * Gabinete arcade com a capa do jogo na tela. Com `video` (Minhas coleções), a tela mostra o
  * trailer do jogo quando houver; na sala, fica a imagem. Com `controls` (Minhas coleções), o painel
  * testa o controle: a alavanca e os botões se mexem com o controle ou o teclado do jogador (pelo
- * motor de captura, enquanto o Client está na frente): clicar na tela do monitor abre o monitor dos
- * jogos (Configurações › Emulador) e no resto do gabinete, os controles do emulador. Com `screen`
- * (a prévia do monitor dos jogos), a tela deitada mostra esse conteúdo no lugar da capa.
+ * motor de captura, enquanto o Client está na frente): clicar na tela do monitor abre o vídeo do
+ * jogo (Configurações › Emulador) e no resto do gabinete, os controles do emulador. Com `screen`
+ * (a prévia do vídeo do jogo), a tela deitada mostra esse conteúdo no lugar da capa.
  */
 export function ArcadeCabinet({ room, className = "", video: withVideo = false, controls = false, screen: screenContent }: { room: GameRoom; className?: string; video?: boolean; controls?: boolean; screen?: ReactNode }) {
   const { t } = useI18n();
@@ -233,7 +233,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
   return (
     <>
     {configuring && <EmulatorControlsDialog onClose={() => setConfiguring(false)} />}
-    {monitorOpen && <MonitorSettingsDialog art={art.src} game={room.title} onClose={() => setMonitorOpen(false)}
+    {monitorOpen && <GameVideoDialog art={art.src} game={room.title} onClose={() => setMonitorOpen(false)}
       cabinet={(preview) => <ArcadeCabinet room={room} className="am-cabinet" screen={preview} />} />}
     {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
     <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${controls ? "is-configurable" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}
@@ -253,9 +253,9 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
       <rect x="58" y="12" width="204" height="22" rx="8" fill={`url(#${id("marquee")})`} stroke="#57fcff" strokeWidth="1.2" />
       <rect x="60" y="13.5" width="200" height="19" rx="7" fill="none" stroke="#57fcff" strokeOpacity=".25" strokeWidth="1" />
       <image href="/img/logo.png" x="124" y="14.5" width="72" height="17" preserveAspectRatio="xMidYMid meet" aria-hidden="true" />
-      {/* Monitor: em Minhas coleções e na sala, o clique abre o monitor dos jogos (o contorno acende). */}
+      {/* Monitor: em Minhas coleções e na sala, o clique abre o vídeo do jogo (o contorno acende). */}
       <g className="cabinet-monitor" data-cabinet-screen>
-      {controls && <title>{t("Clique para configurar o monitor")}</title>}
+      {controls && <title>{t("Clique para configurar o vídeo do jogo")}</title>}
       {/* Moldura escura e funda do monitor (a máscara em volta do tubo) */}
       <path className="cabinet-monitor-frame" d="M50 42 Q50 38 54 38 H266 Q270 38 270 42 L272 212 H48 Z" fill="#14181b" />
       {/* Vão do tubo: deitado (YOKO) ou em pé (TATE) */}

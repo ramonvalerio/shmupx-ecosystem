@@ -1,11 +1,13 @@
-/* Monitor dos jogos (MonitorSettingsDialog): a janela padrão do Client (superfície, borda e os
-   tech_element6/7 nos cantos, em index.css) com o tubo de CRT da prévia à esquerda e o painel de
-   serviço à direita. Sem brilhos: ciano sólido (--cyan, --cyan-2, --cyan-deep). Share Tech só em
-   peso normal: destaque por tamanho e cor. */
+/* Vídeo do jogo: a modal (GameVideoDialog, a janela padrão do Client com os tech_element6/7 nos
+   cantos, em index.css) e o painel (GameVideoPanel, também em Configurações › Emulador) com o
+   gabinete da prévia à esquerda e as opções à direita. Sem brilhos: ciano sólido (--cyan, --cyan-2,
+   --cyan-deep). Share Tech só em peso normal: destaque por tamanho e cor. */
 
-.arcade-monitor {
-  --am-ink: var(--surface-recessed);
+.arcade-monitor, .game-video {
+  --am-ink: var(--surface-recessed, var(--gray-1f1f1f));
   --am-dim: #8a9aa1;
+}
+.arcade-monitor {
   width: min(920px, 100%);
   max-height: calc(100dvh - 48px);
   display: flex;
@@ -18,7 +20,11 @@
   font-weight: 400;
 }
 .arcade-monitor:focus { outline: none; }
-.arcade-monitor button, .arcade-monitor h2, .arcade-monitor h3 { font-family: inherit; font-weight: 400; }
+.arcade-monitor button, .arcade-monitor h2, .game-video button, .game-video h3 { font-family: inherit; font-weight: 400; }
+
+/* O painel: duas colunas; num espaço estreito (Configurações em janela pequena), uma só. */
+.game-video { container-type: inline-size; min-height: 0; display: flex; flex-direction: column; }
+.settings-card .am-body { padding: 18px 0 0; overflow: visible; }
 
 .am-head { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 26px 30px 18px; border-bottom: 1px solid var(--stroke); }
 .am-head h2 { margin: 0 0 6px; font-size: 34px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; }
@@ -30,6 +36,8 @@
 /* O gabinete (ArcadeCabinet com a prévia na tela). */
 .am-crt { margin: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
 .arcade-cabinet.am-cabinet { width: 100%; max-width: 380px; margin: 0 auto; }
+/* Sem gabinete (nenhum jogo no catálogo): a prévia numa moldura de monitor. */
+.am-screen-frame { aspect-ratio: 4 / 3; padding: 14px; border-radius: 12px; background: #14181b; }
 
 /* A tela do gabinete, em unidades do desenho (204×153): a janela do jogo; em tela cheia ela ocupa tudo. */
 .am-screen { position: relative; width: 100%; height: 100%; overflow: hidden; display: grid; place-items: center; border-radius: 6px; background: #050708; }
@@ -127,6 +135,6 @@
 /* Tema claro: textos de apoio escuros. */
 .theme-light .am-head p, .theme-light .am-note { color: #475569; }
 
-@media (max-width: 760px) {
+@container (max-width: 620px) {
   .am-body { grid-template-columns: 1fr; }
 }
