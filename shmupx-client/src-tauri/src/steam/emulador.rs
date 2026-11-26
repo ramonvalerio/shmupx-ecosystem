@@ -377,6 +377,12 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
 
 const MOTOR_EXE: &str = "shmupx-engine.exe";
 
+/// Estado inicial da partida ranked de um ROM no pacote do motor (`states/<rom>/shmupx_ranked.sta`):
+/// o jogo na tela de start com 1 crédito, a ficha travada.
+fn estado_ranked(pasta_do_motor: &Path, rom: &str) -> PathBuf {
+    pasta_do_motor.join("states").join(rom).join("shmupx_ranked.sta")
+}
+
 /// Acha o ShmupX Engine: junto do app (`engine/` nos recursos do instalador), na pasta de
 /// `SHMUPX_ENGINE_DIR` ou, em desenvolvimento, no pacote de teste do repositório `shmupx-engine`
 /// (`shmupx-engine/dist/teste`, ao lado do `shmupx-ecosystem`). Sem ele, os jogos de emulador não abrem.
@@ -451,8 +457,20 @@ pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&P
 /// modo de desenvolvimento.
 fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bool) -> Result<(u32, String), String> {
     let pastas: Vec<&PathBuf> = pastas.iter().filter(|p| p.is_dir()).collect();
-    let Some(rom) = roms.iter().find(|rom| pastas.iter().any(|p| p.join(format!("{rom}.zip")).is_file())) else {
-        return Err(format!("o ROM deste jogo ({}) não está nas pastas de ROMs deste computador", roms.join(" ou ")));
+    let pasta_do_motor = motor.exe.parent().map(Path::to_path_buf).unwrap_or_default();
+    // Ranked: só os ROMs com o estado inicial do ShmupX no pacote do motor (o jogo na tela de start
+    // com 1 crédito, ficha travada). Sem ele, o jogo começaria do zero com a ficha liberada.
+    let roms: Vec<&String> = if motor.ranking {
+        let com_estado: Vec<&String> = roms.iter().filter(|rom| estado_ranked(&pasta_do_motor, rom).is_file()).collect();
+        if com_estado.is_empty() {
+            return Err("este jogo ainda não tem o Ranked nesta versão do ShmupX Emulator; atualize o ShmupX Client".to_string());
+        }
+        com_estado
+    } else {
+        roms.iter().collect()
+    };
+    let Some(rom) = roms.iter().copied().find(|rom| pastas.iter().any(|p| p.join(format!("{rom}.zip")).is_file())) else {
+        return Err(format!("o ROM deste jogo ({}) não está nas pastas de ROMs deste computador", roms.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(" ou ")));
     };
     let rompath = pastas.iter().map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>().join(";");
     for sub in ["cfg", "nvram", "snap", "ini"] {
@@ -470,7 +488,6 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     if motor.ranking {
         comando.arg("-shmupx_ranked");
     }
-    let pasta_do_motor = motor.exe.parent().map(Path::to_path_buf).unwrap_or_default();
     let scanlines_disponiveis = pasta_do_motor.join("bgfx").join("chains").join(format!("{CADEIA_SCANLINES}.json")).is_file();
     if motor.video.scanlines && !scanlines_disponiveis {
         log::warn!("emulador: scanlines pedidas, mas o ShmupX Engine não tem bgfx/chains/{CADEIA_SCANLINES}.json; abrindo sem");

@@ -311,7 +311,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gravar run nem gastar ficha.", { game: room.title }));
     } catch (failure) {
       logFailure(platform === "steam" ? "steam" : "emulador", failure);
-      setProblem({ kind: "launch-failed", retry });
+      // Ranked sem o estado de 1 crédito no pacote do motor (motor antigo): pede a atualização.
+      const semEstado = platform !== "steam" && String(failure).includes("ainda não tem o Ranked");
+      setProblem({ kind: semEstado ? "ranked-needs-update" : "launch-failed", retry });
     } finally {
       setIsLaunching(false);
     }

@@ -15,6 +15,7 @@ export type LaunchProblemKind =
   | "steam-timeout"
   | "rom-missing"
   | "emulator-missing"
+  | "ranked-needs-update"
   | "launch-failed";
 
 type Translate = ReturnType<typeof useI18n>["t"];
@@ -114,6 +115,12 @@ function content(kind: LaunchProblemKind, game: string, t: Translate): { title: 
         title: t("ShmupX Emulator não encontrado"),
         text: t("O ShmupX Emulator vem com o ShmupX Client, mas não foi encontrado nesta instalação."),
         steps: [t("Reinstale o ShmupX Client."), t("Depois, volte aqui e tente de novo.")],
+      };
+    case "ranked-needs-update":
+      return {
+        title: t("{game} ainda não tem Ranked nesta versão", { game }),
+        text: t("No Ranked, a partida começa na tela de start com 1 crédito e a ficha travada. Esta versão do ShmupX Emulator ainda não tem esse começo para {game}.", { game }),
+        steps: [t("Atualize o ShmupX Client para a versão mais nova."), t("Enquanto isso, dá para jogar {game} no Play Training.", { game })],
       };
     case "launch-failed":
       return {
