@@ -40,6 +40,47 @@ pub fn processo_vivo(pid: u32) -> bool {
     system.process(alvo).is_some()
 }
 
+/// Fecha o jogo como o X da janela: pede para as janelas do processo fecharem (`WM_CLOSE`; o
+/// ShmupX Engine sai normalmente e a telemetria registra o fim da partida) e, se ele não fechar em
+/// `prazo`, encerra o processo. Bloqueia até o jogo sair (use fora da thread assíncrona).
+pub fn fechar_jogo(pid: u32, prazo: std::time::Duration) {
+    pedir_para_fechar(pid);
+    let limite = std::time::Instant::now() + prazo;
+    while std::time::Instant::now() < limite {
+        if !processo_vivo(pid) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    let mut system = System::new();
+    let alvo = sysinfo::Pid::from_u32(pid);
+    system.refresh_processes(ProcessesToUpdate::Some(&[alvo]), true);
+    if let Some(processo) = system.process(alvo) {
+        log::warn!("o jogo {pid} não fechou em {}s: encerrando o processo", prazo.as_secs());
+        processo.kill();
+    }
+}
+
+#[cfg(windows)]
+fn pedir_para_fechar(pid: u32) {
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, PostMessageW, WM_CLOSE};
+
+    unsafe extern "system" fn cada_janela(janela: HWND, alvo: LPARAM) -> BOOL {
+        let mut dono = 0u32;
+        unsafe { GetWindowThreadProcessId(janela, Some(&mut dono)) };
+        if dono == alvo.0 as u32 {
+            let _ = unsafe { PostMessageW(Some(janela), WM_CLOSE, WPARAM(0), LPARAM(0)) };
+        }
+        BOOL(1)
+    }
+    let _ = unsafe { EnumWindows(Some(cada_janela), LPARAM(pid as isize)) };
+}
+
+#[cfg(not(windows))]
+fn pedir_para_fechar(_pid: u32) {}
+
 /// Algum processo rodando de dentro da pasta do jogo (o jogo de verdade, quando quem abriu foi
 /// um launcher que já fechou).
 pub fn processo_na_pasta(pasta: &std::path::Path) -> Option<u32> {

@@ -56,6 +56,7 @@ pub fn run() {
             steam::commands::steam_biblioteca,
             steam::commands::emulador_biblioteca,
             steam::commands::emulador_monitores,
+            steam::commands::emulador_identificar_monitor,
             steam::commands::emulador_definir_pasta,
             steam::commands::emulador_baixar_roms,
             steam::commands::mister_biblioteca,

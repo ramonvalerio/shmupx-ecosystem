@@ -21,6 +21,8 @@ pub struct RunHandle {
     pub manter_video: bool,
     /// Processo do jogo: no ShmupX Engine, a telemetria dele decide a run pela memória.
     pub jogo_pid: Option<u32>,
+    /// Jogo da Steam: quem abriu pode ter sido um launcher; o jogo de verdade roda da pasta dele.
+    pub steam_app_id: Option<u32>,
     /// Modo escolhido no Play Ranked (`highscore`, `caravan-sprint`...).
     pub modo: Option<String>,
 }

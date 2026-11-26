@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
-import { EMULATOR_RESOLUTIONS, listMonitors, type EmulatorResolution, type EmulatorSettings, type PcMonitor } from "../data/emulatorSettings";
+import { EMULATOR_RESOLUTIONS, identifyMonitor, listMonitors, SCREEN_MODES, screenMode, withScreenMode, type EmulatorResolution, type EmulatorSettings, type PcMonitor, type ScreenMode } from "../data/emulatorSettings";
 
 /**
- * Como o ShmupX Emulator mostra o jogo neste PC: tela cheia, monitor dos jogos e resolução. Usado
+ * Como o ShmupX Emulator mostra o jogo neste PC: modo de tela (janela, tela cheia ou tela cheia sem
+ * borda), monitor dos jogos e resolução. Usado
  * em Configurações › Emulador e na janela do monitor (clique na tela do gabinete).
  */
 export function EmulatorVideoFields({ settings, update }: { settings: EmulatorSettings; update: (next: EmulatorSettings) => void }) {
@@ -14,8 +15,10 @@ export function EmulatorVideoFields({ settings, update }: { settings: EmulatorSe
   const monitorLabel = (m: PcMonitor) => t(m.principal ? "Monitor {number} · {width}×{height} (principal do Windows)" : "Monitor {number} · {width}×{height}", { number: m.numero, width: m.largura, height: m.altura });
   const savedMonitorGone = settings.monitor !== "" && monitors.length > 0 && !monitors.some((m) => m.id === settings.monitor);
   return <>
-    <label className="checkbox-field"><input type="checkbox" checked={!settings.windowed} onChange={(event) => update({ ...settings, windowed: !event.target.checked, scanlines: true })} />{t("Abrir sempre em tela cheia")}</label>
-    {(monitors.length > 1 || savedMonitorGone) && <label className="settings-field">{t("Monitor dos jogos")}<select value={settings.monitor} onChange={(event) => update({ ...settings, monitor: event.target.value })}>
+    <label className="settings-field">{t("Modo de tela")}<select value={screenMode(settings)} onChange={(event) => update(withScreenMode(settings, event.target.value as ScreenMode))}>
+      {SCREEN_MODES.map((m) => <option key={m.id} value={m.id}>{t(m.label)}</option>)}
+    </select></label>
+    {(monitors.length > 1 || savedMonitorGone) && <label className="settings-field">{t("Monitor dos jogos")}<select value={settings.monitor} onChange={(event) => { update({ ...settings, monitor: event.target.value }); identifyMonitor(event.target.value); }}>
       <option value="">{t("O principal do Windows")}</option>
       {monitors.map((m) => <option key={m.id} value={m.id}>{monitorLabel(m)}</option>)}
       {savedMonitorGone && <option value={settings.monitor}>{t("Monitor escolhido (desligado agora)")}</option>}

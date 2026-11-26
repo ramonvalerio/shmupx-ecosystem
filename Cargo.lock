@@ -5423,6 +5423,7 @@ dependencies = [
  "hound",
  "image",
  "log",
+ "memchr",
  "ort",
  "reqwest 0.12.28",
  "rodio",

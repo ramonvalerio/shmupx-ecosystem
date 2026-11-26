@@ -129,6 +129,7 @@ pub async fn iniciar_corrida_safe(
         video_path,
         manter_video,
         jogo_pid,
+        steam_app_id,
         modo: modo.clone(),
     });
     drop(guard);
@@ -153,8 +154,12 @@ async fn parar_gravacao(app: &AppHandle, handle: &mut RunHandle) -> Result<(), S
     })
 }
 
-/// Para a gravação, avisa o backend do fim da gameplay e põe a análise na fila. Retorna logo:
-/// o jogador pode iniciar outra run enquanto esta é analisada em segundo plano.
+/// Quanto o jogo tem para fechar sozinho no PARAR JOGO antes de o processo ser encerrado.
+const PRAZO_PARA_FECHAR: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// PARAR JOGO de uma run: fecha o jogo (como o X da janela, para o ShmupX Engine registrar o fim
+/// da partida), para a gravação, avisa o backend do fim da gameplay e põe a análise na fila.
+/// Retorna logo depois: o jogador pode iniciar outra run enquanto esta é analisada.
 #[tauri::command]
 pub async fn finalizar_corrida_manual(
     app: AppHandle,
@@ -164,9 +169,29 @@ pub async fn finalizar_corrida_manual(
         .0
         .try_lock()
         .map_err(|_| "aguarde a parada da corrida anterior".to_string())?;
+    // Tirar a run do estado antes de fechar o jogo: o vigia do processo vê que ela acabou e não
+    // a encerra de novo.
     let mut handle = guard
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
+    if let Some(jogo_pid) = handle.jogo_pid {
+        let steam_app_id = handle.steam_app_id;
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            // Aberto por um launcher que já fechou: o jogo de verdade roda da pasta dele.
+            let alvo = if crate::steam::detector::processo_vivo(jogo_pid) {
+                Some(jogo_pid)
+            } else {
+                steam_app_id
+                    .and_then(crate::steam::biblioteca::pasta_do_jogo)
+                    .and_then(|pasta| crate::steam::detector::processo_na_pasta(&pasta))
+            };
+            if let Some(pid) = alvo {
+                log::info!("PARAR JOGO: fechando o jogo {pid}");
+                crate::steam::detector::fechar_jogo(pid, PRAZO_PARA_FECHAR);
+            }
+        })
+        .await;
+    }
     parar_gravacao(&app, &mut handle).await?;
     // Com a gravação fechada, a próxima run já pode começar.
     drop(guard);

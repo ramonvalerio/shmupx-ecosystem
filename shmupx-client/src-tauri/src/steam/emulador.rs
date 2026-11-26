@@ -295,6 +295,8 @@ pub struct Motor {
 #[serde(rename_all = "camelCase", default)]
 pub struct VideoDoMotor {
     pub windowed: bool,
+    /// Tela cheia sem borda (borderless), em vez da exclusiva: vale com `windowed` desmarcado.
+    pub borderless: bool,
     pub scanlines: bool,
     /// `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC.
     pub resolution: String,
@@ -305,7 +307,7 @@ pub struct VideoDoMotor {
 
 impl Default for VideoDoMotor {
     fn default() -> Self {
-        Self { windowed: true, scanlines: true, resolution: "native".into(), monitor: String::new() }
+        Self { windowed: true, borderless: false, scanlines: true, resolution: "native".into(), monitor: String::new() }
     }
 }
 
@@ -346,6 +348,77 @@ pub fn monitores(app: &AppHandle) -> Vec<MonitorDoPc> {
     lista
 }
 
+/// Prefixo das janelas que identificam o monitor (uma por vez).
+const JANELA_IDENTIFICAR: &str = "identificar-monitor";
+/// Quanto tempo o número fica na tela.
+const TEMPO_IDENTIFICAR: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Mostra o número do monitor (`\\.\DISPLAY2` → 2), grande e em vermelho, no meio daquele monitor
+/// por 3 segundos, para o jogador saber qual é qual ao escolher onde os jogos abrem. Janela
+/// transparente, sem borda, por cima de tudo, sem foco e sem pegar o mouse; uma nova escolha troca
+/// a anterior. `vazio` = o principal do Windows.
+pub fn identificar_monitor(app: &AppHandle, id: &str) -> Result<(), String> {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Arc;
+    use tauri::{PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+
+    let monitor = if id.is_empty() {
+        app.primary_monitor().ok().flatten()
+    } else {
+        app.available_monitors().unwrap_or_default().into_iter().find(|m| m.name().map(String::as_str) == Some(id))
+    }
+    .ok_or("monitor não encontrado")?;
+    let numero: u32 = monitor
+        .name()
+        .filter(|nome| monitor_valido(nome))
+        .and_then(|nome| nome.trim_start_matches(r"\\.\DISPLAY").parse().ok())
+        .ok_or("monitor sem número")?;
+
+    for (rotulo, janela) in app.webview_windows() {
+        if rotulo.starts_with(JANELA_IDENTIFICAR) {
+            let _ = janela.destroy();
+        }
+    }
+    static SEQUENCIA: AtomicU64 = AtomicU64::new(0);
+    let rotulo = format!("{JANELA_IDENTIFICAR}-{}", SEQUENCIA.fetch_add(1, Ordering::Relaxed));
+
+    // Quadrado no meio do monitor, com metade da menor dimensão dele.
+    let (pos, tam) = (monitor.position(), monitor.size());
+    let lado = tam.width.min(tam.height) / 2;
+    let x = pos.x + (tam.width - lado) as i32 / 2;
+    let y = pos.y + (tam.height - lado) as i32 / 2;
+
+    // Aparece quando a página termina de carregar e some 3 s depois.
+    let mostrada = Arc::new(AtomicBool::new(false));
+    let janela = WebviewWindowBuilder::new(app, &rotulo, WebviewUrl::App(format!("identificar-monitor.html?n={numero}").into()))
+        .title("ShmupX")
+        .visible(false)
+        .focused(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .on_page_load(move |janela, carga| {
+            if carga.event() != tauri::webview::PageLoadEvent::Finished || mostrada.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            let _ = janela.show();
+            std::thread::spawn(move || {
+                std::thread::sleep(TEMPO_IDENTIFICAR);
+                let _ = janela.destroy();
+            });
+        })
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = janela.set_ignore_cursor_events(true);
+    let _ = janela.set_position(PhysicalPosition::new(x, y));
+    let _ = janela.set_size(PhysicalSize::new(lado, lado));
+    log::info!("monitor: identificando o {numero} em ({x}, {y}), {lado}px");
+    Ok(())
+}
+
 /// Cadeia de efeitos (bgfx) das scanlines, publicada junto do motor em `bgfx/chains/`.
 const CADEIA_SCANLINES: &str = "shmupx-scanlines";
 
@@ -353,7 +426,13 @@ const CADEIA_SCANLINES: &str = "shmupx-scanlines";
 /// Scanlines só com a cadeia presente; numa TV de tubo, nunca (a TV já desenha as linhas).
 /// `gravada` (run ranked validada pelo vídeo): a tela cheia sem scanlines vai pelo bgfx, e não pela
 /// tela cheia exclusiva do Direct3D 9, que a captura da janela vê preta.
-fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, gravada: bool) -> Vec<String> {
+/// Tela cheia sem borda (`borderless`, no monitor do PC): pelo bgfx, uma janela sem moldura do
+/// tamanho do monitor, sem trocar o modo de vídeo (`-noswitchres`): o Alt+Tab não pisca a tela.
+/// Precisa dos shaders do bgfx no pacote (`bgfx_disponivel`). Com `-shmupx_borderless`
+/// (`motor_sem_borda`: o motor conhece a opção), a janela também não fica por cima de tudo nem
+/// minimiza ao perder o foco (tecla Windows, Alt+Tab). Na TV de tubo, a troca para 15 kHz é o
+/// próprio modo: lá vale a tela cheia comum.
+fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, bgfx_disponivel: bool, gravada: bool, motor_sem_borda: bool) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
     let tela_cheia = !(janela || video.windowed);
     args.push(if tela_cheia { "-nowindow" } else { "-window" }.into());
@@ -363,9 +442,16 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
     if !crt {
         args.extend(["-monitor".into(), "lcd".into()]);
     }
+    let sem_borda = tela_cheia && video.borderless && !crt && bgfx_disponivel;
+    if sem_borda {
+        args.push("-noswitchres".into());
+        if motor_sem_borda {
+            args.push("-shmupx_borderless".into());
+        }
+    }
     if video.scanlines && !crt && scanlines_disponiveis {
         args.extend(["-video".into(), "bgfx".into(), "-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
-    } else if gravada && tela_cheia && !crt {
+    } else if tela_cheia && !crt && bgfx_disponivel && (gravada || sem_borda) {
         args.extend(["-video".into(), "bgfx".into()]);
     }
     // Monitor escolhido pelo jogador (em janela e em tela cheia).
@@ -376,6 +462,27 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
 }
 
 const MOTOR_EXE: &str = "shmupx-engine.exe";
+
+/// Opção do ShmupX Engine para a tela cheia sem borda (patch `0009` do motor).
+const OPCAO_SEM_BORDA: &str = "shmupx_borderless";
+
+/// O executável do motor conhece a opção (o nome dela está no binário)? Um motor antigo recusaria
+/// a opção desconhecida e não abriria o jogo. Lido uma vez por executável (caminho, tamanho e data).
+fn motor_conhece_opcao(exe: &Path, opcao: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    type Chave = (PathBuf, u64, Option<std::time::SystemTime>, String);
+    static LIDOS: OnceLock<Mutex<HashMap<Chave, bool>>> = OnceLock::new();
+    let Ok(meta) = std::fs::metadata(exe) else { return false };
+    let chave = (exe.to_path_buf(), meta.len(), meta.modified().ok(), opcao.to_string());
+    let lidos = LIDOS.get_or_init(Default::default);
+    if let Some(&conhece) = lidos.lock().unwrap_or_else(|e| e.into_inner()).get(&chave) {
+        return conhece;
+    }
+    let conhece = std::fs::read(exe).is_ok_and(|bytes| memchr::memmem::find(&bytes, opcao.as_bytes()).is_some());
+    lidos.lock().unwrap_or_else(|e| e.into_inner()).insert(chave, conhece);
+    conhece
+}
 
 /// Estado inicial da partida ranked de um ROM no pacote do motor (`states/<rom>/shmupx_ranked.sta`):
 /// o jogo na tela de start com 1 crédito, a ficha travada.
@@ -492,9 +599,18 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     if motor.video.scanlines && !scanlines_disponiveis {
         log::warn!("emulador: scanlines pedidas, mas o ShmupX Engine não tem bgfx/chains/{CADEIA_SCANLINES}.json; abrindo sem");
     }
+    // Shaders do bgfx no pacote: a tela cheia sem borda e a da run gravada dependem deles.
+    let bgfx_disponivel = pasta_do_motor.join("bgfx").is_dir();
+    if motor.video.borderless && !motor.video.windowed && !janela && !bgfx_disponivel {
+        log::warn!("emulador: tela cheia sem borda pedida, mas o ShmupX Engine não tem bgfx/; abrindo na tela cheia comum");
+    }
     // Run ranked validada pelo vídeo (o ROM não tem mapa de memória): o Client grava a janela.
-    let gravada = motor.ranking && !super::telemetria::rom_pela_memoria(rom) && pasta_do_motor.join("bgfx").is_dir();
-    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, gravada));
+    let gravada = motor.ranking && !super::telemetria::rom_pela_memoria(rom);
+    let motor_sem_borda = motor.video.borderless && motor_conhece_opcao(&motor.exe, OPCAO_SEM_BORDA);
+    if motor.video.borderless && !motor_sem_borda {
+        log::warn!("emulador: este ShmupX Engine não tem -{OPCAO_SEM_BORDA}; a tela cheia sem borda pode sumir ao perder o foco");
+    }
+    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, gravada, motor_sem_borda));
     // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
     // abre com os controles padrão.
     match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
@@ -535,27 +651,40 @@ mod tests {
     fn video_do_motor_vira_argumentos() {
         let padrao = VideoDoMotor::default();
         assert_eq!(
-            argumentos_de_video(&padrao, false, true, false),
+            argumentos_de_video(&padrao, false, true, true, false, true),
             ["-window", "-monitor", "lcd", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
         );
         // Sem a cadeia no pacote, abre sem scanlines em vez de falhar.
-        assert_eq!(argumentos_de_video(&padrao, false, false, false), ["-window", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&padrao, false, false, true, false, true), ["-window", "-monitor", "lcd"]);
+        // Tela cheia comum: a do motor; numa run gravada, pelo bgfx (a captura não vê a exclusiva).
         let tela_cheia = VideoDoMotor { windowed: false, scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true, false), ["-nowindow", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, false, true), ["-nowindow", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, true, true), ["-nowindow", "-monitor", "lcd", "-video", "bgfx"]);
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, false, true, true), ["-nowindow", "-monitor", "lcd"]);
         // A janela forçada vence a tela cheia.
-        assert_eq!(argumentos_de_video(&tela_cheia, true, true, false)[0], "-window");
-        // Run gravada em tela cheia sem scanlines: bgfx, não a tela cheia exclusiva do Direct3D 9.
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true), ["-nowindow", "-monitor", "lcd", "-video", "bgfx"]);
-        // Em janela, ou com scanlines, nada muda.
-        assert_eq!(argumentos_de_video(&VideoDoMotor { scanlines: false, ..padrao.clone() }, false, true, true), ["-window", "-monitor", "lcd"]);
-        // TV de tubo: resolução do GroovyMAME (15 kHz) e nada de scanlines por cima.
+        assert_eq!(argumentos_de_video(&tela_cheia, true, true, true, false, true)[0], "-window");
+        // Tela cheia sem borda: bgfx, sem trocar o modo de vídeo; com scanlines, a cadeia junto.
+        let sem_borda = VideoDoMotor { borderless: true, ..tela_cheia.clone() };
+        assert_eq!(argumentos_de_video(&sem_borda, false, true, true, false, true), ["-nowindow", "-monitor", "lcd", "-noswitchres", "-shmupx_borderless", "-video", "bgfx"]);
+        // Motor antigo, sem a opção: só o bgfx sem trocar o modo de vídeo.
+        assert_eq!(argumentos_de_video(&sem_borda, false, true, true, false, false), ["-nowindow", "-monitor", "lcd", "-noswitchres", "-video", "bgfx"]);
+        assert_eq!(
+            argumentos_de_video(&VideoDoMotor { scanlines: true, ..sem_borda.clone() }, false, true, true, false, true),
+            ["-nowindow", "-monitor", "lcd", "-noswitchres", "-shmupx_borderless", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
+        );
+        // Sem os shaders do bgfx no pacote, fica a tela cheia comum.
+        assert_eq!(argumentos_de_video(&sem_borda, false, true, false, false, true), ["-nowindow", "-monitor", "lcd"]);
+        // Sem borda só vale em tela cheia: em janela, nada muda.
+        assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: true, ..sem_borda.clone() }, false, true, true, false, true), ["-window", "-monitor", "lcd"]);
+        // TV de tubo: resolução do GroovyMAME (15 kHz, com a troca de modo) e nada de scanlines por cima.
         let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&crt, false, true, false), ["-window"]);
+        assert_eq!(argumentos_de_video(&crt, false, true, true, false, true), ["-window"]);
+        assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: false, borderless: true, ..crt.clone() }, false, true, true, false, true), ["-nowindow"]);
         // Monitor escolhido vai no -screen; nome estranho é ignorado (abre no principal).
         let segundo = VideoDoMotor { monitor: r"\\.\DISPLAY2".into(), scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&segundo, false, true, false), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
+        assert_eq!(argumentos_de_video(&segundo, false, true, true, false, true), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
         let estranho = VideoDoMotor { monitor: r"\\.\DISPLAY2 -x".into(), scanlines: false, ..padrao };
-        assert_eq!(argumentos_de_video(&estranho, false, true, false), ["-window", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&estranho, false, true, true, false, true), ["-window", "-monitor", "lcd"]);
     }
 
     #[test]

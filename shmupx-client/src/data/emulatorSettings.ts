@@ -5,6 +5,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 export interface EmulatorSettings {
   /** Abre em janela; desmarcado, em tela cheia. */
   windowed: boolean;
+  /** Em tela cheia: sem borda (borderless), em vez da exclusiva. */
+  borderless: boolean;
   /** Linhas de varredura de TV de tubo por cima da imagem. */
   scanlines: boolean;
   /** `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC. */
@@ -28,7 +30,36 @@ export async function listMonitors(): Promise<PcMonitor[]> {
   return invoke<PcMonitor[]>("emulador_monitores");
 }
 
+/**
+ * Mostra o número do monitor, grande e em vermelho, no meio dele por 3 segundos (ao escolher o
+ * monitor dos jogos). `id` vazio = o principal do Windows. Fora do app desktop, não faz nada.
+ */
+export function identifyMonitor(id: string) {
+  if (!isTauri()) return;
+  invoke("emulador_identificar_monitor", { id }).catch(() => undefined);
+}
+
 export type EmulatorResolution = "native" | "crt15";
+
+/** Modo de tela dos jogos: em janela, tela cheia (exclusiva) ou tela cheia sem borda (borderless). */
+export type ScreenMode = "window" | "fullscreen" | "borderless";
+
+export const SCREEN_MODES: { id: ScreenMode; label: string; detail: string }[] = [
+  { id: "window", label: "Janela", detail: "Ao lado do Client e do chat" },
+  { id: "fullscreen", label: "Tela cheia", detail: "O jogo ocupa o monitor inteiro" },
+  { id: "borderless", label: "Tela cheia sem borda", detail: "Alt+Tab sem piscar a tela" },
+];
+
+export function screenMode(settings: EmulatorSettings): ScreenMode {
+  return settings.windowed ? "window" : settings.borderless ? "borderless" : "fullscreen";
+}
+
+/** As preferências com o modo de tela escolhido (em janela, mantém a escolha de sem borda). */
+export function withScreenMode(settings: EmulatorSettings, mode: ScreenMode): EmulatorSettings {
+  return mode === "window"
+    ? { ...settings, windowed: true, scanlines: true }
+    : { ...settings, windowed: false, borderless: mode === "borderless", scanlines: true };
+}
 
 export const EMULATOR_RESOLUTIONS: { id: EmulatorResolution; label: string; detail: string }[] = [
   { id: "native", label: "Resolução do monitor (recomendado)", detail: "Usa a resolução atual do seu monitor, sem trocar o modo de vídeo." },
@@ -38,7 +69,7 @@ export const EMULATOR_RESOLUTIONS: { id: EmulatorResolution; label: string; deta
 const KEY = "shmupx.emulator.settings";
 
 export function defaultEmulatorSettings(): EmulatorSettings {
-  return { windowed: true, scanlines: true, resolution: "native", monitor: "" };
+  return { windowed: true, borderless: false, scanlines: true, resolution: "native", monitor: "" };
 }
 
 /** Preferências salvas neste computador; sem armazenamento, valem as padrão. */
@@ -49,6 +80,7 @@ export function readEmulatorSettings(): EmulatorSettings {
     if (!saved || typeof saved !== "object") return fallback;
     return {
       windowed: typeof saved.windowed === "boolean" ? saved.windowed : fallback.windowed,
+      borderless: typeof saved.borderless === "boolean" ? saved.borderless : fallback.borderless,
       // Sem opção na tela por enquanto: acima de 240p (fora da TV de tubo) as scanlines ficam sempre ligadas.
       scanlines: true,
       resolution: EMULATOR_RESOLUTIONS.some((r) => r.id === saved.resolution) ? (saved.resolution as EmulatorResolution) : fallback.resolution,

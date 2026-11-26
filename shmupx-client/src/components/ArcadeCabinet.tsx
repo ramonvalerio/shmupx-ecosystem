@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GameRoom } from "../types/room";
 import { useGameArt } from "../data/gameArt";
 import { createPortal } from "react-dom";
@@ -201,9 +201,10 @@ function VideoModal({ title, src, start, onClose }: { title: string; src: string
  * trailer do jogo quando houver; na sala, fica a imagem. Com `controls` (Minhas coleções), o painel
  * testa o controle: a alavanca e os botões se mexem com o controle ou o teclado do jogador (pelo
  * motor de captura, enquanto o Client está na frente): clicar na tela do monitor abre o monitor dos
- * jogos (Configurações › Emulador) e no resto do gabinete, os controles do emulador.
+ * jogos (Configurações › Emulador) e no resto do gabinete, os controles do emulador. Com `screen`
+ * (a prévia do monitor dos jogos), a tela deitada mostra esse conteúdo no lugar da capa.
  */
-export function ArcadeCabinet({ room, className = "", video: withVideo = false, controls = false }: { room: GameRoom; className?: string; video?: boolean; controls?: boolean }) {
+export function ArcadeCabinet({ room, className = "", video: withVideo = false, controls = false, screen: screenContent }: { room: GameRoom; className?: string; video?: boolean; controls?: boolean; screen?: ReactNode }) {
   const { t } = useI18n();
   const art = useGameArt(room);
   const [configuring, setConfiguring] = useState(false);
@@ -222,7 +223,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
   const showVideo = Boolean(video) && !videoFailed;
   const artTate = useTate(art.src);
   // Trailers são largos (16:9): com vídeo, a tela fica deitada.
-  const tate = artTate && !showVideo;
+  const tate = artTate && !showVideo && !screenContent;
   const screen = tate ? SCREEN.tate : SCREEN.yoko;
   const bezel = tate ? BEZEL.tate : BEZEL.yoko;
   // Ids únicos: a Coleção e a sala podem mostrar dois gabinetes ao mesmo tempo.
@@ -231,7 +232,8 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
   return (
     <>
     {configuring && <EmulatorControlsDialog onClose={() => setConfiguring(false)} />}
-    {monitorOpen && <MonitorSettingsDialog art={art.src} game={room.title} onClose={() => setMonitorOpen(false)} />}
+    {monitorOpen && <MonitorSettingsDialog art={art.src} game={room.title} onClose={() => setMonitorOpen(false)}
+      cabinet={(preview) => <ArcadeCabinet room={room} className="am-cabinet" screen={preview} />} />}
     {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
     <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${controls ? "is-configurable" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}
       onClick={controls ? (event) => { if ((event.target as Element).closest("[data-cabinet-screen]")) setMonitorOpen(true); else setConfiguring(true); } : undefined}>
@@ -258,7 +260,9 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
       {/* Vão do tubo: deitado (YOKO) ou em pé (TATE) */}
       <rect {...bezel} fill="#050708" stroke="#2a3136" strokeWidth="2" />
       <rect {...screen} fill="#000" />
-      {showVideo
+      {screenContent
+        ? <foreignObject {...screen}>{screenContent}</foreignObject>
+        : showVideo
         // Sem clip-path no foreignObject: o Chromium deixa de entregar o mouse aos controles. O canto
         // arredondado da tela vem do CSS (.cabinet-video).
         ? <foreignObject {...screen}><CabinetVideo src={video!} paused={modalStart !== null || configuring || monitorOpen} resume={resume} onFail={() => setVideoFailed(true)} onExpand={setModalStart} onClick={controls ? () => setMonitorOpen(true) : undefined} /></foreignObject>

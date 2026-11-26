@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useI18n } from "../i18n";
 import { playingWhere, useAccountPlaying, type PlayingNow } from "../data/playing";
 import { stopGame, useStoppingGame } from "../data/stopGame";
+import { useRecordGameplay } from "../data/recordGameplay";
 
 const KIND_LABEL: Record<PlayingNow["kind"], string> = { training: "Treino", ranked: "Ranked", live: "Live" };
 
@@ -20,6 +21,8 @@ export default function PlayerStatus({ uid, recording, practiceGames }: {
   const { t } = useI18n();
   const playing = useAccountPlaying();
   const busy = useStoppingGame();
+  // "GRAVANDO RUN" só com "Gravar gameplay" ligado; desligado, nenhum vídeo fica guardado.
+  const recordGameplay = useRecordGameplay();
   const [error, setError] = useState<string | null>(null);
 
   // STOP: o mesmo que o PARAR JOGO da sala (data/stopGame).
@@ -35,7 +38,7 @@ export default function PlayerStatus({ uid, recording, practiceGames }: {
 
   const stopButton = (
     <button type="button" className="player-status-stop" disabled={busy} onClick={() => void stop()}
-      title={t(recording ? "Encerrar a gravação da run" : "Parar o jogo e liberar a conta")}>
+      title={t(!recording ? "Parar o jogo e liberar a conta" : recordGameplay ? "Encerrar a gravação da run" : "Encerrar a run")}>
       <span aria-hidden="true" />{t(busy ? "Parando…" : "Parar jogo")}
     </button>
   );
@@ -44,7 +47,7 @@ export default function PlayerStatus({ uid, recording, practiceGames }: {
     return (
       <div className="player-status is-recording" role="status">
         <span className="player-status-dot" aria-hidden="true" />
-        <span className="player-status-text"><strong>{t("GRAVANDO RUN")}</strong><small>{recording.title}</small></span>
+        <span className="player-status-text"><strong>{t(recordGameplay ? "GRAVANDO RUN" : "RUN RANKED")}</strong><small>{recording.title}</small></span>
         {stopButton}
         {error && <small className="player-status-error" role="alert">{t(error)}</small>}
       </div>

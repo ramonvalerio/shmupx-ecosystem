@@ -199,6 +199,13 @@ pub fn emulador_monitores(app: AppHandle) -> Vec<super::emulador::MonitorDoPc> {
     super::emulador::monitores(&app)
 }
 
+/// Mostra o número do monitor no meio dele por 3 segundos, ao escolher o monitor dos jogos.
+/// Assíncrono: no Windows, criar janela num comando síncrono (thread principal) trava o `build()`.
+#[tauri::command]
+pub async fn emulador_identificar_monitor(app: AppHandle, id: String) -> Result<(), String> {
+    super::emulador::identificar_monitor(&app, &id).inspect_err(|e| log::warn!("monitor: falha ao identificar {id:?}: {e}"))
+}
+
 /// Baixa para a pasta padrão (`roms` do Client) os ROMs de `roms.json` que o jogador ainda não tem
 /// em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Ver [`super::roms_auto`].
 #[tauri::command]

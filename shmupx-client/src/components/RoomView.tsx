@@ -13,6 +13,7 @@ import { useCountdown } from "../data/useLive";
 import type { PresenceStatus, RoomPresence } from "../data/useRoomPresence";
 import { usePresenceMode } from "../data/presenceMode";
 import { useAccountPlaying } from "../data/playing";
+import { useRecordGameplay } from "../data/recordGameplay";
 import { useMyJoinedAt } from "../data/useRoomPresence";
 import { stopGame as stopPlaying, useStoppingGame } from "../data/stopGame";
 import { openWatchWindow } from "./WatchWindow";
@@ -156,6 +157,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const { t, locale } = useI18n();
   const presenceMode = usePresenceMode();
   const accountPlaying = useAccountPlaying();
+  // "GRAVANDO RUN" só com "Gravar gameplay" ligado; desligado, nenhum vídeo fica guardado.
+  const recordGameplay = useRecordGameplay();
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
   // Play Ranked (com ou sem live) e as opções dele: RankedPanel, o mesmo do painel da Coleção.
   const ranked = useRankedLive(room);
@@ -317,7 +320,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           <EventsCarousel room={room} uid={playerId} />
         </header>
 
-        {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}
+        {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t(recordGameplay ? "GRAVANDO RUN" : "RUN RANKED")}</p>}
         {liveHere && live.state.status === "live" && live.state.game_open && (
           <p className="room-banner recording" role="status">
             <span className="status-dot" /> {t("AO VIVO no YouTube")}{countdown && ` · ${t("termina em {time}", { time: countdown })}`}{live.state.public ? ` · ${t("pública")}` : ` · ${t("não listada")}`}
