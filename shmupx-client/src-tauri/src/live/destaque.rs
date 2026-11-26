@@ -1,11 +1,12 @@
 //! Destaque no canal oficial da ShmupX: a run Ranked com live que entra no top 3 do ranking tem
-//! a cópia da live (gravada neste PC pelo mesmo FFmpeg da transmissão) enviada ao canal oficial.
+//! o vídeo da live enviado ao canal oficial.
 //!
-//! O backend calcula a posição ao receber o resultado da run e, no top 3, abre o envio do vídeo
-//! no canal oficial (título com o nome do jogador, o placar e a posição) e devolve só o endereço
-//! desse envio. Daqui, o vídeo vai direto ao YouTube em partes (upload retomável: uma queda de
-//! rede retoma de onde parou), sem a tela de espera do começo, e o backend registra o vídeo
-//! publicado. Fora do top 3, a cópia é apagada.
+//! A live não grava nada no PC. O backend calcula a posição ao receber o resultado da run e, no
+//! top 3, abre o envio do vídeo no canal oficial (título com o nome do jogador, o placar e a
+//! posição) e devolve só o endereço desse envio. Daqui: depois que a live termina, o vídeo dela é
+//! baixado do YouTube (`ytdlp`) para uma pasta temporária, a tela de espera do começo é cortada e
+//! o vídeo vai ao YouTube em partes (upload retomável: uma queda de rede retoma de onde parou). O
+//! backend registra o vídeo publicado e a pasta temporária é apagada.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use super::LiveState;
+use super::{ytdlp, LiveState};
 use crate::capture::ffmpeg;
 use crate::session::SessionState;
 
@@ -22,7 +23,7 @@ pub const EVENTO: &str = "run://destaque";
 /// Parte de cada envio: múltiplo de 256 KiB, como o YouTube exige.
 const PARTE: u64 = 32 * 256 * 1024;
 const TENTATIVAS: u32 = 6;
-/// Quanto esperar a live terminar (e a cópia fechar) antes de desistir.
+/// Quanto esperar a live terminar antes de desistir.
 const ESPERA_DA_LIVE: Duration = Duration::from_secs(10 * 60);
 
 /// Destaque aberto pelo backend no envio do resultado (`POST /api/runs`).
@@ -44,7 +45,7 @@ struct Andamento {
     progresso: Option<f64>,
 }
 
-/// A live da run já terminou e a cópia está guardada (ou não houve live).
+/// A live da run já terminou e o vídeo dela está guardado (ou não houve live).
 async fn esperar_a_live(app: &AppHandle) {
     let live = app.state::<LiveState>().inner().clone();
     let inicio = tokio::time::Instant::now();
@@ -53,18 +54,24 @@ async fn esperar_a_live(app: &AppHandle) {
     }
 }
 
-/// Run fora do top 3 (ou sem destaque): apaga a cópia da live dela, se houver.
+/// Run fora do top 3 (ou sem destaque): esquece a live dela (o vídeo continua no canal do jogador).
 pub fn descartar(app: &AppHandle, run_id: &str) {
     let (app, run_id) = (app.clone(), run_id.to_string());
     tauri::async_runtime::spawn(async move {
         esperar_a_live(&app).await;
-        if let Some(copia) = app.state::<LiveState>().tomar_copia(&run_id) {
-            let _ = tokio::fs::remove_file(&copia.arquivo).await;
-        }
+        let _ = app.state::<LiveState>().tomar_live(&run_id);
     });
 }
 
-/// Run do top 3 com live: envia a cópia ao canal oficial em segundo plano.
+/// Pasta temporária do destaque de uma run (fora da pasta das gravações), apagada no fim.
+fn pasta_temporaria(app: &AppHandle, run_id: &str) -> PathBuf {
+    let base = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let nome: String = run_id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+    base.join("destaques").join(nome)
+}
+
+/// Run do top 3 com live: baixa o vídeo da live, corta a tela de espera e envia ao canal oficial,
+/// em segundo plano.
 pub fn enviar(app: &AppHandle, jogo_id: &str, run_id: &str, destaque: Destaque) {
     let (app, jogo_id, run_id) = (app.clone(), jogo_id.to_string(), run_id.to_string());
     tauri::async_runtime::spawn(async move {
@@ -72,48 +79,48 @@ pub fn enviar(app: &AppHandle, jogo_id: &str, run_id: &str, destaque: Destaque) 
             let _ = app.emit(EVENTO, Andamento { jogo_id: jogo_id.clone(), run_id: run_id.clone(), posicao: destaque.posicao, status, video_url, progresso });
         };
         esperar_a_live(&app).await;
-        let Some(copia) = app.state::<LiveState>().tomar_copia(&run_id) else {
-            log::warn!("destaque: run {run_id} sem cópia da live neste PC");
+        let Some(live) = app.state::<LiveState>().tomar_live(&run_id) else {
+            log::warn!("destaque: run {run_id} sem live registrada neste PC");
             avisar("failed", None, None);
             return;
         };
         avisar("uploading", None, Some(0.0));
-        let cortado = cortar_espera(&copia.arquivo, copia.corte_s).await;
-        let arquivo = cortado.as_deref().unwrap_or(&copia.arquivo);
-        let enviado = enviar_arquivo(&destaque.upload_url, arquivo, |p| avisar("uploading", None, Some(p))).await;
-        let resultado = match enviado {
-            Ok(video_id) => registrar(&app, &run_id, &video_id).await.map(|()| video_id),
-            Err(e) => Err(e),
-        };
+        let pasta = pasta_temporaria(&app, &run_id);
+        let resultado = async {
+            let baixado = ytdlp::baixar(&live.video_id, &pasta).await?;
+            let cortado = cortar_espera(&baixado, live.corte_s).await;
+            let arquivo = cortado.as_deref().unwrap_or(&baixado);
+            let video_id = enviar_arquivo(&destaque.upload_url, arquivo, |p| avisar("uploading", None, Some(p))).await?;
+            registrar(&app, &run_id, &video_id).await?;
+            Ok::<String, String>(video_id)
+        }
+        .await;
+        let _ = tokio::fs::remove_dir_all(&pasta).await;
         match resultado {
             Ok(video_id) => {
                 log::info!("destaque: run {run_id} ({}º lugar) publicada no canal da ShmupX: {video_id}", destaque.posicao);
                 avisar("posted", Some(format!("https://www.youtube.com/watch?v={video_id}")), Some(1.0));
-                let _ = tokio::fs::remove_file(&copia.arquivo).await;
             }
             Err(e) => {
-                // A cópia fica na pasta das gravações (é apagada sozinha em 2 dias).
+                // A live continua no canal do jogador.
                 log::warn!("destaque: run {run_id} não foi enviada ao canal da ShmupX: {e}");
                 avisar("failed", None, None);
             }
-        }
-        if let Some(cortado) = cortado {
-            let _ = tokio::fs::remove_file(cortado).await;
         }
     });
 }
 
 /// Tira a tela de espera do começo (sem recodificar: corta no quadro-chave anterior). `None`:
 /// sem nada a cortar, ou o corte falhou (vai o vídeo inteiro).
-async fn cortar_espera(copia: &Path, corte_s: f64) -> Option<PathBuf> {
+async fn cortar_espera(video: &Path, corte_s: f64) -> Option<PathBuf> {
     if corte_s < 1.0 {
         return None;
     }
-    let saida = copia.with_extension("destaque.mp4");
+    let saida = video.with_extension("destaque.mp4");
     let mut cmd = tokio::process::Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-ss", &format!("{corte_s:.2}")])
         .arg("-i")
-        .arg(copia)
+        .arg(video)
         .args(["-c", "copy", "-movflags", "+faststart"])
         .arg(&saida)
         .stdin(std::process::Stdio::null())
@@ -158,10 +165,10 @@ async fn consultar(http: &reqwest::Client, url: &str, total: u64) -> Result<Opti
 /// Envia o arquivo ao endereço do envio retomável, em partes; devolve o id do vídeo publicado.
 async fn enviar_arquivo(url: &str, arquivo: &Path, progresso: impl Fn(f64)) -> Result<String, String> {
     let http = reqwest::Client::builder().timeout(Duration::from_secs(300)).build().map_err(|e| e.to_string())?;
-    let mut file = tokio::fs::File::open(arquivo).await.map_err(|e| format!("cópia da live ilegível: {e}"))?;
+    let mut file = tokio::fs::File::open(arquivo).await.map_err(|e| format!("vídeo da live ilegível: {e}"))?;
     let total = file.metadata().await.map_err(|e| e.to_string())?.len();
     if total == 0 {
-        return Err("cópia da live vazia".into());
+        return Err("vídeo da live vazio".into());
     }
     let mut enviado = 0u64;
     let mut falhas = 0u32;

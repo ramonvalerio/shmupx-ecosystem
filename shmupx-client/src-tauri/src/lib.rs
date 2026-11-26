@@ -110,6 +110,7 @@ pub fn run() {
             )?;
 
             capture::ffmpeg::usar_empacotado(app.path().resource_dir().ok());
+            live::ytdlp::usar_empacotado(app.path().resource_dir().ok());
             input::spawn_listener(app.handle().clone());
             portatil::limpar_atualizacoes();
 

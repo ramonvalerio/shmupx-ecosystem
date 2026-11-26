@@ -9,13 +9,15 @@
 //! END LIVE, no fim da run, se o jogo fechar, se o FFmpeg cair ou em 45 min. Se a run ranked não
 //! começar, a live é encerrada: não existe live fora do Ranked.
 //!
-//! O mesmo FFmpeg grava uma cópia da live neste PC (`tee`). Se a run entrar no top 3 do ranking,
-//! essa cópia vai para o canal oficial da ShmupX (`destaque`); senão, é apagada.
+//! A live não grava nada neste PC: o vídeo fica no canal do jogador. Se a run entrar no top 3 do
+//! ranking, o `destaque` baixa o vídeo da live do YouTube depois que ela termina, corta a tela de
+//! espera e envia ao canal oficial da ShmupX.
 //! O endereço RTMP leva a chave da transmissão: nunca vai para log (FFmpeg em `-loglevel error`).
 
 pub(crate) mod audio;
 pub mod commands;
 pub mod destaque;
+pub mod ytdlp;
 #[cfg(windows)]
 pub mod janela;
 #[cfg(not(windows))]
@@ -99,24 +101,24 @@ struct Corrente {
     captura: Option<janela::CapturaJanela>,
 }
 
-/// A run ranked transmitida por esta live e a cópia da live gravada no PC.
+/// A run ranked transmitida por esta live.
 struct Vinculo {
     jogo_id: String,
     broadcast_id: String,
-    copia: PathBuf,
-    /// Quando a cópia começou a ser gravada.
-    copia_desde: Instant,
-    /// Segundo da cópia em que o jogo apareceu (o destaque corta a tela de espera).
+    /// Quando a live entrou no ar (o começo do vídeo dela no YouTube).
+    no_ar_desde: Instant,
+    /// Segundo do vídeo da live em que o jogo apareceu (o destaque corta a tela de espera).
     jogo_aos_s: Option<f64>,
     run_id: Option<String>,
     run_terminou: bool,
 }
 
-/// Cópia da live de uma run, guardada quando a live termina, até o resultado da run decidir se
-/// ela vai para o canal oficial (top 3) ou é apagada.
-#[derive(Debug, Clone)]
-pub struct CopiaDaLive {
-    pub arquivo: PathBuf,
+/// A live de uma run, guardada quando a live termina, até o resultado da run decidir se ela vai
+/// para o canal oficial (top 3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LiveDaRun {
+    /// Id do vídeo da live no YouTube (o do broadcast).
+    pub video_id: String,
     /// Segundos do começo a pular (a tela de espera antes do jogo abrir).
     pub corte_s: f64,
 }
@@ -127,7 +129,7 @@ pub struct LiveState {
     corrente: Arc<tokio::sync::Mutex<Option<Corrente>>>,
     cancelar: Arc<Notify>,
     vinculo: Arc<Mutex<Option<Vinculo>>>,
-    copias: Arc<Mutex<HashMap<String, CopiaDaLive>>>,
+    lives: Arc<Mutex<HashMap<String, LiveDaRun>>>,
 }
 
 impl Default for LiveState {
@@ -137,7 +139,7 @@ impl Default for LiveState {
             corrente: Arc::default(),
             cancelar: Arc::default(),
             vinculo: Arc::default(),
-            copias: Arc::default(),
+            lives: Arc::default(),
         }
     }
 }
@@ -198,21 +200,16 @@ impl LiveState {
         travar(&self.vinculo).as_ref().map_or((None, false), |v| (v.run_id.clone(), v.run_terminou))
     }
 
-    /// Cópia da live da run `run_id` (só depois que a live terminou).
-    pub fn tomar_copia(&self, run_id: &str) -> Option<CopiaDaLive> {
-        travar(&self.copias).remove(run_id)
+    /// A live da run `run_id` (só depois que a live terminou).
+    pub fn tomar_live(&self, run_id: &str) -> Option<LiveDaRun> {
+        travar(&self.lives).remove(run_id)
     }
 
-    /// Fim da live: a cópia fica guardada para a run decidir; sem run, ela é apagada.
-    fn guardar_copia(&self) {
+    /// Fim da live: guarda o vídeo dela para a run decidir (sem run, não há o que guardar).
+    fn guardar_live(&self) {
         let Some(v) = travar(&self.vinculo).take() else { return };
-        match v.run_id {
-            Some(run_id) if v.copia.is_file() => {
-                travar(&self.copias).insert(run_id, CopiaDaLive { arquivo: v.copia, corte_s: v.jogo_aos_s.unwrap_or(0.0) });
-            }
-            _ => {
-                let _ = std::fs::remove_file(&v.copia);
-            }
+        if let Some(run_id) = v.run_id {
+            travar(&self.lives).insert(run_id, LiveDaRun { video_id: v.broadcast_id, corte_s: v.jogo_aos_s.unwrap_or(0.0) });
         }
     }
 }
@@ -244,36 +241,9 @@ fn tela_de_espera() -> Vec<u8> {
     quadro
 }
 
-/// Caminho para dentro da lista do `tee` do FFmpeg: barras normais (a invertida é o escape dele)
-/// e os separadores escapados.
-fn escapar_tee(caminho: &str) -> String {
-    let mut saida = String::with_capacity(caminho.len());
-    for c in caminho.chars() {
-        match c {
-            '\\' => saida.push('/'),
-            '\'' | '|' | '[' | ']' => {
-                saida.push('\\');
-                saida.push(c);
-            }
-            _ => saida.push(c),
-        }
-    }
-    saida
-}
-
-/// Saídas do FFmpeg da live: o YouTube (se ele cair, a live cai) e a cópia neste PC em MP4
-/// fragmentado (vale mesmo se o FFmpeg for interrompido; se o disco falhar, a live segue).
-fn saidas_tee(ingest: &str, copia: &Path) -> String {
-    format!(
-        "[f=flv:flvflags=no_duration_filesize:onfail=abort]{}|[f=mp4:movflags=+frag_keyframe+empty_moov+default_base_moof:onfail=ignore]{}",
-        escapar_tee(ingest),
-        escapar_tee(&copia.to_string_lossy())
-    )
-}
-
 /// FFmpeg da live: vídeo BGRA 1280×720 a 60 quadros/s pelo stdin (entrada 0) e o áudio `f32le`
-/// por uma conexão TCP local (entrada 1, o FFmpeg escuta).
-fn spawn_ffmpeg_janela(ingest: &str, copia: &Path, porta_audio: u16, log: &PathBuf) -> std::io::Result<Child> {
+/// por uma conexão TCP local (entrada 1, o FFmpeg escuta), direto para o YouTube (nada no PC).
+fn spawn_ffmpeg_janela(ingest: &str, porta_audio: u16, log: &PathBuf) -> std::io::Result<Child> {
     let mut cmd = Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-loglevel", "error", "-y"]);
     let tamanho = format!("{}x{}", janela::LARGURA, janela::ALTURA);
@@ -289,8 +259,7 @@ fn spawn_ffmpeg_janela(ingest: &str, copia: &Path, porta_audio: u16, log: &PathB
     cmd.args(["-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency"]);
     cmd.args(["-b:v", "4500k", "-maxrate", "4500k", "-bufsize", "9000k", "-g", "120", "-keyint_min", "120", "-sc_threshold", "0"]);
     cmd.args(["-c:a", "aac", "-b:a", "160k", "-ar", "48000"]);
-    // Duas saídas do mesmo vídeo codificado: os cabeçalhos dos codecs ficam fora dos quadros.
-    cmd.args(["-flags", "+global_header", "-f", "tee", &saidas_tee(ingest, copia)]);
+    cmd.args(["-f", "flv", "-flvflags", "no_duration_filesize", ingest]);
     cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::from(std::fs::File::create(log)?));
     cmd.kill_on_drop(true);
     #[cfg(windows)]
@@ -318,9 +287,9 @@ fn ligar_parada(da_live: Arc<AtomicBool>, do_escritor: Arc<AtomicBool>) {
 
 /// Envio da live: FFmpeg, escritor de vídeo (da `tela`, que começa com a tela de espera) e de
 /// áudio (da `fonte`, que começa em silêncio).
-async fn abrir_envio(ingest: &str, copia: &Path, log: &PathBuf, parar_audio: Arc<AtomicBool>, tela: janela::Tela, fonte: audio::Fonte) -> Result<Child, String> {
+async fn abrir_envio(ingest: &str, log: &PathBuf, parar_audio: Arc<AtomicBool>, tela: janela::Tela, fonte: audio::Fonte) -> Result<Child, String> {
     let porta = porta_livre()?;
-    let mut child = spawn_ffmpeg_janela(ingest, copia, porta, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
+    let mut child = spawn_ffmpeg_janela(ingest, porta, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
     let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de vídeo")?;
     #[cfg(windows)]
     let stdin = std::fs::File::from(stdin.into_owned_handle().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
@@ -367,7 +336,7 @@ fn motivo_do_log(log: &PathBuf) -> String {
     }
 }
 
-/// Apaga cópias de lives antigas que ficaram na pasta (Client fechado antes do resultado da run).
+/// Apaga cópias de lives que versões antigas do Client deixavam na pasta das gravações.
 fn limpar_copias_antigas(pasta: &Path) {
     let Ok(itens) = std::fs::read_dir(pasta) else { return };
     let limite = Duration::from_secs(2 * 24 * 60 * 60);
@@ -386,7 +355,7 @@ fn limpar_copias_antigas(pasta: &Path) {
 pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: String, titulo: String, publica: bool, abertura: Abertura, log: PathBuf, pasta: PathBuf) {
     limpar_copias_antigas(&pasta);
     let resultado = tokio::select! {
-        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, publica, &abertura, &log, &pasta) => r,
+        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, publica, &abertura, &log) => r,
         _ = live.cancelar.notified() => Err(String::new()),
     };
     match resultado {
@@ -450,7 +419,7 @@ async fn esperar_janela(steam_app_id: Option<u32>) -> Result<janela::Window, Str
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, abertura: &Abertura, log: &PathBuf, pasta: &Path) -> Result<(), String> {
+async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, abertura: &Abertura, log: &PathBuf) -> Result<(), String> {
     let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, ..Default::default() };
     // Fora do Windows ainda não há captura da janela do jogo.
     if cfg!(not(windows)) {
@@ -469,12 +438,10 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     let (broadcast_id, stream_id, ingest, watch) = (texto("broadcast_id")?, texto("stream_id")?, texto("ingest_url")?, texto("watch_url")?);
     let parar_audio = Arc::new(AtomicBool::new(false));
     *live.corrente.lock().await = Some(Corrente { broadcast_id: Some(broadcast_id.clone()), child: None, parar_audio: parar_audio.clone(), captura: None });
-    let copia = pasta.join(format!("shmupx_live_{}.mp4", agora_ms()));
     *travar(&live.vinculo) = Some(Vinculo {
         jogo_id: jogo_id.to_string(),
         broadcast_id: broadcast_id.clone(),
-        copia: copia.clone(),
-        copia_desde: Instant::now(),
+        no_ar_desde: Instant::now(),
         jogo_aos_s: None,
         run_id: None,
         run_terminou: false,
@@ -484,10 +451,7 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     live.definir(app, Estado { status: "connecting", watch_url: Some(watch.clone()), ..base.clone() });
     let tela: janela::Tela = Arc::new(Mutex::new(tela_de_espera()));
     let fonte: audio::Fonte = Arc::default();
-    let child = abrir_envio(&ingest, &copia, log, parar_audio, tela.clone(), fonte.clone()).await?;
-    if let Some(v) = travar(&live.vinculo).as_mut() {
-        v.copia_desde = Instant::now();
-    }
+    let child = abrir_envio(&ingest, log, parar_audio, tela.clone(), fonte.clone()).await?;
     if let Some(c) = live.corrente.lock().await.as_mut() {
         c.child = Some(child);
     }
@@ -516,6 +480,10 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
         Some(serde_json::json!({ "status": "live" })),
     )
     .await?;
+    // O vídeo da live no YouTube começa aqui: o corte da tela de espera conta a partir deste instante.
+    if let Some(v) = travar(&live.vinculo).as_mut() {
+        v.no_ar_desde = Instant::now();
+    }
     live.definir(app, Estado {
         status: "live",
         watch_url: Some(watch),
@@ -543,7 +511,7 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
         c.captura = Some(captura);
     }
     if let Some(v) = travar(&live.vinculo).as_mut() {
-        v.jogo_aos_s = Some(v.copia_desde.elapsed().as_secs_f64());
+        v.jogo_aos_s = Some(v.no_ar_desde.elapsed().as_secs_f64());
     }
     live.alterar(app, |e| {
         e.game_open = true;
@@ -599,9 +567,8 @@ async fn vigiar(app: AppHandle, live: LiveState, token: String, log: PathBuf) {
     });
 }
 
-/// Para o áudio e o FFmpeg (deixando ele fechar a cópia), encerra a live no YouTube (melhor
-/// esforço: sem rede, os recursos locais são liberados mesmo assim) e guarda a cópia para o
-/// resultado da run.
+/// Para o áudio e o FFmpeg, encerra a live no YouTube (melhor esforço: sem rede, os recursos
+/// locais são liberados mesmo assim) e guarda o vídeo da live para o resultado da run.
 async fn encerrar_recursos(live: &LiveState, token: &str) {
     let corrente = live.corrente.lock().await.take();
     if let Some(mut corrente) = corrente {
@@ -623,22 +590,12 @@ async fn encerrar_recursos(live: &LiveState, token: &str) {
             .await;
         }
     }
-    live.guardar_copia();
+    live.guardar_live();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn caminhos_do_tee_sem_barra_invertida_nem_separadores() {
-        assert_eq!(escapar_tee(r"C:\Users\ana\Vídeos\shmupx_live_1.mp4"), "C:/Users/ana/Vídeos/shmupx_live_1.mp4");
-        assert_eq!(escapar_tee("D:/a|b[c]'d"), r"D:/a\|b\[c\]\'d");
-        let saidas = saidas_tee("rtmp://a.rtmp.youtube.com/live2/abcd-efgh", Path::new("C:/x/copia.mp4"));
-        assert!(saidas.starts_with("[f=flv:"));
-        assert!(saidas.contains("]rtmp://a.rtmp.youtube.com/live2/abcd-efgh|[f=mp4:"));
-        assert!(saidas.ends_with("]C:/x/copia.mp4"));
-    }
 
     #[test]
     fn tela_de_espera_tem_o_tamanho_da_live_e_a_moeda_no_centro() {
@@ -657,9 +614,8 @@ mod tests {
         *travar(&live.vinculo) = Some(Vinculo {
             jogo_id: "aero".into(),
             broadcast_id: "b1".into(),
-            copia: PathBuf::from("nao-existe.mp4"),
-            copia_desde: Instant::now(),
-            jogo_aos_s: None,
+            no_ar_desde: Instant::now(),
+            jogo_aos_s: Some(12.5),
             run_id: None,
             run_terminou: false,
         });
@@ -670,9 +626,10 @@ mod tests {
         assert_eq!(live.run_da_live(), (Some("r1".into()), false));
         live.run_terminou("r1");
         assert_eq!(live.run_da_live(), (Some("r1".into()), true));
-        // Sem o arquivo da cópia, nada fica guardado.
-        live.guardar_copia();
-        assert!(live.tomar_copia("r1").is_none());
+        // No fim da live, o vídeo dela fica guardado para a run (uma vez).
+        live.guardar_live();
+        assert_eq!(live.tomar_live("r1"), Some(LiveDaRun { video_id: "b1".into(), corte_s: 12.5 }));
+        assert!(live.tomar_live("r1").is_none());
     }
 }
 
@@ -680,17 +637,15 @@ mod tests {
 mod neste_pc {
     use super::*;
 
-    /// Envio completo para arquivos locais (no lugar do YouTube e da cópia), com um tom tocando:
+    /// Envio completo para um arquivo local (no lugar do YouTube), com um tom tocando:
     /// `cargo test -- --ignored envio_local --nocapture`.
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "depende de som e FFmpeg neste PC"]
     async fn envio_local() {
         let pasta = std::env::temp_dir();
         let saida = pasta.join("shmupx_live_teste.flv");
-        let copia = pasta.join("shmupx_live_teste_copia.mp4");
         let log = pasta.join("shmupx_live_teste.log");
         let _ = std::fs::remove_file(&saida);
-        let _ = std::fs::remove_file(&copia);
         let tela: janela::Tela = Arc::new(Mutex::new(tela_de_espera()));
         let fonte: audio::Fonte = Arc::default();
         let tom = std::thread::spawn(|| {
@@ -701,7 +656,7 @@ mod neste_pc {
             sink.sleep_until_end();
         });
         let parar = Arc::new(AtomicBool::new(false));
-        let mut child = abrir_envio(saida.to_str().unwrap(), &copia, &log, parar.clone(), tela, fonte.clone()).await.unwrap();
+        let mut child = abrir_envio(saida.to_str().unwrap(), &log, parar.clone(), tela, fonte.clone()).await.unwrap();
         // O "jogo" (este processo) entra depois, como na live do Ranked.
         tokio::time::sleep(Duration::from_secs(2)).await;
         *travar(&fonte) = audio::iniciar(std::process::id()).ok();
@@ -713,6 +668,5 @@ mod neste_pc {
         tom.join().unwrap();
         println!("log: {}", std::fs::read_to_string(&log).unwrap_or_default());
         println!("saida: {} bytes", std::fs::metadata(&saida).map(|m| m.len()).unwrap_or(0));
-        println!("copia: {} bytes", std::fs::metadata(&copia).map(|m| m.len()).unwrap_or(0));
     }
 }

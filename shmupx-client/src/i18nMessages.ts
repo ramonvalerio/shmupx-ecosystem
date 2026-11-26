@@ -10,7 +10,7 @@ export const ENGLISH: Record<string, string> = {
   "Você está em {place}º lugar no ranking!": "You're #{place} in the ranking!",
   "Sua live vai para o canal oficial da ShmupX, com seu nome, placar e posição. Enviando o vídeo… {percent}%": "Your live is going to the official ShmupX channel, with your name, score and position. Uploading the video… {percent}%",
   "Sua live está no canal oficial da ShmupX!": "Your live is on the official ShmupX channel!",
-  "Não foi possível publicar sua live no canal da ShmupX agora. O vídeo continua na sua pasta de gravações.": "Couldn't publish your live on the ShmupX channel right now. The video is still in your recordings folder.",
+  "Não foi possível publicar sua live no canal da ShmupX agora. Ela continua no seu canal do YouTube.": "Couldn't publish your live on the ShmupX channel right now. It's still on your YouTube channel.",
   "Assistir": "Watch",
   "Há uma live em andamento: encerre-a antes de iniciar outra run.": "A live is running: end it before starting another run.",
   "a partida ranked não começou (ficha ou gravação); a live só acontece no Ranked": "the ranked match didn't start (coin or recording); lives only happen in Ranked",

@@ -124,7 +124,7 @@ function RunOutcome({ run, onOpenRanking }: { run: SessionRun; onOpenRanking: ()
           {highlight.status === "uploading"
             ? t("Sua live vai para o canal oficial da ShmupX, com seu nome, placar e posição. Enviando o vídeo… {percent}%", { percent: Math.round((highlight.progress ?? 0) * 100) })
             : highlight.status === "posted" ? t("Sua live está no canal oficial da ShmupX!")
-            : t("Não foi possível publicar sua live no canal da ShmupX agora. O vídeo continua na sua pasta de gravações.")}
+            : t("Não foi possível publicar sua live no canal da ShmupX agora. Ela continua no seu canal do YouTube.")}
           {highlight.status === "posted" && highlight.videoUrl && (
             <button type="button" className="text-action" onClick={() => void invoke("live_abrir", { url: highlight.videoUrl })}>{t("Assistir")}</button>
           )}

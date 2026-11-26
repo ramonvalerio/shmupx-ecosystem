@@ -22,6 +22,7 @@ A preservação da gameplay é o requisito principal do Ranked: é competitivo, 
 3. **O trabalho pesado fica na placa de vídeo** (`capture/janela_nv12.rs`): um passo do processador de vídeo do Direct3D 11 recorta, reduz e converte para NV12 (BT.601, 16–235). A CPU só lê o quadro pronto, alternando entre duas texturas para não esperar a GPU. O FFmpeg codifica direto (x264 `ultrafast`), sem converter. Sem o processador de vídeo (driver antigo, área de trabalho remota), a redução cai para a CPU.
 4. **Com o som do jogo:** loopback do processo do jogo (Windows 10 2004+), sem driver extra, em AAC. Sem ele, o loopback da saída padrão; sem nenhum, silêncio.
 5. **O FFmpeg roda abaixo do normal e sem console.** Se faltar CPU, quem perde é o vídeo, nunca o jogo.
+7. **A live não grava nada no PC** (atualização de 2026-11-26). O FFmpeg da live envia só ao YouTube. Se a run da live entra no top 3, o Client baixa o vídeo da live do YouTube depois que ela termina (yt-dlp empacotado, tentando de novo enquanto o YouTube prepara o vídeo), corta a tela de espera, envia ao canal oficial da ShmupX (título e descrição com jogador, jogo, posição, placar e o link da live) e apaga os arquivos temporários.
 6. **Tela cheia gravada vai pelo bgfx.** A captura da janela vê preta a tela cheia exclusiva do Direct3D 9 (o renderizador do motor sem scanlines). Na run ranked gravada, a tela cheia sem scanlines abre pelo bgfx (com scanlines já é bgfx), que a captura vê normalmente.
 
 ## Medições (i7-9750H, 1080p, Aero Fighters 2 em janela, ~3800 quadros por rodada)

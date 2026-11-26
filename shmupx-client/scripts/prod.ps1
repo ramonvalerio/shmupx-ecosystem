@@ -15,7 +15,7 @@
     2. junta motor de validação, scripts, FFmpeg e ShmupX Engine em src-tauri\bundle\
        (prepare-bundle.ps1), se ainda não estiverem lá ou com -Preparar;
     3. compila a interface (dist/) e o app em release (sem terminal, sem os atalhos de debug);
-    4. põe os recursos (engine/, validator/, games/, ffmpeg/) ao lado do executável, onde o app
+    4. põe os recursos (engine/, validator/, games/, ffmpeg/, ytdlp/) ao lado do executável, onde o app
        instalado os procura;
     5. abre o app fora do terminal, como um duplo clique.
 
@@ -58,7 +58,7 @@ Write-Host "Tudo o que você fizer (chat, runs, perfil) vale para os jogadores r
 
 # 2. Recursos do instalador.
 if ($Emulador) { $Preparar = $true }
-if ($Preparar -or -not (Test-Path "$bundle\engine\shmupx-engine.exe") -or -not (Test-Path "$bundle\runtime\DirectML.dll")) {
+if ($Preparar -or -not (Test-Path "$bundle\engine\shmupx-engine.exe") -or -not (Test-Path "$bundle\runtime\DirectML.dll") -or -not (Test-Path "$bundle\ytdlp\yt-dlp.exe")) {
     $opcoes = @{ ReusarMotor = $true }
     if ($Emulador) { $opcoes.Emulador = $Emulador }
     & (Join-Path $PSScriptRoot "prepare-bundle.ps1") @opcoes
@@ -82,7 +82,7 @@ if ($LASTEXITCODE) { throw "falha ao compilar o Client" }
 if (-not (Test-Path $exe)) { throw "não achei o executável em $exe" }
 
 # 4. No Windows, o app instalado procura os recursos na pasta do próprio executável.
-foreach ($pasta in "engine", "validator", "games", "ffmpeg") {
+foreach ($pasta in "engine", "validator", "games", "ffmpeg", "ytdlp") {
     $destino = Join-Path $release $pasta
     if (Test-Path $destino) { Remove-Item -Recurse -Force $destino }
     Copy-Item -Recurse (Join-Path $bundle $pasta) $destino

@@ -8,6 +8,8 @@
   validator\  shmupx-validator.exe + dependências (shmupx-lab\validators\tools\build_validator.ps1)
   games\      só os scripts de src-tauri\scripts-aceitos.json, e só se aprovados no Lab
   ffmpeg\     ffmpeg.exe (de -Ffmpeg ou do PATH) e a licença dele, se encontrada
+  ytdlp\      yt-dlp.exe da última release oficial (SHA-256 conferido): baixa o vídeo da live do
+              top 3 para o envio ao canal oficial (só Windows)
   engine\     ShmupX Emulator (ShmupX Engine): o pacote do último build do main que passou, da
               release pública windows-latest de ramonvalerio/shmupx-engine (SHA-256 conferido),
               ou o de -Emulador
@@ -59,6 +61,16 @@ Copy-Item $Ffmpeg "$saida\ffmpeg\ffmpeg.exe"
 $licenca = Get-ChildItem (Split-Path (Split-Path $Ffmpeg)) -Filter "LICENSE*" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($licenca) { Copy-Item $licenca.FullName "$saida\ffmpeg\LICENSE.txt" }
 else { Write-Warning "licença do FFmpeg não encontrada ao lado de $Ffmpeg; inclua-a antes de distribuir" }
+
+# yt-dlp (Windows): baixa do YouTube o vídeo da live que entra no top 3, para o envio ao canal
+# oficial (a live não grava nada no PC). O da última release oficial, com o SHA-256 conferido.
+New-Item -ItemType Directory -Force "$saida\ytdlp" | Out-Null
+gh release download -R yt-dlp/yt-dlp -p "yt-dlp.exe" -p "SHA2-256SUMS" -D "$saida\ytdlp" --clobber
+if ($LASTEXITCODE) { throw "falha ao baixar o yt-dlp" }
+$esperado = (Get-Content "$saida\ytdlp\SHA2-256SUMS" | Where-Object { $_ -match '\syt-dlp\.exe$' }) -replace '\s.*$', ''
+$obtido = (Get-FileHash "$saida\ytdlp\yt-dlp.exe" -Algorithm SHA256).Hash
+if (-not $esperado -or $obtido -ne $esperado.ToUpper()) { throw "SHA-256 do yt-dlp não confere" }
+Remove-Item "$saida\ytdlp\SHA2-256SUMS"
 
 # ShmupX Emulator: sem ele, nenhum jogo de emulador abre no Client instalado.
 $urlEmulador = "https://github.com/ramonvalerio/shmupx-engine/releases/download/windows-latest/shmupx-engine-windows.zip"
