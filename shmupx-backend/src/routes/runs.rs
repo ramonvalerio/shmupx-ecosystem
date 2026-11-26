@@ -7,6 +7,7 @@ use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
+use crate::firestore::valor::ler_texto;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::FirebaseUser;
 use crate::middleware::jogador::{exigir_jogador, Origem};
@@ -154,7 +155,15 @@ async fn submeter_run(
         bombas_usadas: payload.bombas_usadas,
         zerou: payload.zerou,
     };
+    let (score, vidas) = (resultado.score_bruto, resultado.vidas_perdidas);
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
+    // O modo da run, lido antes da poda: uma run abaixo do recorde sai do banco.
+    let modo = firestore
+        .ler_documento(&format!("gameplays/{}", payload.run_id))
+        .await
+        .ok()
+        .flatten()
+        .and_then(|gameplay| ler_texto(&gameplay, "mode"));
     // Ranking online só com o recorde: a run atual contra o que está no banco.
     let online = recordes::manter_so_os_recordes(&firestore, &usuario.uid, &payload.jogo_id, &payload.run_id)
         .await
@@ -162,7 +171,11 @@ async fn submeter_run(
             eprintln!("recordes: run {}: {e:?}", payload.run_id);
             true
         });
-    let depois = destaques::depois_do_envio(&firestore, youtube.as_deref(), &usuario.uid, &payload.run_id, &payload.jogo_id).await;
+    let mut depois = destaques::depois_do_envio(&firestore, youtube.as_deref(), &usuario.uid, &payload.run_id, &payload.jogo_id).await;
+    // Run abaixo do recorde do jogador: sem registro no ranking, mas com o RANK que o placar teria.
+    if depois.posicao.is_none() && !online {
+        depois.posicao = destaques::posicao_fora_do_recorde(&firestore, &usuario.uid, &payload.jogo_id, modo.as_deref(), score, vidas).await;
+    }
     Ok(Json(RespostaEnvio { run, online, depois }))
 }
 

@@ -66,6 +66,31 @@ fn tabela_do_modo(modo: Option<&str>) -> &'static str {
     }
 }
 
+/// Posição que um resultado teria na tabela, para a run que não é o recorde do jogador: 1 mais o
+/// número de outros jogadores cujo registro é melhor (Caravan: menos vidas perdidas e depois mais
+/// pontos; nos outros modos, mais pontos). Empate não passa à frente.
+pub(crate) fn posicao_do_resultado(entradas: &[placar::EntradaJogo], uid: &str, score: i64, vidas_perdidas: Option<i32>, caravana: bool) -> usize {
+    let vidas = |v: Option<i32>| v.unwrap_or(i32::MAX);
+    let melhor = |e: &placar::EntradaJogo| {
+        if caravana {
+            (vidas(e.vidas_perdidas), -e.score) < (vidas(vidas_perdidas), -score)
+        } else {
+            e.score > score
+        }
+    };
+    1 + entradas.iter().filter(|e| e.jogador_id != uid && melhor(e)).count()
+}
+
+/// Posição de uma run que ficou abaixo do recorde do jogador (o servidor a apagou): o RANK que o
+/// placar dela teria. `None` se o jogo ou a tabela não puderem ser lidos.
+pub async fn posicao_fora_do_recorde(fs: &Firestore, uid: &str, game_id: &str, modo: Option<&str>, score: i64, vidas_perdidas: Option<i32>) -> Option<usize> {
+    let jogos = jogos_publicados(fs).await.ok()?;
+    let (partidas, _) = ler_partidas(fs, Some(game_id), &jogos).await.ok()?;
+    let tabela = tabela_do_modo(modo);
+    let entradas = placar::ranking_do_jogo(&partidas, game_id, Some(tabela), None);
+    Some(posicao_do_resultado(&entradas, uid, score, vidas_perdidas, tabela == "caravan"))
+}
+
 /// Posição do jogador se o melhor placar dele na tabela é o desta run.
 fn posicao_da_run(entradas: &[placar::EntradaJogo], uid: &str, run_id: &str) -> Option<usize> {
     // A run é o registro do jogador na tabela (o recorde dele: no Caravan, menos vidas perdidas e
@@ -230,6 +255,23 @@ mod tests {
             run_id: format!("run-{jogador}"),
             youtube_url: None,
         }
+    }
+
+    #[test]
+    fn posicao_de_uma_run_abaixo_do_recorde() {
+        let mut tabela = [entrada(1, "ana", 900), entrada(2, "bia", 800), entrada(3, "caio", 700)];
+        // Hi-Score: 750 fica atrás de Ana e Bia, à frente de Caio; os outros jogadores contam uma vez.
+        assert_eq!(posicao_do_resultado(&tabela, "davi", 750, None, false), 3);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", 100, None, false), 4);
+        // O próprio jogador não conta contra si (o recorde dele está na tabela).
+        assert_eq!(posicao_do_resultado(&tabela, "bia", 100, None, false), 3);
+        // Caravan: menos vidas perdidas vence; empate de vidas, mais pontos.
+        tabela[0].vidas_perdidas = Some(0);
+        tabela[1].vidas_perdidas = Some(2);
+        tabela[2].vidas_perdidas = Some(2);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", 100, Some(1), true), 2);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", 750, Some(2), true), 3);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", 5000, Some(3), true), 4);
     }
 
     #[test]
