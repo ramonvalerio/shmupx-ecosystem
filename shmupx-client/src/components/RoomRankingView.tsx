@@ -114,7 +114,12 @@ interface RoomRankingViewProps {
   /** uid e nome do jogador conectado: destacam a linha dele (YOU). */
   uid?: string;
   playerName?: string;
+  /** Tela de Eventos do jogo (aba depois do Ranking): a mesma tela, por enquanto vazia e sem jogadores. */
+  events?: boolean;
 }
+
+/** Eventos ainda sem dados: nada a buscar e nenhum jogador participando. */
+const NO_EVENTS = { status: "ready" as const, data: { jogo_id: "", titulo: "", modo: null, versao: null, total: 0, truncado: false, atualizado_em: "", entradas: [] }, reload: () => undefined };
 
 /**
  * Ranking do jogo, aberto na aba da sala. Online: `GET /api/ranking/jogos/{id}` do backend (melhor
@@ -126,7 +131,7 @@ interface RoomRankingViewProps {
  * Visual (proposta v2 aprovada): faixa do recorde com a placa 1ST, placar de fliperama com o Top 10
  * fixo e painel de detalhes em tabela; tudo chapado, linhas de 1px e sem brilho.
  */
-export default function RoomRankingView({ room, runs, uid, playerName }: RoomRankingViewProps) {
+export default function RoomRankingView({ room, runs, uid, playerName, events = false }: RoomRankingViewProps) {
   const { t, locale } = useI18n();
   const [scope, setScope] = useState<Scope>("online");
   const [mode, setMode] = useState<GameMode>("highscore");
@@ -137,15 +142,16 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   /** Vídeo tocando no detalhe do registro (o player do YouTube no lugar da miniatura). */
   const [playing, setPlaying] = useState<string | null>(null);
 
-  const ranking = useGameRanking(scope === "online" ? room.id : "", mode);
+  const liveRanking = useGameRanking(scope === "online" && !events ? room.id : "", mode);
+  const ranking = events ? NO_EVENTS : liveRanking;
   const online = useMemo(() => ranking.data?.entradas ?? [], [ranking.data]);
   // Runs desta sessão ainda sem resultado aceito (em andamento, analisando, não enviada); as aceitas
   // já estão no ranking local.
   const localRuns = useMemo(
-    () => runs.filter((run) => run.gameId === room.id && run.status !== "submitted").sort((a, b) => b.startedAt - a.startedAt),
-    [runs, room.id],
+    () => (events ? [] : runs.filter((run) => run.gameId === room.id && run.status !== "submitted").sort((a, b) => b.startedAt - a.startedAt)),
+    [runs, room.id, events],
   );
-  const localAll = useLocalRanking(uid, room.id, scope === "local");
+  const localAll = useLocalRanking(uid, room.id, scope === "local" && !events);
   // O Local respeita o modo escolhido: Hi-Score (runs sem modo incluídas), 1CC (zeradas sem continue) e
   // Caravan; no Caravan, quem perdeu menos vidas fica na frente e o placar desempata.
   const localRanking = useMemo(() => {
@@ -316,7 +322,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   }
 
   return (
-    <section className="room-ranking rk" aria-label={t("Ranking de {game}", { game: room.title })}>
+    <section className="room-ranking rk" aria-label={events ? t("Eventos de {game}", { game: room.title }) : t("Ranking de {game}", { game: room.title })}>
 
       <div className="room-ranking-filters" data-tutorial="ranking-filters">
         <div className="filter-group">
@@ -401,7 +407,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
             <span>{dateLabel}</span>
             <span className="rk-c">{t("Vídeo")}</span>
           </div>
-          {scope === "local" && localRecords.length === 0 && <p className="empty-state">{t("Nenhuma run deste jogo neste PC ainda. As runs válidas do Ranked ficam guardadas aqui.")}</p>}
+          {scope === "local" && localRecords.length === 0 && <p className="empty-state">{events ? t("Nenhuma participação em eventos de {game} neste PC ainda.", { game: room.title }) : t("Nenhuma run deste jogo neste PC ainda. As runs válidas do Ranked ficam guardadas aqui.")}</p>}
           {scope === "online" && ranking.status === "loading" && online.length === 0 && (
             <div className="rk-skeleton" role="status" aria-label={t("Carregando o ranking…")}>
               {[0, 1, 2, 3, 4].map((index) => <span key={index} />)}
@@ -410,8 +416,8 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
           {scope === "online" && ranking.status === "error" && <p className="empty-state" role="alert">{t("Não foi possível carregar o ranking agora.")} <button type="button" className="text-action" onClick={ranking.reload}>{t("Tentar de novo")}</button></p>}
           {scope === "online" && ranking.status === "ready" && online.length === 0 && (
             <div className="rk-empty">
-              <strong>{t("Nenhum resultado ainda")}</strong>
-              <p>{t("Seja o primeiro: jogue {game} em Ranked Mode no modo {mode}.", { game: room.title, mode: modeLabel })}</p>
+              <strong>{events ? t("Nenhum evento no momento") : t("Nenhum resultado ainda")}</strong>
+              <p>{events ? t("Quando um torneio ou desafio de {game} começar, ele aparece aqui para você participar.", { game: room.title }) : t("Seja o primeiro: jogue {game} em Ranked Mode no modo {mode}.", { game: room.title, mode: modeLabel })}</p>
             </div>
           )}
           {scope === "online" && online.length > 0 && visible.length === 0 && <p className="empty-state">{t("Nenhum jogador encontrado.")}</p>}

@@ -116,6 +116,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const [openRoomIds, setOpenRoomIds] = useState<string[]>(() => readOpenRooms(profile.uid));
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [rankingRoomIds, setRankingRoomIds] = useState<string[]>([]);
+  // Eventos do jogo: a aba depois do Ranking (uma das duas por sala; abrir uma fecha a outra).
+  const [eventsRoomIds, setEventsRoomIds] = useState<string[]>([]);
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
   // Menu lateral = os jogos abertos, na mesma ordem das abas; arrastar ali reordena as abas também.
   const railDrag = useDragReorder({ ids: openRoomIds, onReorder: setOpenRoomIds, axis: "y" });
@@ -156,6 +158,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       void leaveRoomPresence(replacing, profile.uid);
       clearRoomSession(profile.uid, replacing);
       setRankingRoomIds((current) => current.filter((roomId) => roomId !== replacing));
+      setEventsRoomIds((current) => current.filter((roomId) => roomId !== replacing));
     }
     roomJoinedAt(profile.uid, id);
     setOpenRoomIds((current) => {
@@ -180,6 +183,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     const remaining = openRoomIds.filter((roomId) => roomId !== id);
     setOpenRoomIds(remaining);
     setRankingRoomIds((current) => current.filter((roomId) => roomId !== id));
+    setEventsRoomIds((current) => current.filter((roomId) => roomId !== id));
     if (activeRoomId === id) {
       const next = remaining[Math.min(index, remaining.length - 1)] ?? null;
       setActiveRoomId(next);
@@ -188,6 +192,11 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   }
   function setRanking(id: string, open: boolean) {
     setRankingRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
+    if (open) setEventsRoomIds((current) => current.filter((roomId) => roomId !== id));
+  }
+  function setEvents(id: string, open: boolean) {
+    setEventsRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
+    if (open) setRankingRoomIds((current) => current.filter((roomId) => roomId !== id));
   }
   const isLibrary = section === "collection";
   // Versão instalada (tauri.conf.json), no rodapé: acompanha cada atualização sozinha.
@@ -198,7 +207,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // mostra, para abrir o ranking dali). A tela atual fica marcada; em outras telas (notificações,
   // perfil…) Minhas coleções é um botão de volta.
   function showCollection() { setSection("collection"); setActiveRoomId(null); }
-  function showRoom(id: string) { setSection("collection"); setRanking(id, false); activateRoom(id); }
+  function showRoom(id: string) { setSection("collection"); setRanking(id, false); setEvents(id, false); activateRoom(id); }
   // Em Minhas coleções, o jogo selecionado já aparece no menu (sala e Ranking como atalhos); a
   // marcação vermelha fica só na tela atual.
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId) ?? null;
@@ -207,8 +216,11 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   if (crumbRoom) {
     const inRoom = activeRoom !== null;
     const inRanking = inRoom && rankingRoomIds.includes(crumbRoom.id);
-    crumbs.push({ label: crumbRoom.title, onClick: () => (inRoom ? showRoom(crumbRoom.id) : openGame(crumbRoom.id)), current: inRoom && !inRanking });
+    const inEvents = inRoom && eventsRoomIds.includes(crumbRoom.id);
+    crumbs.push({ label: crumbRoom.title, onClick: () => (inRoom ? showRoom(crumbRoom.id) : openGame(crumbRoom.id)), current: inRoom && !inRanking && !inEvents });
     crumbs.push({ label: t("Ranking"), onClick: () => (inRoom ? setRanking(crumbRoom.id, true) : openGame(crumbRoom.id, true)), current: inRanking });
+    // Eventos: depois do Ranking. Fora da sala, abre a sala já nessa aba.
+    crumbs.push({ label: t("Eventos"), onClick: () => { if (!inRoom) openGame(crumbRoom.id); setEvents(crumbRoom.id, true); }, current: inEvents });
   }
 
   // Esc volta um nível no menu de navegação: Ranking → sala → Minhas coleções; telas internas
@@ -221,13 +233,14 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       if (focused instanceof HTMLElement && focused.matches("input,select,textarea,[contenteditable=true]")) return;
       if (section !== "collection") { setSection("collection"); setActiveRoomId(null); }
       else if (activeRoomId && rankingRoomIds.includes(activeRoomId)) setRanking(activeRoomId, false);
+      else if (activeRoomId && eventsRoomIds.includes(activeRoomId)) setEvents(activeRoomId, false);
       else if (activeRoomId) setActiveRoomId(null);
       else return;
       event.preventDefault();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [section, activeRoomId, rankingRoomIds, bigPicture.active]);
+  }, [section, activeRoomId, rankingRoomIds, eventsRoomIds, bigPicture.active]);
 
   return (
     <main ref={bigPicture.rootRef} className={`client-shell theme-${preferences.appearance} ${preferences.compact ? "dense-collection" : ""} ${bigPicture.active ? "big-picture" : ""}`}>
@@ -369,6 +382,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
             <CollectionPane uid={profile.uid} rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} compact={false} bigPicture={bigPicture.active} />
           ) : rankingRoomIds.includes(activeRoom.id) ? (
             <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} uid={profile.uid} playerName={profile.displayName} />
+          ) : eventsRoomIds.includes(activeRoom.id) ? (
+            <RoomRankingView key={`eventos-${activeRoom.id}`} room={activeRoom} runs={runs} uid={profile.uid} playerName={profile.displayName} events />
           ) : (
             renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true), showCollection: () => setActiveRoomId(null) })
           )}
