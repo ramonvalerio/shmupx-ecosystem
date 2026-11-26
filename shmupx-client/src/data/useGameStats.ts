@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, where, type Timestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, type Timestamp } from "firebase/firestore";
 import { db } from "../auth/firebase";
 
 export interface GameStats {
@@ -14,13 +14,34 @@ export interface GameStats {
 const millis = (value: unknown) => (value && typeof (value as Timestamp).toMillis === "function" ? (value as Timestamp).toMillis() : null);
 
 /**
- * Fichas gastas e tempo de jogo do jogador neste jogo: as gameplays dele (`gameplays`, que as
- * Security Rules só liberam para o dono). O treino não gasta ficha nem cria gameplay.
+ * Fichas gastas e tempo de jogo do jogador neste jogo: os totais que o backend mantém em
+ * `playerStats/{uid}_{gameId}` (o ranking online guarda só recordes, então as gameplays abaixo do
+ * recorde saem do banco). Sem esse documento (o jogador ainda não jogou depois da mudança), conta
+ * as gameplays dele como antes. As Security Rules só liberam os dois para o dono. O treino não gasta
+ * ficha nem cria gameplay.
  */
 export function useGameStats(uid: string | undefined, gameId: string): GameStats | null {
-  const [stats, setStats] = useState<GameStats | null>(null);
+  const [totals, setTotals] = useState<GameStats | null | undefined>(undefined);
+  const [fromGameplays, setFromGameplays] = useState<GameStats | null>(null);
   useEffect(() => {
-    if (!uid) { setStats(null); return; }
+    if (!uid) { setTotals(null); return; }
+    return onSnapshot(
+      doc(db, "playerStats", `${uid}_${gameId}`),
+      (snapshot) => {
+        if (!snapshot.exists()) { setTotals(null); return; }
+        const data = snapshot.data();
+        setTotals({
+          credits: typeof data.credits === "number" ? data.credits : 0,
+          seconds: typeof data.seconds === "number" ? data.seconds : 0,
+          lastAt: millis(data.lastStartedAt),
+        });
+      },
+      () => setTotals(null),
+    );
+  }, [uid, gameId]);
+  useEffect(() => {
+    // Só sem os totais do backend.
+    if (!uid || totals !== null) { setFromGameplays(null); return; }
     return onSnapshot(
       query(collection(db, "gameplays"), where("ownerId", "==", uid), where("gameId", "==", gameId)),
       (snapshot) => {
@@ -35,12 +56,12 @@ export function useGameStats(uid: string | undefined, gameId: string): GameStats
           const began = start ?? millis(item.data().createdAt) ?? millis(item.data().updatedAt);
           if (began !== null && (lastAt === null || began > lastAt)) lastAt = began;
         }
-        setStats({ credits: snapshot.size, seconds: Math.round(seconds), lastAt });
+        setFromGameplays({ credits: snapshot.size, seconds: Math.round(seconds), lastAt });
       },
-      () => setStats(null),
+      () => setFromGameplays(null),
     );
-  }, [uid, gameId]);
-  return stats;
+  }, [uid, gameId, totals]);
+  return totals ?? fromGameplays;
 }
 
 /** Último ranked: só a hora se foi hoje; senão a data e a hora ("24/11/2026 21:14"). */

@@ -33,6 +33,7 @@ beforeEach(async () => {
       "plans/old": { name: "Old", active: false },
       "gameplays/run-a": { ownerId: "alice", status: "approved", createdAt: now },
       "gameplays/run-b": { ownerId: "bob", status: "analyzing", createdAt: now },
+      "playerStats/alice_earthion": { ownerId: "alice", gameId: "earthion", credits: 3, seconds: 900 },
       "wallets/alice": { balance: 3 },
       "wallets/alice/entries/debit": { amount: -1 },
       "seasons/current": { published: true },
@@ -112,6 +113,14 @@ test("gameplay history is private and queries must constrain owner", async () =>
   await assertFails(getDocs(collection(store, "gameplays")));
   await assertFails(updateDoc(doc(store, "gameplays/run-a"), { status: "approved", score: 999999 }));
   await assertFails(setDoc(doc(store, "gameplays/forged"), { ownerId: "alice", status: "approved" }));
+});
+
+test("player stats are private to the owner and written only by the server", async () => {
+  await assertSucceeds(getDoc(doc(db("alice"), "playerStats/alice_earthion")));
+  await assertFails(getDoc(doc(db("bob"), "playerStats/alice_earthion")));
+  await assertFails(getDoc(doc(db(), "playerStats/alice_earthion")));
+  await assertFails(updateDoc(doc(db("alice"), "playerStats/alice_earthion"), { credits: 0 }));
+  await assertFails(setDoc(doc(db("alice"), "playerStats/alice_forged"), { ownerId: "alice", credits: 0 }));
 });
 
 test("both ranking queries work only for published seasons and reject score edits", async () => {

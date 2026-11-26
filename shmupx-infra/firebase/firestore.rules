@@ -187,6 +187,13 @@ service cloud.firestore {
       allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
       allow write: if false;
     }
+    // playerStats/{uid}_{gameId}: totais do jogador num jogo (fichas gastas, tempo de jogo, última
+    // run), escritos só pelo backend. O ranking online guarda só recordes; o histórico de runs fica
+    // no ranking local do Client.
+    match /playerStats/{statId} {
+      allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
+      allow write: if false;
+    }
     match /wallets/{uid} {
       allow read: if owns(uid);
       allow write: if false;

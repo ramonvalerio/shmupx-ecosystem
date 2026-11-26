@@ -129,6 +129,7 @@ pub async fn iniciar_corrida_safe(
         video_path,
         manter_video,
         jogo_pid,
+        modo: modo.clone(),
     });
     drop(guard);
 
@@ -187,6 +188,8 @@ struct RunAnalysisPayload {
     position: Option<usize>,
     /// Pódio (top 3 do Hi-Score) do jogo já com esta run (`submitted`): a sala reordena se mudou.
     podium: Option<Vec<backend::LugarNoPodio>>,
+    /// `submitted`: a run ficou no ranking online (é o recorde do jogador); senão, só no local.
+    online: Option<bool>,
 }
 
 fn emit_analysis(app: &AppHandle, jogo_id: &str, pid: u32, status: &str, message: Option<String>) {
@@ -205,14 +208,36 @@ fn emit_run(app: &AppHandle, jogo_id: &str, pid: u32, run_id: Option<&str>, stat
             score,
             position: None,
             podium: None,
+            online: None,
         },
     );
 }
 
-/// Resultado aceito: avisa a interface (placar, posição e pódio) e decide a cópia da live da
-/// run: no top 3, vai para o canal oficial da ShmupX; senão, é apagada.
-fn run_enviada(app: &AppHandle, job: &AnaliseJob, score: i64, resposta: backend::SubmeterRunResponse) {
+/// Placar de uma run aceita (o que vai para o ranking local).
+struct Placar {
+    score: i64,
+    vidas_perdidas: i32,
+    continues: i32,
+    zerou: bool,
+}
+
+/// Resultado aceito: guarda a run no ranking local, avisa a interface (placar, posição, pódio e se
+/// ficou no ranking online) e decide a live da run: no top 3, vai para o canal oficial da ShmupX.
+fn run_enviada(app: &AppHandle, job: &AnaliseJob, placar: Placar, resposta: backend::SubmeterRunResponse) {
     pendentes::remover(app, &job.run_id);
+    let agora = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    super::ranking_local::registrar(app, super::ranking_local::EntradaLocal {
+        run_id: job.run_id.clone(),
+        jogo_id: job.jogo_id.clone(),
+        uid: pendentes::uid_do_token(&job.token),
+        score: placar.score,
+        vidas_perdidas: placar.vidas_perdidas,
+        continues: placar.continues,
+        zerou: placar.zerou,
+        modo: job.modo.clone(),
+        quando: agora,
+        online: resposta.online,
+    });
     // Vídeo só para a validação ("Gravar gameplays" desmarcado ou live): sai depois do envio.
     if !job.manter_video {
         if let Some(video) = &job.video_path {
@@ -227,9 +252,10 @@ fn run_enviada(app: &AppHandle, job: &AnaliseJob, score: i64, resposta: backend:
             run_id: Some(job.run_id.clone()),
             status: "submitted".into(),
             message: None,
-            score: Some(score),
+            score: Some(placar.score),
             position: resposta.posicao,
             podium: Some(resposta.podio),
+            online: Some(resposta.online),
         },
     );
     match resposta.destaque {
@@ -249,6 +275,8 @@ struct AnaliseJob {
     /// O vídeo fica na pasta ("Gravar gameplays" marcado, fora da live); senão, sai depois do envio.
     manter_video: bool,
     jogo_pid: Option<u32>,
+    /// Modo escolhido no Play Ranked (vai para o ranking local).
+    modo: Option<String>,
 }
 
 /// O ID token do Firebase vale ~1 h: uma análise longa na fila envia com o token atual da sessão.
@@ -273,6 +301,7 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
         video_path: handle.video_path,
         manter_video: handle.manter_video,
         jogo_pid: handle.jogo_pid,
+        modo: handle.modo,
     };
     match backend::encerrar_run(&token_atual(app, &job.token), &job.run_id).await {
         Ok(()) => {}
@@ -334,7 +363,7 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             if resultado.zerou { ", zerou" } else { "" }
         );
         match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0, Some(resultado.zerou)).await {
-            Ok(resposta) => run_enviada(app, &job, resultado.placar, resposta),
+            Ok(resposta) => run_enviada(app, &job, Placar { score: resultado.placar, vidas_perdidas: resultado.vidas_perdidas, continues: 0, zerou: resultado.zerou }, resposta),
             Err(error) => {
                 log::warn!("capture: run {} (memória) não enviada: {error}", job.run_id);
                 emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(format!("falha ao enviar resultado: {error}")), None);
@@ -364,11 +393,12 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
         )
         .await
         .map_err(|error| format!("vídeo preservado; falha ao enviar resultado: {error}"))?;
-        Ok::<(i64, backend::SubmeterRunResponse), String>((result.score_bruto, resposta))
+        let placar = Placar { score: result.score_bruto, vidas_perdidas: result.vidas_perdidas, continues: result.continues_usados, zerou: false };
+        Ok::<(Placar, backend::SubmeterRunResponse), String>((placar, resposta))
     }
     .await;
     match result {
-        Ok((score, resposta)) => run_enviada(app, &job, score, resposta),
+        Ok((placar, resposta)) => run_enviada(app, &job, placar, resposta),
         Err(error) => {
             log::warn!("capture: run {} não enviada: {error}", job.run_id);
             // O vídeo fica: o jogador pode analisar de novo (Ranking da sala › Analisar de novo).
@@ -407,7 +437,7 @@ pub fn reanalisar_run(app: AppHandle, run_id: String) -> Result<(), String> {
         .snapshot()
         .token
         .ok_or("sem sessão: entre com sua conta Google")?;
-    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: Some(run.video_path), manter_video: !run.temporario, jogo_pid: None };
+    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: Some(run.video_path), manter_video: !run.temporario, jogo_pid: None, modo: None };
     emit_run(&app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
     tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
     Ok(())

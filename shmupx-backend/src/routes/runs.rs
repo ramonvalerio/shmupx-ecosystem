@@ -14,7 +14,7 @@ use crate::routes::notificacoes::versao_do_client;
 use crate::services::destaques::{self, DepoisDoEnvio};
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
 use crate::services::youtube::YouTube;
-use crate::services::{jogo_aberto, usuarios, versoes};
+use crate::services::{estatisticas, jogo_aberto, recordes, usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
@@ -71,7 +71,13 @@ async fn iniciar_run(
     let live_broadcast_id = payload.live_broadcast_id.filter(|id| !id.is_empty());
     let evento_id = payload.evento_id.filter(|id| !id.is_empty());
     let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem, live_broadcast_id, evento_id };
+    // Totais do jogador neste jogo (fichas gastas, tempo de jogo): criados antes da run nova, com o
+    // que as gameplays antigas registram, e somados depois que ela começa.
+    if gameplays::id_valido(&payload.jogo_id) {
+        estatisticas::garantir(&firestore, &usuario.uid, &payload.jogo_id).await;
+    }
     let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
+    estatisticas::run_comecou(&firestore, &usuario.uid, &payload.jogo_id, run.server_started_at).await;
     Ok((StatusCode::CREATED, Json(run)))
 }
 
@@ -116,10 +122,13 @@ struct SubmeterRunPayload {
 }
 
 /// Resultado registrado, com a posição da run, o pódio da sala e o destaque (top 3 com live).
+/// `online`: a run é o recorde do jogador (em alguma tabela) e ficou no ranking online; senão ela
+/// vale só no ranking local do Client e saiu do banco.
 #[derive(Debug, Serialize)]
 struct RespostaEnvio {
     #[serde(flatten)]
     run: RunSubmetida,
+    online: bool,
     #[serde(flatten)]
     depois: DepoisDoEnvio,
 }
@@ -139,8 +148,15 @@ async fn submeter_run(
         zerou: payload.zerou,
     };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
+    // Ranking online só com o recorde: a run atual contra o que está no banco.
+    let online = recordes::manter_so_os_recordes(&firestore, &usuario.uid, &payload.jogo_id, &payload.run_id)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("recordes: run {}: {e:?}", payload.run_id);
+            true
+        });
     let depois = destaques::depois_do_envio(&firestore, youtube.as_deref(), &usuario.uid, &payload.run_id, &payload.jogo_id).await;
-    Ok(Json(RespostaEnvio { run, depois }))
+    Ok(Json(RespostaEnvio { run, online, depois }))
 }
 
 #[derive(Debug, Deserialize)]

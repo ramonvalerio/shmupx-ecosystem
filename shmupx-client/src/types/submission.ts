@@ -17,6 +17,8 @@ export interface SessionRun {
   podium?: PodiumPlace[];
   /** Ranked com live no top 3: a live indo para o canal oficial da ShmupX. */
   highlight?: RunHighlight;
+  /** Enviada: ficou no ranking online (é o recorde do jogador); `false`, só no ranking local. */
+  online?: boolean;
 }
 
 /** Um dos 3 primeiros do ranking do jogo da sala. */
@@ -54,6 +56,8 @@ export interface RunAnalysisEvent {
   score?: number | null;
   position?: number | null;
   podium?: PodiumPlace[] | null;
+  /** `submitted`: a run ficou no ranking online (recorde) ou só no local. */
+  online?: boolean | null;
 }
 
 /** Run "Não enviada" guardada pelo Client (`runs_pendentes`), com o vídeo ainda no disco. */
@@ -91,7 +95,7 @@ export function applyRunAnalysis(runs: SessionRun[], event: RunAnalysisEvent, no
     if (!sameRun && !samePid) return run;
     return { ...run, runId: runId ?? run.runId, status: event.status as SessionRun["status"], endedAt: run.endedAt ?? now,
       message: event.message ?? undefined, score: event.score ?? run.score,
-      position: event.position ?? run.position, podium: event.podium ?? run.podium };
+      position: event.position ?? run.position, podium: event.podium ?? run.podium, online: event.online ?? run.online };
   });
 }
 

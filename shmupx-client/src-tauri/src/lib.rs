@@ -44,6 +44,7 @@ pub fn run() {
             capture::commands::runs_pendentes,
             capture::commands::reanalisar_run,
             capture::commands::descartar_run_pendente,
+            capture::ranking_local::ranking_local,
             capture::destino::gravacoes_destino,
             capture::destino::gravacoes_definir_destino,
             capture::destino::gravacoes_definir_gravar,

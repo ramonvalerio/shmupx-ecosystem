@@ -10,6 +10,7 @@ pub mod gravacao;
 #[cfg(windows)]
 pub mod janela_nv12;
 pub mod pendentes;
+pub mod ranking_local;
 pub mod run_timer;
 pub mod state;
 

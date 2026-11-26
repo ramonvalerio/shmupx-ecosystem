@@ -130,6 +130,13 @@ pub struct SubmeterRunResponse {
     pub podio: Vec<LugarNoPodio>,
     #[serde(default)]
     pub destaque: Option<crate::live::destaque::Destaque>,
+    /// A run ficou no ranking online (é o recorde do jogador). Backend antigo, sem o campo: sim.
+    #[serde(default = "sim")]
+    pub online: bool,
+}
+
+fn sim() -> bool {
+    true
 }
 
 /// Por que o encerramento da run falhou.

@@ -9,6 +9,7 @@ import type { GameRankingEntry } from "../types/ranking";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import type { SessionRun } from "../types/submission";
 import { RUN_LABELS } from "./AccountPages";
+import { useLocalRanking } from "../data/useLocalRanking";
 
 type Scope = "local" | "online";
 
@@ -85,6 +86,8 @@ interface RankRecord {
   rating?: number;
   verified?: boolean;
   runStatus?: SessionRun["status"];
+  /** Run do ranking local: ficou também no ranking online (o recorde) ou só aqui. */
+  localStatus?: "online" | "local";
   /** Vídeo do YouTube: live no ar agora (presença na sala) ou o vídeo da run (quando o backend expuser). */
   video?: { id: string; live: boolean };
   run?: SessionRun;
@@ -92,6 +95,8 @@ interface RankRecord {
 
 /** Posição no estilo placar de fliperama: 1ST, 2ND, 3RD, 4TH… */
 function Ordinal({ n }: { n: number }) {
+  // Run local ainda sem resultado (em andamento, analisando, não enviada): sem posição.
+  if (n <= 0) return <>—</>;
   const tens = n % 100;
   const suffix = tens >= 11 && tens <= 13 ? "TH" : ({ 1: "ST", 2: "ND", 3: "RD" } as Record<number, string>)[n % 10] ?? "TH";
   return <>{n}<sup>{suffix}</sup></>;
@@ -111,7 +116,8 @@ interface RoomRankingViewProps {
 /**
  * Ranking do jogo, aberto na aba da sala. Online: `GET /api/ranking/jogos/{id}` do backend (melhor
  * placar de cada jogador no modo escolhido), com a faixa do recorde e o placar do Top 10. Local:
- * runs deste jogo observadas nesta sessão. Avatar e nick vêm de `publicProfiles/{uid}`; o LIVE, da
+ * o ranking local do jogador (todas as runs válidas dele neste PC, do maior placar para o menor;
+ * `useLocalRanking`), com as runs desta sessão ainda sem resultado no topo. Avatar e nick vêm de `publicProfiles/{uid}`; o LIVE, da
  * presença na sala (quem está transmitindo agora). Campos que o backend ainda não envia (plataforma,
  * início da gameplay, duração e vídeo da run) aparecem como "—" em vez de inventados.
  * Visual (proposta v2 aprovada): faixa do recorde com a placa 1ST, placar de fliperama com o Top 10
@@ -128,10 +134,13 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
 
   const ranking = useGameRanking(scope === "online" ? room.id : "", mode);
   const online = useMemo(() => ranking.data?.entradas ?? [], [ranking.data]);
+  // Runs desta sessão ainda sem resultado aceito (em andamento, analisando, não enviada); as aceitas
+  // já estão no ranking local.
   const localRuns = useMemo(
-    () => runs.filter((run) => run.gameId === room.id).sort((a, b) => b.startedAt - a.startedAt),
+    () => runs.filter((run) => run.gameId === room.id && run.status !== "submitted").sort((a, b) => b.startedAt - a.startedAt),
     [runs, room.id],
   );
+  const localRanking = useLocalRanking(uid, room.id, scope === "local");
 
   // Quem está ao vivo nesta sala agora (o próprio jogador vem do estado local da live).
   const presence = useRoomPresence(room.id, uid ?? "");
@@ -171,9 +180,9 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
     };
   }), [online, liveByUid, uid, mode]);
 
-  const localRecords = useMemo<RankRecord[]>(() => localRuns.map((run, index) => ({
+  const localRecords = useMemo<RankRecord[]>(() => [...localRuns.map((run) => ({
     key: run.id,
-    position: index + 1,
+    position: 0,
     uid,
     you: true,
     name: playerName || t("Você"),
@@ -184,7 +193,19 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
     runStatus: run.status,
     video: run.status === "recording" && myLiveId ? { id: myLiveId, live: true } : undefined,
     run,
-  })), [localRuns, uid, playerName, myLiveId, t]);
+  })), ...localRanking.map((entry, index) => ({
+    key: entry.run_id,
+    position: index + 1,
+    uid,
+    you: true,
+    name: playerName || t("Você"),
+    score: entry.score,
+    submittedAt: entry.quando,
+    mode: modeOf(entry.modo) ?? "highscore",
+    continues: entry.continues,
+    livesLost: entry.vidas_perdidas,
+    localStatus: (entry.online ? "online" : "local") as RankRecord["localStatus"],
+  }))], [localRuns, localRanking, uid, playerName, myLiveId, t]);
 
   const records = scope === "online" ? onlineRecords : localRecords;
   const term = query.trim().toLowerCase();
@@ -193,7 +214,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
     : records;
   const leader = scope === "online" ? onlineRecords.find((record) => record.position === 1) : undefined;
   const runnerUp = scope === "online" ? onlineRecords.find((record) => record.position === 2) : undefined;
-  const total = scope === "online" ? ranking.data?.total ?? online.length : localRecords.length;
+  const total = scope === "online" ? ranking.data?.total ?? online.length : localRanking.length;
 
   // Sem escolha: o 1º lugar (ou a run mais recente) já aparece nos detalhes.
   const current = records.find((record) => record.key === selected) ?? (selected === null ? visible[0] : undefined);
@@ -228,6 +249,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
 
   function statusOf(record: RankRecord): { label: string; tone: string } {
     if (record.runStatus) return { label: t(RUN_LABELS[record.runStatus]), tone: record.runStatus };
+    if (record.localStatus) return record.localStatus === "online" ? { label: t("No ranking online"), tone: "verified" } : { label: t("Só no ranking local"), tone: "review" };
     return record.verified ? { label: t("Verificado"), tone: "verified" } : { label: t("Em revisão"), tone: "review" };
   }
 
@@ -352,7 +374,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
             <span>{dateLabel}</span>
             <span className="rk-c">{t("Vídeo")}</span>
           </div>
-          {scope === "local" && localRecords.length === 0 && <p className="empty-state">{t("Nenhuma run deste jogo nesta sessão. Inicie o jogo pela sala para registrar uma.")}</p>}
+          {scope === "local" && localRecords.length === 0 && <p className="empty-state">{t("Nenhuma run deste jogo neste PC ainda. As runs válidas do Ranked ficam guardadas aqui.")}</p>}
           {scope === "online" && ranking.status === "loading" && online.length === 0 && (
             <div className="rk-skeleton" role="status" aria-label={t("Carregando o ranking…")}>
               {[0, 1, 2, 3, 4].map((index) => <span key={index} />)}
@@ -430,7 +452,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
               {onlineRecords.some((record) => !record.platform || !record.video) && <span>{t("Plataforma e vídeo aparecem quando o servidor enviar esses dados")}</span>}
             </footer>
           )}
-          {scope === "local" && localRecords.length > 0 && <p className="muted room-ranking-note">{t("O placar de cada run aparece aqui quando o backend publicar o resultado aprovado.")}</p>}
+          {scope === "local" && localRecords.length > 0 && <p className="muted room-ranking-note">{t("Todas as suas runs válidas deste jogo neste PC. Só o seu recorde vai para o ranking online.")}</p>}
         </div>
       </div>
 
@@ -444,7 +466,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
           const sub = [real ?? (handle ? `@${handle}` : undefined), current.you ? t("Você") : undefined].filter(Boolean).join(" · ");
           const stats: { label: string; value: ReactNode; tone?: string }[] = online_ ? [
             { label: t("Enviado em"), value: current.submittedAt !== undefined ? formatWhen(current.submittedAt, locale) : dash },
-            { label: t("Posição"), value: t("{position}º de {total}", { position: current.position, total }) },
+            { label: t("Posição"), value: current.position > 0 ? t("{position}º de {total}", { position: current.position, total }) : dash },
             { label: t("Modo"), value: current.mode ? t(MODE_LABEL[current.mode]) : dash },
             { label: t("Continues"), value: current.continues === undefined ? dash : current.continues === 0 ? t("0 · 1CC") : current.continues },
             { label: t("Vidas perdidas"), value: current.livesLost ?? dash },

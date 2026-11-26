@@ -107,8 +107,10 @@ function RunOutcome({ run, onOpenRanking }: { run: SessionRun; onOpenRanking: ()
   const tone = run.status === "submitted" ? "success" : run.status === "failed" ? "warning" : "";
   const text =
     run.status === "analyzing" ? t("Analisando a gameplay da última run. O resultado aparece aqui quando terminar.")
-    : run.status === "submitted" ? t("Última run enviada: o resultado entrou em revisão.")
-    : run.status === "expired" ? t("O tempo da ficha acabou e a gravação foi encerrada; a gameplay está sendo processada.")
+    : run.status === "submitted" ? (run.online === false
+      ? t("Run salva no seu ranking local. Ela ficou abaixo do seu recorde, que continua no ranking online.")
+      : t("Novo recorde! A run entrou no ranking online (em revisão) e no seu ranking local."))
+    : run.status === "expired" ? t("O tempo da ficha acabou e a partida foi encerrada; o resultado está sendo processado.")
     : t("A última run não foi enviada: {reason}", { reason: run.message ?? t("motivo não informado") });
   const highlight = run.highlight;
   return (

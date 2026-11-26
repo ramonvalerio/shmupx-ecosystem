@@ -254,15 +254,23 @@ pub async fn encerrar(fs: &Firestore, uid: &str, run_id: &str) -> Result<RunEnce
         fs.desfazer(&tx).await;
     }
     match saida? {
-        Encerramento::Encerrada(run) | Encerramento::JaEncerrada(run) => Ok(run),
-        Encerramento::Excedeu => Err(AppError::conflict("a gameplay passou do tempo da ficha; a run expirou")),
+        Encerramento::Encerrada(run, jogo, segundos) => {
+            crate::services::estatisticas::run_terminou(fs, uid, &jogo, segundos).await;
+            Ok(run)
+        }
+        Encerramento::JaEncerrada(run) => Ok(run),
+        Encerramento::Excedeu(jogo, segundos) => {
+            crate::services::estatisticas::run_terminou(fs, uid, &jogo, segundos).await;
+            Err(AppError::conflict("a gameplay passou do tempo da ficha; a run expirou"))
+        }
     }
 }
 
+/// Como a run terminou; nos fins novos, o jogo e os segundos jogados (para os totais do jogador).
 enum Encerramento {
-    Encerrada(RunEncerrada),
+    Encerrada(RunEncerrada, String, i64),
     JaEncerrada(RunEncerrada),
-    Excedeu,
+    Excedeu(String, i64),
 }
 
 async fn encerrar_na_transacao(fs: &Firestore, tx: &str, uid: &str, run_id: &str) -> Result<Encerramento, AppError> {
@@ -285,10 +293,13 @@ async fn encerrar_na_transacao(fs: &Firestore, tx: &str, uid: &str, run_id: &str
 
     // Microssegundos, a precisão que o Firestore guarda: o valor devolvido bate com o gravado.
     let agora = Utc::now().trunc_subsecs(6);
+    let jogo = ler_texto(&gameplay, "gameId").unwrap_or_default();
+    let max_duracao = ler_inteiro(&captura, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS);
+    let segundos = ler_data(&captura, "serverStartedAt").map(|inicio| (agora - inicio).num_seconds().clamp(0, max_duracao)).unwrap_or(0);
     if !dentro_do_tempo(&captura, agora)? {
         let escrita = atualizar(fs, &caminho, campos(&[("status", texto("expired")), ("updatedAt", data(agora))]), Some(&["status", "updatedAt"]));
         fs.confirmar(tx, vec![escrita]).await?;
-        return Ok(Encerramento::Excedeu);
+        return Ok(Encerramento::Excedeu(jogo, segundos));
     }
     let escrita = atualizar(
         fs,
@@ -301,7 +312,7 @@ async fn encerrar_na_transacao(fs: &Firestore, tx: &str, uid: &str, run_id: &str
         Some(&["status", "updatedAt", "capture.serverEndedAt"]),
     );
     fs.confirmar(tx, vec![escrita]).await?;
-    Ok(Encerramento::Encerrada(RunEncerrada { run_id: run_id.to_string(), status: "processing", server_ended_at: agora }))
+    Ok(Encerramento::Encerrada(RunEncerrada { run_id: run_id.to_string(), status: "processing", server_ended_at: agora }, jogo, segundos))
 }
 
 pub async fn submeter(
