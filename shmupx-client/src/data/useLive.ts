@@ -23,7 +23,7 @@ export interface LiveState {
 /** Como abrir o jogo depois que a live entra no ar (Rust `live::Abertura`). */
 export type LiveLaunch =
   | { platform: "steam"; steamAppId: number }
-  | { platform: "emulator"; roms: string[]; pasta: string | null; motorVideo: unknown; motorControles: unknown; caravanSegundos?: number | null; cartaoJogador?: boolean };
+  | { platform: "emulator"; roms: string[]; pasta: string | null; motorVideo: unknown; motorControles: unknown; caravanSegundos?: number | null; cartaoJogador?: boolean; idioma?: "pt" | "en" };
 
 const IDLE: LiveState = { status: "idle", public: false, ended_by_time_limit: false, silent: false, game_open: false };
 

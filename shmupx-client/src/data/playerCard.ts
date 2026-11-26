@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { DEFAULT_AVATAR, readMyPublicProfile } from "./publicProfile";
+import { readPreferences } from "../components/settingsState";
 
 /**
  * Cartão do jogador para a tela final do Caravan no ShmupX Emulator: a foto do avatar em círculo, sem
@@ -69,9 +70,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Campos de abertura do ShmupX Emulator para uma partida ranked: o tempo do Caravan (só no Caravan) e
  * o cartão do jogador da tela final (game over ou fim do tempo). Em treino, nada.
  */
-export async function rankedLaunchFields(seconds: number, caravan: boolean, ranked: boolean): Promise<{ caravanSegundos: number | null; cartaoJogador: boolean }> {
-  if (!ranked) return { caravanSegundos: null, cartaoJogador: false };
-  return { caravanSegundos: caravan ? seconds : null, cartaoJogador: await preparePlayerCard("") };
+export async function rankedLaunchFields(seconds: number, caravan: boolean, ranked: boolean): Promise<{ caravanSegundos: number | null; cartaoJogador: boolean; idioma: "pt" | "en" }> {
+  // O idioma do Client (português ou inglês) vale para os rótulos do cartão do motor.
+  const idioma = readPreferences().language === "en" ? "en" : "pt";
+  if (!ranked) return { caravanSegundos: null, cartaoJogador: false, idioma };
+  return { caravanSegundos: caravan ? seconds : null, cartaoJogador: await preparePlayerCard(""), idioma };
 }
 
 /**

@@ -295,6 +295,8 @@ pub struct Motor {
     /// Ranked: arquivo onde o Client grava a posição no ranking, que o motor mostra na tela final
     /// (`SHMUPX_POSICAO_ARQUIVO`).
     pub posicao_arquivo: Option<PathBuf>,
+    /// Idioma dos rótulos do cartão de resultado: `pt` ou `en` (`SHMUPX_IDIOMA`).
+    pub idioma: Option<String>,
 }
 
 /// Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Valores ausentes ficam
@@ -514,7 +516,7 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     }
     let exe = pastas.into_iter().map(|p| p.join(MOTOR_EXE)).find(|e| e.is_file())?;
     let dados = app.path().app_data_dir().ok()?.join("engine");
-    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None })
+    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None, idioma: None })
 }
 
 /// Nome curto de ROM (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
@@ -614,6 +616,9 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
         }
         if let Some(arquivo) = &motor.posicao_arquivo {
             comando.env("SHMUPX_POSICAO_ARQUIVO", arquivo);
+        }
+        if let Some(idioma) = &motor.idioma {
+            comando.env("SHMUPX_IDIOMA", idioma);
         }
     }
     let scanlines_disponiveis = pasta_do_motor.join("bgfx").join("chains").join(format!("{CADEIA_SCANLINES}.json")).is_file();
