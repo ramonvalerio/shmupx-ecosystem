@@ -75,41 +75,34 @@ export async function rankedLaunchFields(seconds: number, caravan: boolean, rank
 }
 
 /**
- * Imagem da posição no ranking para a tela final do motor: a medalha (ouro, prata ou bronze) no top
- * 3 e "1º LUGAR" (valor em branco, rótulo em azul). Chega depois que o servidor aceita a run; o
- * motor a mostra assim que o arquivo aparece. Fora do app desktop, nada.
+ * Imagem da posição no ranking para a tela final do motor: "RANK N" em dourado, com a medalha (ouro,
+ * prata ou bronze) ao lado no top 3. Chega depois que o servidor aceita a run; o motor a mostra assim
+ * que o arquivo aparece. Fora do app desktop, nada.
  */
 export async function publishPlacement(position: number): Promise<void> {
   if (!isTauri() || !Number.isInteger(position) || position < 1) return;
   try {
     await document.fonts.load('64px "Share Tech"');
-    const HEIGHT = 112, GAP = 20;
+    const HEIGHT = 112, GAP = 22, GOLD = "#ffd76a";
     const medal = position <= 3 ? await loadImage(`/img/medals/medal-${position}.png`) : null;
-    const number = `${position}º`;
+    const text = `RANK ${position}`;
     const measure = document.createElement("canvas").getContext("2d")!;
-    measure.font = `${HEIGHT * 0.62}px "Share Tech"`;
-    const numberWidth = Math.ceil(measure.measureText(number).width);
-    measure.font = `${HEIGHT * 0.34}px "Share Tech"`;
-    const labelWidth = Math.ceil(measure.measureText("LUGAR").width);
+    measure.font = `${HEIGHT * 0.66}px "Share Tech"`;
+    const textWidth = Math.ceil(measure.measureText(text).width);
     const canvas = document.createElement("canvas");
-    canvas.width = (medal ? HEIGHT + GAP : 0) + numberWidth + GAP + labelWidth + 8;
+    canvas.width = (medal ? HEIGHT + GAP : 0) + textWidth + 8;
     canvas.height = HEIGHT;
     const ctx = canvas.getContext("2d")!;
     let x = 0;
     if (medal) { ctx.drawImage(medal, 0, 0, HEIGHT, HEIGHT); x = HEIGHT + GAP; }
+    ctx.font = `${HEIGHT * 0.66}px "Share Tech"`;
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
     ctx.lineWidth = 8;
     ctx.strokeStyle = "#100e2c";
-    // Posição em branco (valor) e o rótulo em azul, com o mesmo contorno escuro dos números do motor.
-    ctx.font = `${HEIGHT * 0.62}px "Share Tech"`;
-    ctx.strokeText(number, x, HEIGHT / 2 + 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(number, x, HEIGHT / 2 + 2);
-    ctx.font = `${HEIGHT * 0.34}px "Share Tech"`;
-    ctx.strokeText("LUGAR", x + numberWidth + GAP, HEIGHT / 2 + 8);
-    ctx.fillStyle = "#57fcff";
-    ctx.fillText("LUGAR", x + numberWidth + GAP, HEIGHT / 2 + 8);
+    ctx.strokeText(text, x, HEIGHT / 2 + 3);
+    ctx.fillStyle = GOLD;
+    ctx.fillText(text, x, HEIGHT / 2 + 3);
     await invoke("salvar_posicao_jogador", { pngBase64: canvas.toDataURL("image/png").split(",")[1] });
   } catch (error) {
     console.warn("posição do jogador não gerada:", error);
