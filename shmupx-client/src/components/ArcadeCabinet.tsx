@@ -231,7 +231,7 @@ export function ArcadeCabinet({ room, className = "", video: withVideo = false, 
   return (
     <>
     {configuring && <EmulatorControlsDialog onClose={() => setConfiguring(false)} />}
-    {monitorOpen && <MonitorSettingsDialog onClose={() => setMonitorOpen(false)} />}
+    {monitorOpen && <MonitorSettingsDialog art={art.src} game={room.title} onClose={() => setMonitorOpen(false)} />}
     {showVideo && modalStart !== null && <VideoModal title={room.title} src={video!} start={modalStart} onClose={(time) => { setResume({ time }); setModalStart(null); }} />}
     <svg className={`arcade-cabinet ${tate ? "is-tate" : ""} ${controls ? "is-configurable" : ""} ${className}`} viewBox="22 0 276 327" role="img" aria-label={room.title}
       onClick={controls ? (event) => { if ((event.target as Element).closest("[data-cabinet-screen]")) setMonitorOpen(true); else setConfiguring(true); } : undefined}>

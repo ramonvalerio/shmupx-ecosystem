@@ -1,0 +1,133 @@
+/* Monitor dos jogos (MonitorSettingsDialog): monitor de arcade — o tubo de CRT com a prévia à
+   esquerda e o painel de serviço à direita. Share Tech só em peso normal: destaque por tamanho e cor. */
+
+.arcade-monitor {
+  --am-ink: #07090a;
+  --am-metal: #151819;
+  --am-rule: #ffffff1a;
+  --am-dim: #8a9aa1;
+  position: relative;
+  width: min(920px, 100%);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  border: 1px solid #57fcff33;
+  border-radius: 6px;
+  background:
+    radial-gradient(120% 80% at 20% 0%, #57fcff0f, transparent 60%),
+    linear-gradient(180deg, #1b1f20, var(--am-metal) 40%, #101213);
+  box-shadow: 0 30px 90px #000c, inset 0 1px 0 #ffffff12;
+  color: #e8f6f8;
+  font-weight: 400;
+}
+.arcade-monitor:focus { outline: none; }
+.arcade-monitor button, .arcade-monitor h2, .arcade-monitor h3 { font-family: inherit; font-weight: 400; }
+
+/* Cantoneiras ciano, como no ranking. */
+.am-corner { position: absolute; width: 14px; height: 14px; border-color: var(--cyan); border-style: solid; border-width: 0; pointer-events: none; }
+.am-corner.is-tl { top: 8px; left: 8px; border-top-width: 2px; border-left-width: 2px; }
+.am-corner.is-tr { top: 8px; right: 8px; border-top-width: 2px; border-right-width: 2px; }
+.am-corner.is-bl { bottom: 8px; left: 8px; border-bottom-width: 2px; border-left-width: 2px; }
+.am-corner.is-br { bottom: 8px; right: 8px; border-bottom-width: 2px; border-right-width: 2px; }
+
+.am-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 26px 30px 18px; border-bottom: 1px solid var(--am-rule); }
+.am-kicker { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: var(--cyan); }
+.am-head h2 { margin: 0 0 6px; font-size: 34px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 18px #57fcff55; }
+.am-head p { margin: 0; max-width: 520px; font-size: 13px; line-height: 1.6; color: #b3b3b3; }
+.am-close { flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--am-rule); border-radius: 3px; background: var(--am-ink); color: #d7e4e8; font-size: 16px; cursor: pointer; }
+.am-close:hover, .am-close:focus-visible { border-color: var(--cyan); color: var(--cyan); outline: none; }
+
+.am-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; padding: 24px 30px; }
+
+/* O tubo. */
+.am-crt { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.am-bezel {
+  padding: 22px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #26292b, #0d0f10 55%, #1a1d1e);
+  box-shadow: inset 0 2px 0 #ffffff14, inset 0 -3px 8px #000a, 0 10px 30px #0009;
+}
+.am-screen {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 22px / 26px;
+  background: radial-gradient(ellipse at center, #0e1516 0%, #030405 75%);
+  box-shadow: inset 0 0 40px #000, inset 0 0 0 2px #000, 0 0 0 3px #050607;
+}
+/* A janela do jogo dentro do tubo; em tela cheia ela ocupa tudo. */
+.am-game { position: relative; width: 62%; aspect-ratio: 4 / 3; display: flex; flex-direction: column; border: 1px solid #57fcff55; background: #000; box-shadow: 0 0 22px #57fcff22; transition: width .25s ease, border-color .25s ease; }
+.am-screen.is-full .am-game { width: 100%; height: 100%; aspect-ratio: auto; border-color: transparent; box-shadow: none; }
+.am-game-bar { display: flex; justify-content: flex-end; gap: 4px; height: 12px; padding: 0 5px; align-items: center; background: #1d2324; border-bottom: 1px solid #57fcff33; }
+.am-game-bar i { width: 5px; height: 5px; border-radius: 50%; background: #57fcff66; }
+.am-game-image { flex: 1; display: grid; place-items: center; background: linear-gradient(135deg, #12353a, #050708) center / cover no-repeat; filter: saturate(1.15) contrast(1.05); }
+.am-game-image span { font-size: 18px; letter-spacing: .3em; color: var(--cyan); text-shadow: 0 0 12px var(--cyan); }
+.am-scanlines { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, #0000 0 2px, #00000059 2px 3px); mix-blend-mode: multiply; }
+.am-screen.is-crt .am-scanlines { background: repeating-linear-gradient(to bottom, #0000 0 3px, #00000080 3px 5px); }
+.am-glare { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; background: radial-gradient(120% 70% at 25% 10%, #ffffff1c, transparent 45%), radial-gradient(ellipse at center, transparent 62%, #0009 100%); }
+
+/* Plaqueta embaixo do tubo, com o LED de ligado. */
+.am-plate { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--am-rule); border-radius: 3px; background: var(--am-ink); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--am-dim); }
+.am-plate span:not(.am-led) + span:not(.am-led)::before { content: "·"; margin-right: 12px; color: #ffffff33; }
+.am-led { width: 8px; height: 8px; border-radius: 50%; background: #4dff88; box-shadow: 0 0 8px #4dff88; }
+
+/* Painel de serviço. */
+.am-panel { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.am-group h3 { margin: 0 0 8px; font-size: 11px; font-weight: 400; letter-spacing: .24em; text-transform: uppercase; color: var(--am-dim); }
+.am-tiles { display: grid; gap: 8px; }
+.am-tiles.is-two { grid-template-columns: 1fr 1fr; }
+.am-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--am-rule);
+  border-radius: 3px;
+  background: var(--am-ink);
+  color: #d7e4e8;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.am-tiles.is-two .am-tile { grid-template-columns: 1fr; justify-items: start; row-gap: 8px; }
+.am-tile:hover { border-color: #57fcff66; }
+.am-tile:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+.am-tile[aria-checked=true] { border-color: var(--cyan); background: linear-gradient(180deg, #57fcff1f, #57fcff08); box-shadow: inset 0 0 0 1px #57fcff40, 0 0 18px #57fcff1f; }
+.am-tile[aria-checked=true]::after { content: ""; position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.am-tile-name { font-size: 16px; letter-spacing: .06em; }
+.am-tile[aria-checked=true] .am-tile-name { color: var(--cyan); }
+.am-tile small { grid-column: 2; font-size: 11.5px; color: var(--am-dim); }
+.am-tiles.is-two .am-tile small { grid-column: 1; }
+.am-tile .am-tile-icon, .am-tile .am-tile-number { grid-row: span 2; }
+.am-tiles.is-two .am-tile .am-tile-icon { grid-row: auto; }
+.am-tile-number { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 3px; font-size: 15px; color: var(--am-dim); }
+.am-tile[aria-checked=true] .am-tile-number { color: var(--cyan); }
+
+/* Ícones desenhados em CSS: janela, tela cheia, monitor LCD e TV de tubo. */
+.am-tile-icon { position: relative; width: 34px; height: 26px; border: 2px solid var(--am-dim); border-radius: 2px; }
+.am-tile[aria-checked=true] .am-tile-icon { border-color: var(--cyan); }
+.am-tile-icon.is-window::before { content: ""; position: absolute; inset: 4px 6px; border: 1px solid currentColor; border-top-width: 3px; color: var(--am-dim); }
+.am-tile[aria-checked=true] .am-tile-icon.is-window::before { color: var(--cyan); }
+.am-tile-icon.is-full::before { content: ""; position: absolute; inset: 3px; background: var(--am-dim); opacity: .6; }
+.am-tile[aria-checked=true] .am-tile-icon.is-full::before { background: var(--cyan); }
+.am-tile-icon.is-lcd { border-bottom-width: 4px; }
+.am-tile-icon.is-tube { border-radius: 8px / 10px; }
+.am-tile-icon.is-tube::before { content: ""; position: absolute; inset: 3px; border-radius: 6px / 8px; background: repeating-linear-gradient(to bottom, var(--am-dim) 0 1px, transparent 1px 3px); opacity: .7; }
+.am-tile[aria-checked=true] .am-tile-icon.is-tube::before { background: repeating-linear-gradient(to bottom, var(--cyan) 0 1px, transparent 1px 3px); }
+
+.am-note { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #b3b3b3; }
+
+.am-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 30px 22px; border-top: 1px solid var(--am-rule); }
+.am-foot p { margin: 0; font-size: 12px; color: var(--am-dim); }
+.am-reset { height: 32px; padding: 0 14px; border: 1px solid var(--am-rule); border-radius: 3px; background: var(--am-ink); color: #d7e4e8; font-size: 12.5px; letter-spacing: .06em; cursor: pointer; }
+.am-reset:hover, .am-reset:focus-visible { border-color: var(--cyan); color: var(--cyan); outline: none; }
+
+@media (max-width: 760px) {
+  .am-body { grid-template-columns: 1fr; }
+}

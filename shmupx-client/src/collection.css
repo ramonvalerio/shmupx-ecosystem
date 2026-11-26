@@ -86,11 +86,6 @@
 .emulator-controls-dialog { width: min(1040px, 100%); }
 .emulator-controls-dialog .controller-dialog-body { padding-top: 16px; }
 /* Monitor dos jogos (clique na tela do gabinete): as opções de Configurações › Emulador. */
-.monitor-settings-dialog { width: min(560px, 100%); }
-.monitor-settings-body { display: grid; gap: 14px; padding-top: 16px; }
-.monitor-settings-body > * { margin: 0; }
-.monitor-settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--stroke); }
-.monitor-settings-footer p { margin: 0; }
 .collection-facts { display: flex; flex-direction: column; gap: 9px; margin: 0; font-size: 12px; }
 .collection-facts > div { display: flex; justify-content: space-between; gap: 12px; }
 .collection-facts dt { color: #d7e4e8; }
