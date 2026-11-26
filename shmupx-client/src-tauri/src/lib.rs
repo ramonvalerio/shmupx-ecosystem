@@ -46,6 +46,7 @@ pub fn run() {
             capture::commands::descartar_run_pendente,
             capture::destino::gravacoes_destino,
             capture::destino::gravacoes_definir_destino,
+            capture::destino::gravacoes_definir_gravar,
             capture::destino::gravacoes_abrir_pasta,
             steam::commands::inicializar_jogo_steam,
             steam::commands::inicializar_jogo_emulador,

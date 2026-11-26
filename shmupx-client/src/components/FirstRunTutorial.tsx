@@ -201,7 +201,7 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
     case "insert-coin": return { code: "3.3", index: 3, target: "play-coin", hand: true, block: true,
       title: "Insira a ficha", text: "Toque na ficha para jogar." };
     case "choose-mode": return { code: "3.4", index: 4, target: "play-mode-choices", hand: true, block: true, point: ".play-mode-choice.is-training",
-      title: "Como você quer jogar?", text: "Training Mode é grátis e não vale ranking: ótimo para começar. Ranked Mode gasta 1 ficha, grava a run e vale para o ranking." };
+      title: "Como você quer jogar?", text: "Training Mode é grátis e não vale ranking: ótimo para começar. Ranked Mode gasta 1 ficha e vale para o ranking." };
     case "launch-problem": return { code: "3.5", index: 5, target: "launch-problem", hand: false, block: true,
       title: "O jogo não abriu", text: "Siga as dicas da janela. Se os ROMs estão em outra pasta, toque em Selecionar pasta de ROMs e depois tente de novo." };
     case "launching": return { code: "3.5", index: 5, target: null, hand: false, block: false,

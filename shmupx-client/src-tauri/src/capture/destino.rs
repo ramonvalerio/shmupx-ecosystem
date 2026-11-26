@@ -1,4 +1,10 @@
-//! Pasta de destino dos vídeos das runs (Configurações › Armazenamento). Padrão: `recordings`
+//! Gravação das gameplays e pasta de destino dos vídeos (Configurações › Armazenamento).
+//!
+//! "Gravar gameplays" vem desmarcado: sem ele, nada fica gravado (os jogos validados pelo vídeo
+//! gravam só para a validação e o vídeo é apagado depois; a live fica no YouTube). Marcado, toda
+//! gameplay (Ranked e Treino) é gravada e fica na pasta.
+//!
+//! Pasta padrão: `recordings`
 //! na pasta onde o Client foi instalado (o instalador a cria com escrita liberada aos usuários);
 //! se ela não aceitar escrita, e em desenvolvimento, `recordings` na pasta de dados do app. A escolha do jogador fica em `<pasta de dados>/gravacoes.json`; se a pasta escolhida
 //! deixar de existir ou de aceitar escrita (disco removido), a gravação volta ao padrão.
@@ -11,10 +17,15 @@ use tauri::{AppHandle, Manager};
 #[derive(Serialize, Deserialize, Default)]
 struct Config {
     pasta: Option<String>,
+    /// Gravar gameplays (desmarcado por padrão).
+    #[serde(default)]
+    gravar: bool,
 }
 
 #[derive(Serialize)]
 pub struct Destino {
+    /// "Gravar gameplays" marcado.
+    pub gravar: bool,
     /// Pasta onde as próximas runs vão ser gravadas.
     pub pasta: String,
     /// É a pasta padrão (dados do app)?
@@ -24,7 +35,8 @@ pub struct Destino {
     /// Espaço do disco da pasta (bytes), quando o sistema informa.
     pub disco_livre: Option<u64>,
     pub disco_total: Option<u64>,
-    /// Vídeos das runs (`shmupx_run_*.mp4`) já nessa pasta: quantos e quanto ocupam.
+    /// Vídeos das gameplays (`shmupx_run_*.mp4`, `shmupx_treino_*.mp4`) já nessa pasta: quantos e
+    /// quanto ocupam.
     pub gravacoes: u64,
     pub gravacoes_bytes: u64,
 }
@@ -46,16 +58,19 @@ fn gravacoes_na_pasta(pasta: &Path) -> (u64, u64) {
     let Ok(entradas) = std::fs::read_dir(pasta) else { return (0, 0) };
     entradas
         .flatten()
-        .filter(|e| { let nome = e.file_name().to_string_lossy().into_owned(); nome.starts_with("shmupx_run_") && nome.ends_with(".mp4") })
+        .filter(|e| {
+            let nome = e.file_name().to_string_lossy().into_owned();
+            (nome.starts_with("shmupx_run_") || nome.starts_with("shmupx_treino_")) && nome.ends_with(".mp4")
+        })
         .filter_map(|e| e.metadata().ok())
         .fold((0, 0), |(qtd, bytes), m| (qtd + 1, bytes + m.len()))
 }
 
-fn destino(pasta: String, padrao: bool, indisponivel: Option<String>) -> Destino {
+fn destino(gravar: bool, pasta: String, padrao: bool, indisponivel: Option<String>) -> Destino {
     let caminho = PathBuf::from(&pasta);
     let (disco_livre, disco_total) = espaco_do_disco(&caminho);
     let (gravacoes, gravacoes_bytes) = gravacoes_na_pasta(&caminho);
-    Destino { pasta, padrao, indisponivel, disco_livre, disco_total, gravacoes, gravacoes_bytes }
+    Destino { gravar, pasta, padrao, indisponivel, disco_livre, disco_total, gravacoes, gravacoes_bytes }
 }
 
 fn pasta_de_dados(app: &AppHandle) -> Result<PathBuf, String> {
@@ -68,6 +83,16 @@ fn arquivo(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn ler_config(app: &AppHandle) -> Config {
     arquivo(app).ok().and_then(|a| std::fs::read(a).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+fn salvar_config(app: &AppHandle, config: &Config) -> Result<(), String> {
+    std::fs::create_dir_all(pasta_de_dados(app)?).map_err(|e| e.to_string())?;
+    std::fs::write(arquivo(app)?, serde_json::to_vec(config).map_err(|e| e.to_string())?).map_err(|e| format!("não foi possível salvar a escolha: {e}"))
+}
+
+/// "Gravar gameplays" está marcado?
+pub fn gravar_gameplays(app: &AppHandle) -> bool {
+    ler_config(app).gravar
 }
 
 /// A pasta aceita gravar? Cria (se faltar) e escreve um arquivo de teste.
@@ -100,14 +125,15 @@ fn pasta_padrao(app: &AppHandle) -> Result<PathBuf, String> {
 pub fn atual(app: &AppHandle) -> Result<Destino, String> {
     let padrao = pasta_padrao(app)?;
     std::fs::create_dir_all(&padrao).map_err(|e| e.to_string())?;
-    if let Some(escolhida) = ler_config(app).pasta {
+    let config = ler_config(app);
+    if let Some(escolhida) = config.pasta {
         let caminho = PathBuf::from(&escolhida);
         if caminho.is_absolute() && gravavel(&caminho) {
-            return Ok(destino(escolhida, false, None));
+            return Ok(destino(config.gravar, escolhida, false, None));
         }
-        return Ok(destino(padrao.to_string_lossy().into_owned(), true, Some(escolhida)));
+        return Ok(destino(config.gravar, padrao.to_string_lossy().into_owned(), true, Some(escolhida)));
     }
-    Ok(destino(padrao.to_string_lossy().into_owned(), true, None))
+    Ok(destino(config.gravar, padrao.to_string_lossy().into_owned(), true, None))
 }
 
 /// Pasta onde a próxima run grava o vídeo.
@@ -126,8 +152,9 @@ pub fn gravacoes_destino(app: AppHandle) -> Result<Destino, String> {
 /// Escolhe a pasta (`None` volta ao padrão). Confere se ela aceita gravar.
 #[tauri::command]
 pub fn gravacoes_definir_destino(app: AppHandle, pasta: Option<String>) -> Result<Destino, String> {
-    let config = match pasta.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
-        None => Config::default(),
+    let mut config = ler_config(&app);
+    config.pasta = match pasta.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+        None => None,
         Some(pasta) => {
             let caminho = PathBuf::from(&pasta);
             if !caminho.is_absolute() {
@@ -136,11 +163,19 @@ pub fn gravacoes_definir_destino(app: AppHandle, pasta: Option<String>) -> Resul
             if !gravavel(&caminho) {
                 return Err("não é possível gravar nessa pasta: escolha outra".into());
             }
-            Config { pasta: Some(pasta) }
+            Some(pasta)
         }
     };
-    std::fs::create_dir_all(pasta_de_dados(&app)?).map_err(|e| e.to_string())?;
-    std::fs::write(arquivo(&app)?, serde_json::to_vec(&config).map_err(|e| e.to_string())?).map_err(|e| format!("não foi possível salvar a escolha: {e}"))?;
+    salvar_config(&app, &config)?;
+    atual(&app)
+}
+
+/// Marca ou desmarca "Gravar gameplays".
+#[tauri::command]
+pub fn gravacoes_definir_gravar(app: AppHandle, gravar: bool) -> Result<Destino, String> {
+    let mut config = ler_config(&app);
+    config.gravar = gravar;
+    salvar_config(&app, &config)?;
     atual(&app)
 }
 

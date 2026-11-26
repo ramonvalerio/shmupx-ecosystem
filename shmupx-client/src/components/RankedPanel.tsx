@@ -125,7 +125,7 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
             <span className="play-mode-art" aria-hidden="true" />
             <span className="play-mode-text">
               <strong>{t("Training Mode")}</strong>
-              <small>{t("Não gasta ficha. Não vale para o ranking, não grava a run e não transmite live.")}</small>
+              <small>{t("Não gasta ficha, não vale para o ranking e não transmite live.")}</small>
             </span>
           </button>
           <button type="button" className="play-mode-choice is-ranked" onClick={onRanked} disabled={Boolean(rankedBlocked)} title={rankedBlocked ?? undefined} aria-keyshortcuts="2">
@@ -138,7 +138,7 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
                 <span className="play-mode-setup">
                   {rankedSetup.map((item) => <span key={item.key} className={item.live ? "is-live" : undefined}>{item.label}</span>)}
                 </span>
-                <small>{t("Gasta 1 ficha, grava a run e vale para o ranking.")}</small>
+                <small>{t("Gasta 1 ficha e vale para o ranking.")}</small>
               </>}
             </span>
           </button>
@@ -155,7 +155,7 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
                     {platform && <span>{t(PLATFORM_LABEL[platform])}</span>}
                     {withLive && <span className="is-live">{t("Live")}</span>}
                   </span>
-                  <small>{t("Gasta 1 ficha, grava a run e vale para o evento e o ranking.")}</small>
+                  <small>{t("Gasta 1 ficha e vale para o evento e o ranking.")}</small>
                 </>}
               </span>
             </button>

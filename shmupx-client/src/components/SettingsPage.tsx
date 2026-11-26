@@ -22,10 +22,8 @@ const GROUPS = [
   { id: "integrations", title: "Integrações", detail: "YouTube", icon: "▷" },
   { id: "emulator", title: "Emulador", detail: "Tela cheia e resolução", icon: "▶" },
   { id: "controller", title: "Controle", detail: "Dispositivo e comandos", icon: "✥" },
-  { id: "storage", title: "Armazenamento", detail: "Destino das gravações", icon: "▣" },
+  { id: "storage", title: "Armazenamento", detail: "Gravação de gameplays", icon: "▣" },
   // Gravação e Captura fora do menu por enquanto (hidden); as telas continuam abaixo para voltar depois.
-  { id: "recording", title: "Gravação", detail: "Vídeo e áudio", icon: "●", hidden: true },
-  { id: "capture", title: "Captura", detail: "Fonte da imagem", icon: "▤", hidden: true },
   { id: "interface", title: "Interface", detail: "Visual e abertura do cliente", icon: "◐" },
 ] as const;
 
@@ -196,9 +194,7 @@ export default function SettingsPage({ rooms = [], preferences, onPreferences, s
         {group === "integrations" && <YouTubeCard />}
         {group === "emulator" && <EmulatorSettingsCard />}
         {group === "controller" && <><SettingsCard title="Controles do emulador" detail="Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator."><CabinetControlMapper /></SettingsCard></>}
-        {group === "storage" && <SettingsCard title={t("Destino das gravações")} detail={t("Pasta onde os vídeos das runs são gravados.")} tutorial="settings-storage"><StorageSettings /></SettingsCard>}
-        {group === "recording" && <><SettingsCard title={t("Vídeo")} detail={t("Parâmetros atuais do gravador, somente para consulta.")}><dl className="settings-facts"><dt>{t("Taxa de quadros")}</dt><dd>{t("60 fps")}</dd><dt>{t("Codificador")}</dt><dd>{t("H.264")}</dd><dt>{t("Preset")}</dt><dd>{t("Ultrafast")}</dd><dt>{t("Formato")}</dt><dd>{t("MP4")}</dd></dl></SettingsCard><SettingsCard title={t("Áudio")}><dl className="settings-facts"><dt>{t("Fonte")}</dt><dd>{t("Áudio do sistema")}</dd><dt>{t("Captura")}</dt><dd>{t("Dispositivo de loopback")}</dd></dl><p className="muted">{t("A seleção do dispositivo e a edição dos parâmetros ainda não estão disponíveis.")}</p></SettingsCard></>}
-        {group === "capture" && <SettingsCard title={t("Fonte de captura")} detail={t("O gravador atual captura a tela inteira do Windows.")}><div className="capture-source-preview" aria-hidden="true"><span>{t("SHMUPX")}</span><span>{t("Captura da tela inteira")}</span></div><dl className="settings-facts"><dt>{t("Origem")}</dt><dd>{t("Tela inteira")}</dd><dt>{t("Início")}</dt><dd>{t("Após autorização da run")}</dd><dt>{t("Encerramento")}</dt><dd>{t("Manual ou pelo limite da ficha")}</dd></dl><p className="muted">{t("A seleção de janela do cliente original ainda não está disponível.")}</p></SettingsCard>}
+        {group === "storage" && <SettingsCard title={t("Gravação de gameplays")} detail={t("Grave suas partidas em vídeo e escolha onde guardar.")} tutorial="settings-storage"><StorageSettings /></SettingsCard>}
       </div>
     </div>
   </div>;

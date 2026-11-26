@@ -60,7 +60,7 @@ export default function RoomTabs({ rooms, openRoomIds, activeRoomId, recordingRo
               onClick={() => { if (!drag.consumeClick()) onActivate(id); }}
               onKeyDown={(event) => onTabKeyDown(event, id)}
             >
-              {recordingRoomId === id && <span className="room-tab-recording" aria-label={t("Gravando")} />}
+              {recordingRoomId === id && <span className="room-tab-recording" aria-label={t("Em partida")} />}
               {room.title}
             </button>
             <button type="button" className="room-tab-close" aria-label={t("Fechar sala de {game}", { game: room.title })} onClick={() => onClose(id)}>×</button>

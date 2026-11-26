@@ -249,7 +249,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
                 <strong>{room.title}</strong>
                 <span className="game-card-developer">{room.developer ?? " "}</span>
                 <span className="game-card-meta"><PlatformTags tags={playable.tags(room)} /></span>
-                {recordingRoomId === room.id && <small className="recording-label">{t("● Gravando run")}</small>}
+                {recordingRoomId === room.id && <small className="recording-label">{t("● Run em andamento")}</small>}
               </div>
             </button>
             <button type="button" className="game-card-about" onClick={() => setAboutId(room.id)} aria-label={t("Sobre {game}", { game: room.title })}>{t("About")}</button>

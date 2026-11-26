@@ -17,11 +17,16 @@ struct RunExpiredPayload {
     pid: u32,
 }
 
-/// Inicia uma corrida. Jogo do ShmupX Emulator validado pela memória (`rom` em
-/// `jogos-pela-memoria.json`): não grava nada, a telemetria do motor decide a run. Os outros: começa
-/// a gravar a janela do jogo e confirma que o FFmpeg está gravando. Só então debita a ficha no
-/// backend (`POST /api/runs/start`) e usa a `max_duration_segundos` devolvida para o timer seguro.
-/// Uma gravação que não inicia não custa ficha.
+/// Inicia uma corrida. Grava a janela do jogo só quando precisa:
+/// - jogo validado pelo vídeo: grava sempre, para a validação; sem "Gravar gameplays", o vídeo é
+///   apagado depois que a run é enviada;
+/// - "Gravar gameplays" marcado (Configurações › Armazenamento): grava toda run e o vídeo fica;
+/// - live: o vídeo fica no YouTube, nunca na pasta (só o temporário da validação, se precisar);
+/// - jogo do ShmupX Emulator validado pela memória (`rom` em `jogos-pela-memoria.json`), sem a
+///   opção: não grava; a telemetria do motor decide a run.
+///
+/// Com a gravação confirmada (se houver), debita a ficha no backend (`POST /api/runs/start`) e usa a
+/// `max_duration_segundos` devolvida para o timer seguro. Uma gravação que não inicia não custa ficha.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn iniciar_corrida_safe(
@@ -46,7 +51,9 @@ pub async fn iniciar_corrida_safe(
     let pela_memoria = steam_app_id.is_none()
         && jogo_pid.is_some()
         && rom.as_deref().is_some_and(crate::steam::telemetria::rom_pela_memoria);
-    if !pela_memoria && !ffmpeg::is_ffmpeg_available() {
+    let manter_video = super::destino::gravar_gameplays(&app) && live_broadcast.is_none();
+    let gravar = !pela_memoria || manter_video;
+    if gravar && !ffmpeg::is_ffmpeg_available() {
         return Err("FFmpeg não encontrado: reinstale o ShmupX Client".into());
     }
 
@@ -62,7 +69,7 @@ pub async fn iniciar_corrida_safe(
         "sem sessão: entre com sua conta Google antes de iniciar uma run".to_string()
     })?;
 
-    let (gravacao, video_path, pid) = match jogo_pid.filter(|_| pela_memoria) {
+    let (gravacao, video_path, pid) = match jogo_pid.filter(|_| !gravar) {
         Some(jogo_pid) => {
             log::info!("run de {jogo_id} pela memória ({}): sem gravação", rom.as_deref().unwrap_or_default());
             (None, None, jogo_pid)
@@ -77,7 +84,7 @@ pub async fn iniciar_corrida_safe(
                 .map(|d| d.as_millis())
                 .unwrap_or_default();
             let output_path = data_dir.join(format!("shmupx_run_{carimbo}.mp4"));
-            let gravacao = match iniciar_gravacao(&output_path, jogo_pid, steam_app_id).await {
+            let gravacao = match super::gravacao::iniciar_do_jogo(&output_path, jogo_pid, steam_app_id).await {
                 Ok(g) => g,
                 Err(erro) => {
                     let _ = std::fs::remove_file(&output_path);
@@ -120,6 +127,7 @@ pub async fn iniciar_corrida_safe(
         run_id: inicio.run_id,
         token: token.clone(),
         video_path,
+        manter_video,
         jogo_pid,
     });
     drop(guard);
@@ -133,32 +141,6 @@ pub async fn iniciar_corrida_safe(
     spawn_safe_timer(app, state.0.clone(), jogo_id, run_id, limite);
 
     Ok(pid)
-}
-
-/// Começa a gravação de um jogo validado pelo vídeo: espera a janela dele (até 1 min no ShmupX
-/// Emulator; até 3 min na Steam, que pode estar abrindo ou atualizando) e grava só ela, com o som.
-#[cfg(windows)]
-async fn iniciar_gravacao(video: &std::path::Path, jogo_pid: Option<u32>, steam_app_id: Option<u32>) -> Result<super::gravacao::Gravacao, String> {
-    // Na Steam, quem abriu pode ter sido um launcher: vale também qualquer processo da pasta do jogo.
-    let pasta = match steam_app_id {
-        Some(app_id) => tauri::async_runtime::spawn_blocking(move || crate::steam::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten(),
-        None => None,
-    };
-    let pids = move || {
-        let mut pids: Vec<u32> = jogo_pid.into_iter().filter(|pid| crate::steam::detector::processo_vivo(*pid)).collect();
-        if let Some(pasta) = &pasta {
-            pids.extend(crate::steam::detector::processos_na_pasta(pasta));
-        }
-        pids
-    };
-    let prazo = std::time::Duration::from_secs(if steam_app_id.is_some() { 180 } else { 60 });
-    let janela = super::gravacao::esperar_janela(pids, prazo).await?;
-    super::gravacao::iniciar(video, janela).await
-}
-
-#[cfg(not(windows))]
-async fn iniciar_gravacao(video: &std::path::Path, _jogo_pid: Option<u32>, _steam_app_id: Option<u32>) -> Result<super::gravacao::Gravacao, String> {
-    super::gravacao::iniciar_tela_inteira(video).await
 }
 
 /// Fecha a gravação da run (se houver) com o vídeo completo.
@@ -231,6 +213,12 @@ fn emit_run(app: &AppHandle, jogo_id: &str, pid: u32, run_id: Option<&str>, stat
 /// run: no top 3, vai para o canal oficial da ShmupX; senão, é apagada.
 fn run_enviada(app: &AppHandle, job: &AnaliseJob, score: i64, resposta: backend::SubmeterRunResponse) {
     pendentes::remover(app, &job.run_id);
+    // Vídeo só para a validação ("Gravar gameplays" desmarcado ou live): sai depois do envio.
+    if !job.manter_video {
+        if let Some(video) = &job.video_path {
+            apagar_video(video);
+        }
+    }
     let _ = app.emit(
         "run://analysis",
         RunAnalysisPayload {
@@ -258,6 +246,8 @@ struct AnaliseJob {
     token: String,
     /// `None`: run pela memória, sem vídeo.
     video_path: Option<PathBuf>,
+    /// O vídeo fica na pasta ("Gravar gameplays" marcado, fora da live); senão, sai depois do envio.
+    manter_video: bool,
     jogo_pid: Option<u32>,
 }
 
@@ -281,6 +271,7 @@ async fn encerrar_e_enfileirar(app: &AppHandle, handle: RunHandle) {
         run_id: handle.run_id,
         token: handle.token,
         video_path: handle.video_path,
+        manter_video: handle.manter_video,
         jogo_pid: handle.jogo_pid,
     };
     match backend::encerrar_run(&token_atual(app, &job.token), &job.run_id).await {
@@ -388,6 +379,7 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
                 iniciada_em: pendentes::inicio_pelo_video(&video_path),
                 encerrada_em: pendentes::fim_pelo_video(&video_path),
                 video_path,
+                temporario: !job.manter_video,
                 erro: error.clone(),
             });
             emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(error), None);
@@ -415,17 +407,27 @@ pub fn reanalisar_run(app: AppHandle, run_id: String) -> Result<(), String> {
         .snapshot()
         .token
         .ok_or("sem sessão: entre com sua conta Google")?;
-    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: Some(run.video_path), jogo_pid: None };
+    let job = AnaliseJob { pid: 0, jogo_id: run.jogo_id, run_id: run.run_id, token, video_path: Some(run.video_path), manter_video: !run.temporario, jogo_pid: None };
     emit_run(&app, &job.jogo_id, job.pid, Some(&job.run_id), "analyzing", None, None);
     tauri::async_runtime::spawn(async move { analisar_e_enviar(&app, job).await });
     Ok(())
 }
 
-/// Tira a run da lista de não enviadas (o vídeo continua na pasta das gravações).
+/// Apaga o vídeo de uma run e o log do FFmpeg ao lado dele.
+fn apagar_video(video: &std::path::Path) {
+    let _ = std::fs::remove_file(video);
+    let _ = std::fs::remove_file(super::gravacao::caminho_do_log(video));
+}
+
+/// Tira a run da lista de não enviadas. O vídeo continua na pasta das gravações, a não ser que
+/// fosse só para a validação ("Gravar gameplays" desmarcado).
 #[tauri::command]
 pub fn descartar_run_pendente(app: AppHandle, run_id: String) {
     if let Some(run) = pendentes::buscar(&app, &run_id) {
         pendentes::remover(&app, &run_id);
+        if run.temporario {
+            apagar_video(&run.video_path);
+        }
         emit_run(&app, &run.jogo_id, 0, Some(&run_id), "discarded", None, None);
     }
 }

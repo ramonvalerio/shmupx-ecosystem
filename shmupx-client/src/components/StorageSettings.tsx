@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
 
 interface Destino {
+  gravar: boolean;
   pasta: string;
   padrao: boolean;
   indisponivel: string | null;
@@ -23,8 +24,9 @@ function size(bytes: number | null, locale: string): string {
 }
 
 /**
- * Configurações › Armazenamento: a pasta onde as runs são gravadas (escolher, abrir, voltar ao
- * padrão), com o espaço livre do disco e o quanto os vídeos do ShmupX já ocupam nela.
+ * Configurações › Armazenamento: "Gravar gameplays" (desmarcado por padrão) e a pasta dos vídeos
+ * (escolher, abrir, voltar ao padrão), com o espaço livre do disco e o quanto os vídeos do ShmupX
+ * já ocupam nela.
  */
 /** `onShowRuns`: link para a tela de Submissões (fora de uso por enquanto: sem ele, o link some). */
 export default function StorageSettings({ onShowRuns }: { onShowRuns?: () => void }) {
@@ -54,10 +56,23 @@ export default function StorageSettings({ onShowRuns }: { onShowRuns?: () => voi
     finally { setBusy(false); }
   }
 
+  async function setRecording(gravar: boolean) {
+    setBusy(true);
+    setError(null);
+    try { setDestino(await invoke<Destino>("gravacoes_definir_gravar", { gravar })); }
+    catch (failure) { setError(String(failure)); }
+    finally { setBusy(false); }
+  }
+
   const used = destino && destino.disco_total !== null && destino.disco_livre !== null ? 1 - destino.disco_livre / destino.disco_total : null;
   const lowSpace = destino?.disco_livre !== null && destino?.disco_livre !== undefined && destino.disco_livre < 5 * 1024 ** 3;
 
   return <div className="storage-settings">
+    <label className="storage-record">
+      <input type="checkbox" checked={destino?.gravar ?? false} disabled={busy || !destino} onChange={(event) => void setRecording(event.target.checked)} />
+      <span><span className="storage-record-title">{t("Gravar gameplays")}</span><small>{t("Grava em vídeo cada partida, no Ranked e no Treino, com o som do jogo. A live não grava aqui: ela fica no seu canal do YouTube.")}</small></span>
+    </label>
+    {destino && !destino.gravar && <p className="muted">{t("Desmarcado, nada fica gravado. Jogos validados pelo vídeo gravam só para a validação, e o vídeo é apagado em seguida.")}</p>}
     <div className="storage-folder">
       <code title={destino?.pasta}>{destino?.pasta ?? t("Carregando…")}</code>
       <span className={`play-tag ${destino?.padrao ? "" : "is-owned"}`}>{t(destino?.padrao ? "Padrão" : "Escolhida")}</span>
@@ -81,7 +96,7 @@ export default function StorageSettings({ onShowRuns }: { onShowRuns?: () => voi
     )}
     {lowSpace && <p className="mode-error-inline">{t("Pouco espaço livre: uma run longa pode não caber. Libere espaço ou escolha outra pasta.")}</p>}
     {error && <p className="mode-error-inline" role="alert">{t(error)}</p>}
-    <p className="muted">{t("Vale para as próximas runs; os vídeos já gravados continuam onde estão.")}</p>
+    <p className="muted">{t("Vale para as próximas partidas; os vídeos já gravados continuam onde estão.")}</p>
     {onShowRuns && <button type="button" className="text-action" onClick={onShowRuns}>{t("Ver runs desta sessão →")}</button>}
   </div>;
 }

@@ -308,7 +308,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       } else {
         await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
       }
-      if (forPractice) setNotice(t("Modo treino: {game} abre sem gravar run nem gastar ficha.", { game: room.title }));
+      if (forPractice) setNotice(t("Modo treino: {game} abre sem gastar ficha.", { game: room.title }));
     } catch (failure) {
       logFailure(platform === "steam" ? "steam" : "emulador", failure);
       // Ranked sem o estado de 1 crédito no pacote do motor (motor antigo): pede a atualização.
@@ -380,7 +380,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
                 ? "Treino: o jogo abre sem gravar run nem gastar ficha."
                 : choosing.kind === "live"
                   ? "Ao vivo no seu canal do YouTube. Escolha o modo e a plataforma."
-                  : "Valendo ranking: gasta 1 ficha e grava a run. Escolha o modo e a plataforma.")}</p>
+                  : "Valendo ranking: gasta 1 ficha. Escolha o modo e a plataforma.")}</p>
             </div>
           </header>
           <div className="controller-dialog-body play-dialog-body">

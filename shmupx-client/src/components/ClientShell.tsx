@@ -244,7 +244,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); setClosingRoomId(id); } }}>
               <button type="button" className="rail-room" title={room.title} aria-current={section === "collection" && activeRoomId === id ? "page" : undefined}
                 onClick={() => { if (railDrag.consumeClick()) return; setSection("collection"); activateRoom(id); }}>
-                {recordingRoomId === id && <span className="rail-room-recording" aria-label={t("Gravando")} />}
+                {recordingRoomId === id && <span className="rail-room-recording" aria-label={t("Em partida")} />}
                 <span className="rail-room-title">{room.title}</span>
               </button>
               <button type="button" className="rail-room-close" aria-label={t("Fechar sala de {game}", { game: room.title })} title={t("Fechar")} onClick={() => setClosingRoomId(id)}>×</button>
@@ -321,7 +321,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         {autoUpdate.state.status === "ready" && (
           <p className="update-available" role="status">
             {t("Versão {version} pronta.", { version: autoUpdate.state.version })}{" "}
-            <button type="button" className="text-action" onClick={() => void autoUpdate.installNow()} disabled={Boolean(recordingRoom)} title={recordingRoom ? t("Termine a gravação antes de atualizar.") : undefined}>
+            <button type="button" className="text-action" onClick={() => void autoUpdate.installNow()} disabled={Boolean(recordingRoom)} title={recordingRoom ? t("Termine a partida antes de atualizar.") : undefined}>
               {t("Reiniciar e atualizar")}
             </button>
           </p>
@@ -389,10 +389,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
                 const recording = recordingRoomId === id;
                 return (
                   <li key={id}>
-                    <button type="button" disabled={recording} title={recording ? t("Há uma run sendo gravada nesta sala.") : undefined}
+                    <button type="button" disabled={recording} title={recording ? t("Há uma run em andamento nesta sala.") : undefined}
                       onClick={() => { enterRoom(pendingOpen.id, pendingOpen.ranking, id); setPendingOpen(null); }}>
                       <span>{room.title}</span>
-                      <small>{recording ? t("Gravando") : t("Sair e trocar")}</small>
+                      <small>{recording ? t("Em partida") : t("Sair e trocar")}</small>
                     </button>
                   </li>
                 );
@@ -411,7 +411,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
               <div>
                 <h2 id="close-room-title">{t("Sair da sala de {game}?", { game: closingRoom.title })}</h2>
                 <p>{t("Você sai do chat e da lista de jogadores desta sala. Para voltar, abra o jogo de novo na coleção.")}</p>
-                {recordingRoomId === closingRoom.id && <p className="mode-error" role="alert">{t("Há uma run sendo gravada nesta sala: a gravação continua até você parar.")}</p>}
+                {recordingRoomId === closingRoom.id && <p className="mode-error" role="alert">{t("Há uma run em andamento nesta sala: ela continua até você parar.")}</p>}
               </div>
             </header>
             <footer>
@@ -423,7 +423,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       )}
       {howToOpen && <HowToUseDialog onClose={() => setHowToOpen(false)} onPick={(topic: TutorialTopic) => { setHowToOpen(false); setSettingsOpen(false); showCollection(); tutorial.start(topic); }} />}
       {tutorial.active && <FirstRunTutorial key={tutorial.topic} topic={tutorial.topic} rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
-      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Gravando · {game}", {game:recordingRoom.title}) : t("Nenhuma gravação em andamento")}</span><LibrarySyncStatus /><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
+      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Em partida · {game}", {game:recordingRoom.title}) : t("Nenhuma partida em andamento")}</span><LibrarySyncStatus /><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );
 }

@@ -84,6 +84,33 @@ async fn confirmar_inicio(child: &mut Child, log: &Path) -> Result<(), String> {
 #[cfg(windows)]
 pub use janela_do_jogo::{esperar_janela, iniciar};
 
+/// Grava o jogo recém-aberto (`jogo_pid`; na Steam, também os processos da pasta dele): espera a
+/// janela (até 1 min no ShmupX Emulator; até 3 min na Steam, que pode estar abrindo ou atualizando)
+/// e grava só ela, com o som.
+#[cfg(windows)]
+pub async fn iniciar_do_jogo(video: &Path, jogo_pid: Option<u32>, steam_app_id: Option<u32>) -> Result<Gravacao, String> {
+    // Na Steam, quem abriu pode ter sido um launcher: vale também qualquer processo da pasta do jogo.
+    let pasta = match steam_app_id {
+        Some(app_id) => tauri::async_runtime::spawn_blocking(move || crate::steam::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten(),
+        None => None,
+    };
+    let pids = move || {
+        let mut pids: Vec<u32> = jogo_pid.into_iter().filter(|pid| crate::steam::detector::processo_vivo(*pid)).collect();
+        if let Some(pasta) = &pasta {
+            pids.extend(crate::steam::detector::processos_na_pasta(pasta));
+        }
+        pids
+    };
+    let prazo = std::time::Duration::from_secs(if steam_app_id.is_some() { 180 } else { 60 });
+    let janela = esperar_janela(pids, prazo).await?;
+    iniciar(video, janela).await
+}
+
+#[cfg(not(windows))]
+pub async fn iniciar_do_jogo(video: &Path, _jogo_pid: Option<u32>, _steam_app_id: Option<u32>) -> Result<Gravacao, String> {
+    iniciar_tela_inteira(video).await
+}
+
 #[cfg(windows)]
 mod janela_do_jogo {
     use super::*;

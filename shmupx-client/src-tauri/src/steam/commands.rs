@@ -94,7 +94,7 @@ fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration, treino: b
                     GameLaunchedPayload { app_id, pid, name, treino },
                 );
                 if treino {
-                    super::treino::acompanhar(app.clone(), pid);
+                    super::treino::acompanhar(app.clone(), pid, Some(app_id));
                 }
                 return;
             }
@@ -162,7 +162,7 @@ pub async fn inicializar_jogo_emulador(
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
     let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
     if treino {
-        super::treino::acompanhar(app.clone(), pid);
+        super::treino::acompanhar(app.clone(), pid, None);
     }
     Ok(())
 }

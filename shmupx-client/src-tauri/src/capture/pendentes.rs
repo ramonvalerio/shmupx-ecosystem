@@ -21,6 +21,9 @@ pub struct RunPendente {
     pub iniciada_em: u64,
     pub encerrada_em: Option<u64>,
     pub erro: String,
+    /// Vídeo só para a validação ("Gravar gameplays" desmarcado): sai ao enviar ou descartar.
+    #[serde(default)]
+    pub temporario: bool,
 }
 
 /// Leituras e escritas do arquivo, uma de cada vez.

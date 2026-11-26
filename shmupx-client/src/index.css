@@ -547,6 +547,11 @@ button:disabled { opacity: .5; cursor: default; }
 
 /* Armazenamento: pasta das gravações e espaço do disco */
 .storage-settings { display: flex; flex-direction: column; gap: 10px; }
+.storage-record { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-recessed); cursor: pointer; }
+.storage-record input { margin-top: 3px; }
+.storage-record > span { display: flex; flex-direction: column; gap: 4px; }
+.storage-record-title { font-size: 15px; color: var(--cyan); }
+.storage-record small { color: #b3b3b3; font-size: 12px; line-height: 1.6; }
 .storage-folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-recessed); }
 .storage-folder code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: inherit; font-size: 13px; }
 .storage-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
