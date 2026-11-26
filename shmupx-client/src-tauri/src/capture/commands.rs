@@ -140,6 +140,14 @@ pub async fn iniciar_corrida_safe(
     if let Some(jogo_pid) = jogo_pid {
         spawn_game_watcher(app.clone(), state.0.clone(), jogo_id.clone(), run_id.clone(), jogo_pid, steam_app_id);
     }
+    // Caravan: o jogo fecha no tempo do Caravan, como o PARAR JOGO, e o placar feito até ali vale.
+    // No ShmupX Emulator quem fecha é o motor (o contador conta do início da partida, depois do
+    // Start); aqui fica só uma garantia, com folga. Na Steam, o tempo conta daqui.
+    if let Some(segundos) = inicio.caravan_segundos.filter(|s| *s > 0) {
+        let folga = if steam_app_id.is_none() { FOLGA_CARAVAN_NO_MOTOR } else { 0 };
+        log::info!("run {run_id}: Caravan de {segundos}s");
+        spawn_caravan_timer(app.clone(), state.0.clone(), run_id.clone(), std::time::Duration::from_secs(segundos as u64 + folga));
+    }
     spawn_safe_timer(app, state.0.clone(), jogo_id, run_id, limite);
 
     Ok(pid)
@@ -153,6 +161,53 @@ async fn parar_gravacao(app: &AppHandle, handle: &mut RunHandle) -> Result<(), S
         error.to_string()
     })
 }
+
+/// Fecha o jogo da run como o X da janela (o ShmupX Engine sai normalmente e a telemetria registra
+/// o fim da partida); se não fechar em `PRAZO_PARA_FECHAR`, encerra o processo. Aberto por um
+/// launcher que já fechou: fecha o processo que roda da pasta do jogo.
+async fn fechar_o_jogo(jogo_pid: Option<u32>, steam_app_id: Option<u32>) {
+    let Some(jogo_pid) = jogo_pid else { return };
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        let alvo = if crate::steam::detector::processo_vivo(jogo_pid) {
+            Some(jogo_pid)
+        } else {
+            steam_app_id
+                .and_then(crate::steam::biblioteca::pasta_do_jogo)
+                .and_then(|pasta| crate::steam::detector::processo_na_pasta(&pasta))
+        };
+        if let Some(pid) = alvo {
+            log::info!("fechando o jogo {pid}");
+            crate::steam::detector::fechar_jogo(pid, PRAZO_PARA_FECHAR);
+        }
+    })
+    .await;
+}
+
+/// Tempo do Caravan: quando acaba, fecha o jogo e encerra a run como o PARAR JOGO (a análise tira o
+/// placar feito até ali). A run que já acabou por outro caminho (PARAR JOGO, o jogo fechado, o
+/// limite da ficha) não é tocada.
+fn spawn_caravan_timer(app: AppHandle, run_state: std::sync::Arc<tokio::sync::Mutex<Option<RunHandle>>>, run_id: String, tempo: std::time::Duration) {
+    tokio::spawn(async move {
+        tokio::time::sleep(tempo).await;
+        let mut guard = run_state.lock().await;
+        if guard.as_ref().is_none_or(|handle| handle.run_id != run_id) {
+            return;
+        }
+        let Some(mut handle) = guard.take() else { return };
+        log::info!("Caravan: o tempo da run {run_id} acabou, fechando o jogo");
+        fechar_o_jogo(handle.jogo_pid, handle.steam_app_id).await;
+        if parar_gravacao(&app, &mut handle).await.is_err() {
+            return;
+        }
+        drop(guard);
+        let _ = app.emit("run://caravan-fim", GameClosedPayload { jogo_id: handle.jogo_id.clone(), pid: handle.pid });
+        encerrar_e_enfileirar(&app, handle).await;
+    });
+}
+
+/// Caravan no ShmupX Emulator: o motor fecha o jogo no fim do contador, que começa quando a partida
+/// começa; o Client só fecha se o motor não fechar até esta folga depois do tempo.
+const FOLGA_CARAVAN_NO_MOTOR: u64 = 120;
 
 /// Quanto o jogo tem para fechar sozinho no PARAR JOGO antes de o processo ser encerrado.
 const PRAZO_PARA_FECHAR: std::time::Duration = std::time::Duration::from_secs(5);
@@ -174,24 +229,7 @@ pub async fn finalizar_corrida_manual(
     let mut handle = guard
         .take()
         .ok_or("nenhuma corrida em andamento".to_string())?;
-    if let Some(jogo_pid) = handle.jogo_pid {
-        let steam_app_id = handle.steam_app_id;
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            // Aberto por um launcher que já fechou: o jogo de verdade roda da pasta dele.
-            let alvo = if crate::steam::detector::processo_vivo(jogo_pid) {
-                Some(jogo_pid)
-            } else {
-                steam_app_id
-                    .and_then(crate::steam::biblioteca::pasta_do_jogo)
-                    .and_then(|pasta| crate::steam::detector::processo_na_pasta(&pasta))
-            };
-            if let Some(pid) = alvo {
-                log::info!("PARAR JOGO: fechando o jogo {pid}");
-                crate::steam::detector::fechar_jogo(pid, PRAZO_PARA_FECHAR);
-            }
-        })
-        .await;
-    }
+    fechar_o_jogo(handle.jogo_pid, handle.steam_app_id).await;
     parar_gravacao(&app, &mut handle).await?;
     // Com a gravação fechada, a próxima run já pode começar.
     drop(guard);

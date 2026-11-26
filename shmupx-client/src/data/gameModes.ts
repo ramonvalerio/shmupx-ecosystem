@@ -8,24 +8,37 @@ export const GAME_MODES: { id: GameMode; label: string; detail: string }[] = [
 ];
 
 /**
- * Modos para escolher ao jogar: Hi-Score e Caravan (em breve). O 1CC não se escolhe: a run de
- * Hi-Score que zera com 1 crédito entra também na tabela 1CC do ranking.
+ * Modos para escolher ao jogar: Hi-Score e Caravan. O 1CC não se escolhe: a run de Hi-Score que
+ * zera com 1 crédito entra também na tabela 1CC do ranking. O Caravan é uma run ranked em que o
+ * jogo fecha no tempo do Caravan do Lab (`caravanSeconds`); o placar feito até ali vale.
  */
 export const PLAY_MODES: { id: GameMode; label: string; detail: string; soon?: boolean }[] = [
   { id: "highscore", label: "Hi-Score", detail: "Pontuação máxima. Se zerar com 1 crédito, entra também no ranking 1CC." },
-  { id: "caravan", label: "Caravan", detail: "Pontuação em tempo limitado.", soon: true },
+  { id: "caravan", label: "Caravan", detail: "Pontuação em tempo limitado: o jogo fecha quando o tempo acaba." },
 ];
+
+/** Tempo do Caravan do jogo (Lab), em segundos; padrão: a caravana clássica, 5 min. */
+export function caravanSecondsOf(room: GameRoom): number {
+  return room.caravanSeconds ?? 300;
+}
+
+/** `300` → `5:00`. */
+export function formatCaravanTime(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 /**
  * Modos da sala para jogar: sempre os dois. Hi-Score vale para todo jogo (o 1CC sai dele); Caravan
- * só no jogo que o Lab marcou com Caravan (`supported`). Fora dele, o Caravan aparece desabilitado;
- * no jogo com Caravan, desabilitado com "Em breve" até o modo sair.
+ * só no jogo que o Lab marcou com Caravan (`supported`). Fora dele, o Caravan aparece desabilitado.
  */
 export function playModesFor(room: GameRoom): (typeof PLAY_MODES[number] & { supported: boolean; disabled: boolean })[] {
-  const modes = modesFor(room);
+  // Só o que o Lab marcou: um jogo sem modos marcados (tabelas de todos os modos) não joga Caravan.
+  const marked = room.modes ?? [];
   return PLAY_MODES.map((m) => {
-    const supported = m.id === "highscore" || modes.includes(m.id);
-    return { ...m, supported, disabled: !supported || Boolean(m.soon) };
+    const supported = m.id === "highscore" || marked.includes(m.id);
+    // Caravan com o tempo do jogo no botão ("Caravan · 5:00").
+    const label = m.id === "caravan" && supported ? `${m.label} · ${formatCaravanTime(caravanSecondsOf(room))}` : m.label;
+    return { ...m, label, supported, disabled: !supported || Boolean(m.soon) };
   });
 }
 

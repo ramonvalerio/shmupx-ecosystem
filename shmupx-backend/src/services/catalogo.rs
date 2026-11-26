@@ -18,6 +18,11 @@ use crate::services::versoes::Mudanca;
 
 const DURACAO_PADRAO_SEGUNDOS: i64 = 3600;
 const DURACAO_MAXIMA_SEGUNDOS: i64 = 7200;
+/// Tempo do Caravan quando o Lab não definiu (a caravana clássica, 5 min). O jogo fecha nesse tempo.
+pub const CARAVAN_PADRAO_SEGUNDOS: i64 = 300;
+/// Tempo do Caravan aceito no Lab: de 30 s a 1 h.
+pub const CARAVAN_MINIMO_SEGUNDOS: i64 = 30;
+pub const CARAVAN_MAXIMO_SEGUNDOS: i64 = 3600;
 const TITULO_MAXIMO: usize = 80;
 const TEXTO_MAXIMO: usize = 80;
 const ANO_MINIMO: i64 = 1970;
@@ -66,6 +71,10 @@ pub struct JogoEntrada {
     /// core de Mega Drive). Desligado, o jogo no MiSTer é só Training. Exige MiSTer em `platforms`.
     #[serde(default)]
     pub ranked_mister: bool,
+    /// Tempo do Caravan em segundos: na partida Caravan, o jogo fecha nesse tempo e o placar feito
+    /// até ali vale. Ausente = `CARAVAN_PADRAO_SEGUNDOS`. Menor que `max_duration_segundos`.
+    #[serde(default)]
+    pub caravan_segundos: Option<i64>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, PartialEq)]
@@ -91,6 +100,8 @@ pub struct Jogo {
     pub cover_url: Option<String>,
     /// Ranked no MiSTer liberado (leitura de placar pela memória no agente do MiSTer).
     pub ranked_mister: bool,
+    /// Tempo do Caravan em segundos (o jogo fecha nesse tempo na partida Caravan).
+    pub caravan_segundos: i64,
     /// Quando o jogo foi cadastrado (RFC 3339, do Firestore). Só na visão do admin.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
@@ -124,6 +135,14 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
     }
     if !(1..=DURACAO_MAXIMA_SEGUNDOS).contains(&entrada.max_duration_segundos) {
         return Err(AppError::bad_request("max_duration_segundos deve ficar entre 1 e 7200"));
+    }
+    if let Some(caravan) = entrada.caravan_segundos {
+        if !(CARAVAN_MINIMO_SEGUNDOS..=CARAVAN_MAXIMO_SEGUNDOS).contains(&caravan) {
+            return Err(AppError::bad_request("caravan_segundos deve ficar entre 30 e 3600"));
+        }
+        if caravan >= entrada.max_duration_segundos {
+            return Err(AppError::bad_request("o tempo do Caravan deve ser menor que a duração máxima da run"));
+        }
     }
     if entrada.year.is_some_and(|ano| !(ANO_MINIMO..=ANO_MAXIMO).contains(&ano)) {
         return Err(AppError::bad_request("year deve ficar entre 1970 e 2100"));
@@ -176,7 +195,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
 
 /// Campos do catálogo que a gravação controla. Os opcionais ausentes na entrada estão na máscara
 /// mas não nos valores, o que os apaga do documento.
-const MASCARA: [&str; 14] = [
+const MASCARA: [&str; 15] = [
     "title",
     "steamAppId",
     "maxDurationSeconds",
@@ -191,6 +210,7 @@ const MASCARA: [&str; 14] = [
     "modes",
     "coverUrl",
     "rankedMister",
+    "caravanSeconds",
 ];
 
 /// Cria ou atualiza `games/{id}`. Só toca os campos do catálogo, preservando o que outras
@@ -245,6 +265,9 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
     if let Some(ano) = entrada.year {
         inserir("year", inteiro(ano));
     }
+    if let Some(caravan) = entrada.caravan_segundos {
+        inserir("caravanSeconds", inteiro(caravan));
+    }
     if !entrada.modes.is_empty() {
         inserir("modes", lista_de_textos(&entrada.modes));
     }
@@ -280,6 +303,7 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
         modes: entrada.modes,
         cover_url: entrada.cover_url,
         ranked_mister: entrada.ranked_mister,
+        caravan_segundos: entrada.caravan_segundos.unwrap_or(CARAVAN_PADRAO_SEGUNDOS),
     })
 }
 
@@ -333,6 +357,9 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
             if antes.modes != depois.modes {
                 mudancas.push(item("modos", "rules", Some(format!("{}: modos competitivos agora são {}", depois.title, nomes_dos_modos(&depois.modes)))));
             }
+            if antes.caravan_segundos != depois.caravan_segundos && depois.modes.iter().any(|m| m == "caravan") {
+                mudancas.push(item("caravan", "rules", Some(format!("{}: o Caravan agora tem {}", depois.title, duracao_legivel(depois.caravan_segundos)))));
+            }
             if antes.ranked_mister != depois.ranked_mister {
                 let texto = if depois.ranked_mister { "Ranked no MiSTer liberado" } else { "no MiSTer agora só Training" };
                 mudancas.push(item("ranked-mister", "rules", Some(format!("{}: {texto}", depois.title))));
@@ -342,6 +369,15 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
             }
             mudancas
         }
+    }
+}
+
+/// Duração para as notas da versão: `5 min`, `2 min 30 s`, `45 s`.
+fn duracao_legivel(segundos: i64) -> String {
+    match (segundos / 60, segundos % 60) {
+        (0, s) => format!("{s} s"),
+        (m, 0) => format!("{m} min"),
+        (m, s) => format!("{m} min {s} s"),
     }
 }
 
@@ -375,6 +411,7 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         modes: ler_lista_de_textos(campos, "modes"),
         cover_url: ler_texto(campos, "coverUrl"),
         ranked_mister: ler_booleano(campos, "rankedMister").unwrap_or(false),
+        caravan_segundos: ler_inteiro(campos, "caravanSeconds").unwrap_or(CARAVAN_PADRAO_SEGUNDOS),
         created_at: None,
         updated_at: None,
         id,
@@ -401,6 +438,20 @@ mod tests {
     fn entrada_valida_e_normalizada() {
         let ok = validar("earthion", entrada()).unwrap();
         assert_eq!(ok.title, "Earthion");
+    }
+
+    #[test]
+    fn tempo_do_caravan_entre_30_s_e_1_h_e_menor_que_a_run() {
+        let com = |s: i64| validar("earthion", JogoEntrada { caravan_segundos: Some(s), ..entrada() });
+        assert_eq!(com(300).unwrap().caravan_segundos, Some(300));
+        assert!(com(29).is_err());
+        assert!(com(3601).is_err());
+        // A run de 30 min (1800 s) precisa caber o Caravan com folga.
+        assert!(com(1800).is_err());
+        assert_eq!(validar("earthion", entrada()).unwrap().caravan_segundos, None);
+        assert_eq!(duracao_legivel(300), "5 min");
+        assert_eq!(duracao_legivel(150), "2 min 30 s");
+        assert_eq!(duracao_legivel(45), "45 s");
     }
 
     #[test]
@@ -514,6 +565,7 @@ mod tests {
                 steam_app_id: 0,
                 max_duration_segundos: 3600,
                 published: false,
+                caravan_segundos: CARAVAN_PADRAO_SEGUNDOS,
                 ..Default::default()
             }
         );

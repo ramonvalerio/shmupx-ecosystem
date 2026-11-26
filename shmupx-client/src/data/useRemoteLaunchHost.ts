@@ -5,7 +5,7 @@ import type { GameRoom } from "../types/room";
 import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
 import { readEmulatorSettings } from "./emulatorSettings";
 import { readEmulatorControls } from "./emulatorControls";
-import { setPendingRunEvent, setPendingRunMode } from "./gameModes";
+import { caravanSecondsOf, setPendingRunEvent, setPendingRunMode } from "./gameModes";
 import { stillInstalled, usePlatformOwnership } from "./platforms";
 import {
   COMMAND_TTL_MS, DESKTOP_HEARTBEAT_MS, publishDesktop, publishResult, remoteRef,
@@ -94,7 +94,8 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
           if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
           await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training });
         } else {
-          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
+          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+            caravanSegundos: !training && command.mode === "caravan" ? caravanSecondsOf(room) : null });
         }
         awaitingRun.current = training ? null : { id: command.id, gameId: room.id };
         answer(command.id, "started", training

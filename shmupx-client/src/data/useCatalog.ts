@@ -22,6 +22,7 @@ export function roomFromGame(id: string, data: Record<string, unknown>): GameRoo
     platforms: catalogPlayOn(data),
     modes: Array.isArray(data.modes) ? data.modes.filter((m): m is GameMode => m === "highscore" || m === "1cc" || m === "caravan") : [],
     rankedMister: data.rankedMister === true,
+    caravanSeconds: typeof data.caravanSeconds === "number" && data.caravanSeconds > 0 ? data.caravanSeconds : undefined,
     platform: texto(data.platform),
     developer: texto(data.developer),
     publisher: texto(data.publisher),

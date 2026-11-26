@@ -41,13 +41,29 @@ interface Draft {
   coverUrl: string;
   /** Ranked no MiSTer: o agente lê o placar da memória lá (hoje só o Earthion, core Mega Drive). */
   rankedMister: boolean;
+  /** Tempo do Caravan como digitado: minutos (`5`) ou minutos e segundos (`2:30`). */
+  caravan: string;
+}
+
+/** Tempo do Caravan quando o jogo ainda não tem um (a caravana clássica, 5 min). */
+const CARAVAN_PADRAO_SEGUNDOS = 300;
+
+/** `300` → `5:00`. */
+function caravanText(segundos: number): string {
+  return `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
+}
+
+/** `5` ou `5:00` → 300; `2:30` → 150; inválido → `null`. */
+function caravanSeconds(text: string): number | null {
+  const match = /^(\d{1,2})(?::([0-5]\d))?$/.exec(text.trim());
+  return match ? Number(match[1]) * 60 + Number(match[2] ?? 0) : null;
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function toDraft(game: CatalogGame | null): Draft {
   if (!game) {
-    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "", rankedMister: false };
+    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "", rankedMister: false, caravan: caravanText(CARAVAN_PADRAO_SEGUNDOS) };
   }
   return {
     id: game.id,
@@ -64,6 +80,7 @@ function toDraft(game: CatalogGame | null): Draft {
     modes: game.modes,
     coverUrl: game.cover_url ?? "",
     rankedMister: game.ranked_mister ?? false,
+    caravan: caravanText(game.caravan_segundos ?? CARAVAN_PADRAO_SEGUNDOS),
   };
 }
 
@@ -82,6 +99,11 @@ function problem(draft: Draft): string | null {
   if (!ID_PATTERN.test(draft.id.trim())) return "ID inválido: use letras, números, - e _ (ex.: earthion).";
   if (!Number.isInteger(steamAppId) || steamAppId < 0) return "app_id da Steam deve ser um inteiro (0 = fora da Steam).";
   if (!Number.isFinite(minutes) || minutes < 1 || minutes > 120) return "Duração máxima da run: de 1 a 120 minutos.";
+  if (draft.modes.includes("caravan")) {
+    const caravan = caravanSeconds(draft.caravan);
+    if (caravan === null || caravan < 30 || caravan > 3600) return "Tempo do Caravan: de 0:30 a 60:00 (minutos ou m:ss, ex.: 5 ou 2:30).";
+    if (caravan >= minutes * 60) return "O tempo do Caravan deve ser menor que a duração máxima da run.";
+  }
   if (year !== null && (!Number.isInteger(year) || year < 1970 || year > 2100)) return "Ano deve ficar entre 1970 e 2100.";
   return null;
 }
@@ -229,6 +251,7 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
         modes: draft.modes,
         cover_url: draft.coverUrl || undefined,
         ranked_mister: draft.rankedMister && draft.platforms.includes("mister"),
+        caravan_segundos: draft.modes.includes("caravan") ? caravanSeconds(draft.caravan) ?? undefined : undefined,
       });
       onSaved(saved);
     } catch (e) {
@@ -399,6 +422,20 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
                 </Field>
                 <Field label="Duração máx. da run" hint="Em minutos (1 a 120).">
                   <TextInput inputMode="numeric" value={draft.minutes} onChange={(e) => patch({ minutes: e.target.value })} />
+                </Field>
+                <Field
+                  label="Tempo do Caravan"
+                  hint={draft.modes.includes("caravan")
+                    ? "Minutos ou m:ss (ex.: 5 ou 2:30). Na partida Caravan, o jogo fecha nesse tempo e o placar feito até ali vale."
+                    : "Marque o modo Caravan em Detalhes para definir o tempo."}
+                >
+                  <TextInput
+                    inputMode="numeric"
+                    placeholder="5:00"
+                    disabled={!draft.modes.includes("caravan")}
+                    value={draft.caravan}
+                    onChange={(e) => patch({ caravan: e.target.value })}
+                  />
                 </Field>
               </div>
               <RankedValidationField id={draft.id.trim()} ranked={ranked} />

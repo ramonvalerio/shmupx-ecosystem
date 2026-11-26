@@ -103,7 +103,7 @@ function ComingSoonBadge({ room }: { room: GameRoom }) {
 function PlayPanel({ room, uid }: { room: GameRoom; uid: string | undefined }) {
   const { t } = useI18n();
   const ranked = useRankedLive(room);
-  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
+  const launcher = useGameLauncher(room, { onLive: (platform, mode) => void ranked.start(platform, launcher.ensureInstalled, mode) });
   const play = useRoomPlay(room, launcher.platforms, launcher.owns);
   return <section className="collection-play" aria-label={t("Jogar")}>
     {/* A ficha (com o saldo) em cima; abaixo, modo de jogo e plataforma e as opções da live. */}

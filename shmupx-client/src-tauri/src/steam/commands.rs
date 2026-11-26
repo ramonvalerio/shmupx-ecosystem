@@ -133,6 +133,8 @@ pub async fn inicializar_jogo_emulador(
     janela: Option<bool>,
     motor_video: Option<super::emulador::VideoDoMotor>,
     motor_controles: Option<Vec<super::controles::ControleMapeado>>,
+    // Partida Caravan: o tempo do Caravan do jogo (Lab), para o contador e o fim no motor.
+    caravan_segundos: Option<u32>,
 ) -> Result<(), String> {
     let janela = janela.unwrap_or(false);
     let escolhida = super::emulador::pasta_escolhida(&app);
@@ -144,6 +146,7 @@ pub async fn inicializar_jogo_emulador(
             ranking: !treino,
             video: motor_video.unwrap_or_default(),
             controles: motor_controles.unwrap_or_default(),
+            caravan_segundos: caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino),
             ..m
         });
     // Ranked de jogo validado só pela memória (sem script de vídeo): só com o ROM mapeado (outra

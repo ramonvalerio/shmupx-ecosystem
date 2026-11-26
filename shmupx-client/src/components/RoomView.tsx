@@ -162,7 +162,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // Play Training / Play Ranked / Play Live Ranked: modo e plataforma em useGameLauncher.
   // Play Ranked (com ou sem live) e as opções dele: RankedPanel, o mesmo do painel da Coleção.
   const ranked = useRankedLive(room);
-  const launcher = useGameLauncher(room, { onLive: (platform) => void ranked.start(platform, launcher.ensureInstalled) });
+  const launcher = useGameLauncher(room, { onLive: (platform, mode) => void ranked.start(platform, launcher.ensureInstalled, mode) });
   const stats = useGameStats(playerId, room.id);
   const myJoinedAt = useMyJoinedAt(room.id);
   // Pódio do jogo da sala (Hi-Score): medalha de ouro, prata e bronze e o topo da lista de jogadores.

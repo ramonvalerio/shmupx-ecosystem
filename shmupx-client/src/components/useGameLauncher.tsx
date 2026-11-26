@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { misterEntryMatches, playableMode, playModesFor, setPendingRunEvent, setPendingRunMode } from "../data/gameModes";
+import { caravanSecondsOf, misterEntryMatches, playableMode, playModesFor, setPendingRunEvent, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { readEmulatorControls } from "../data/emulatorControls";
@@ -306,7 +306,8 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
         await watchSteamLaunch(room.steamAppId, retry);
         await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
       } else {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() });
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+          caravanSegundos: !forPractice && chosenMode === "caravan" ? caravanSecondsOf(room) : null });
       }
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gastar ficha.", { game: room.title }));
     } catch (failure) {

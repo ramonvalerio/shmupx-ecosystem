@@ -21,6 +21,8 @@ export interface CatalogGame {
   cover_url?: string;
   /** Ranked no MiSTer liberado: o agente do MiSTer lê o placar da memória do jogo. Exige MiSTer em `platforms`. */
   ranked_mister?: boolean;
+  /** Tempo do Caravan em segundos (30 a 3600, menor que a duração máxima): na partida Caravan o jogo fecha nesse tempo. Padrão 300. */
+  caravan_segundos?: number;
   /** Data de cadastro (ISO 8601), definida pelo backend. */
   created_at?: string;
   /** Última alteração, inclusive no RobotX (ISO 8601), definida pelo backend. */

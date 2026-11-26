@@ -73,6 +73,9 @@ pub struct IniciarRunResponse {
     pub run_id: String,
     pub server_started_at: String,
     pub max_duration_segundos: i32,
+    /// Partida Caravan: em quantos segundos o jogo fecha (o tempo do Caravan do jogo no Lab).
+    #[serde(default)]
+    pub caravan_segundos: Option<i32>,
 }
 
 /// `POST /api/runs/start`: débito atômico de ficha no backend, abre a "ficha ativa" da run.

@@ -4,6 +4,7 @@ import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { liveActive, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
+import { caravanSecondsOf } from "../data/gameModes";
 import { readEmulatorControls } from "../data/emulatorControls";
 import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
@@ -55,13 +56,14 @@ export function useRankedLive(room: GameRoom) {
   const liveOn = liveActive(live.state);
 
   /** Play Ranked com live: confere o jogo instalado e põe a live no ar; o jogo abre depois dela. */
-  async function start(platform: PlayOn, ensureInstalled: (platform: PlayOn) => Promise<boolean>) {
+  async function start(platform: PlayOn, ensureInstalled: (platform: PlayOn) => Promise<boolean>, mode?: GameMode) {
     setLiveError(null);
     if (platform === "mister") return;
     if (!(await ensureInstalled(platform))) return;
     const launch: LiveLaunch = platform === "steam"
       ? { platform: "steam", steamAppId: room.steamAppId }
-      : { platform: "emulator", roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls() };
+      : { platform: "emulator", roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+        caravanSegundos: mode === "caravan" ? caravanSecondsOf(room) : null };
     try {
       await live.start(room.id, `${room.title} · Ranked · ShmupX`, prefs.public, launch);
     } catch (error) {

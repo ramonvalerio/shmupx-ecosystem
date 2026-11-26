@@ -39,6 +39,9 @@ pub struct RunIniciada {
     pub run_id: String,
     pub server_started_at: DateTime<Utc>,
     pub max_duration_segundos: i32,
+    /// Partida Caravan: em quantos segundos o Client fecha o jogo (o tempo do Caravan do Lab).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caravan_segundos: Option<i32>,
 }
 
 /// Vidas e continues são opcionais: o MiSTer só lê o placar (ADR 008).
@@ -56,7 +59,8 @@ pub struct Resultado {
 /// Steam, MiSTer ou placa original.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Detalhes {
-    /// `highscore`, `1cc`, `caravan-sprint` (2 min) ou `caravan-classic` (5 min).
+    /// `highscore`, `1cc`, `caravan-sprint` ou `caravan-classic` (os dois Caravan duram o tempo do
+    /// Caravan do jogo no Lab, `caravanSeconds`).
     pub modo: Option<String>,
     /// Versão do jogo (ex.: `megadrive-4.0.0`); partidas de versões diferentes não se misturam.
     pub versao: Option<String>,
@@ -147,7 +151,16 @@ async fn iniciar_na_transacao(
             return Err(AppError::bad_request(format!("este jogo não tem o modo {categoria}")));
         }
     }
-    let max_duracao = ler_inteiro(&jogo, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS).clamp(1, 7200);
+    let mut max_duracao = ler_inteiro(&jogo, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS).clamp(1, 7200);
+    // Caravan: o jogo fecha no tempo do Caravan do Lab; a ficha cobre esse tempo com folga para
+    // fechar o jogo e enviar o resultado.
+    let caravan = detalhes.modo.as_deref().filter(|m| m.starts_with("caravan")).map(|_| {
+        use crate::services::catalogo::{CARAVAN_MAXIMO_SEGUNDOS, CARAVAN_MINIMO_SEGUNDOS, CARAVAN_PADRAO_SEGUNDOS};
+        ler_inteiro(&jogo, "caravanSeconds").unwrap_or(CARAVAN_PADRAO_SEGUNDOS).clamp(CARAVAN_MINIMO_SEGUNDOS, CARAVAN_MAXIMO_SEGUNDOS)
+    });
+    if let Some(caravan) = caravan {
+        max_duracao = max_duracao.max(caravan + 60).min(7200);
+    }
 
     // Partida de evento: só para quem se inscreveu, durante o evento, num jogo e modo do evento.
     let agora = Utc::now();
@@ -170,6 +183,9 @@ async fn iniciar_na_transacao(
             ("maxDurationSeconds", inteiro(max_duracao)),
         ]))),
     ]);
+    if let Some(caravan) = caravan {
+        campos_gameplay.insert("caravanSeconds".into(), inteiro(caravan));
+    }
     if let Some(modo) = &detalhes.modo {
         campos_gameplay.insert("mode".into(), texto(modo));
     }
@@ -188,7 +204,7 @@ async fn iniciar_na_transacao(
     escritas.push(criar(fs, &format!("gameplays/{run_id}"), campos_gameplay));
 
     fs.confirmar(tx, escritas).await?;
-    Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32 })
+    Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32, caravan_segundos: caravan.map(|s| s as i32) })
 }
 
 /// Escritas que debitam `valor` fichas da carteira (`wallets/{uid}`, já lida na transação) com o
