@@ -241,7 +241,7 @@ const ROOM_LAYOUT_ENGLISH: Record<string, string> = {
   "PC (Steam)": "PC (Steam)", "Mega Drive": "Mega Drive", "Neo Geo": "Neo Geo", "Arcade": "Arcade", "Xbox 360": "Xbox 360",
   "PlayStation": "PlayStation", "Nintendo Switch": "Nintendo Switch",
   "Ligar o som do vídeo": "Turn video sound on", "Silenciar o vídeo": "Mute video",
-  "Volume do vídeo": "Video volume", "Ver o vídeo grande": "Watch the video large", "Duplo clique para ver o vídeo grande": "Double-click to watch the video large",
+  "Volume do vídeo": "Video volume", "Ver o vídeo grande": "Watch the video large", "Duplo clique para ver o vídeo grande": "Double-click to watch the video large", "Clique para configurar o monitor · duplo clique para ver o vídeo grande": "Click to set up the monitor · double-click to watch the video large", "Clique para configurar o monitor": "Click to set up the monitor", "Monitor": "Monitor",
   "Vídeo de {game}": "{game} video",
   "Até {count} salas abertas ao mesmo tempo": "Up to {count} rooms open at the same time",
   "Escolha de qual sala sair para entrar em {game} no lugar dela.": "Choose which room to leave so {game} takes its place.",

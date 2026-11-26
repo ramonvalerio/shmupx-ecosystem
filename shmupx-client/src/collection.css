@@ -65,10 +65,13 @@
 .collection-details > header .favorite-action:is(.is-favorite, :hover) { color: #f2c14e; }
 .arcade-cabinet { display: block; flex-shrink: 0; width: 100%; max-width: 300px; margin: 4px auto 0; }
 .arcade-cabinet-label { fill: #c9d3d8; font-size: 6px; letter-spacing: .1em; }
-/* Minhas coleções: o gabinete testa o controle (botões afundam como em Configurações › Controle) e,
-   fora da tela, abre os controles do emulador. */
+/* Minhas coleções e sala: o gabinete testa o controle (botões afundam como em Configurações › Controle);
+   a tela abre o monitor dos jogos e o resto do gabinete, os controles do emulador. */
 .arcade-cabinet.is-configurable { cursor: pointer; }
-.arcade-cabinet.is-configurable [data-cabinet-screen] { cursor: default; }
+/* Mouse no monitor: a moldura acende em ciano, como o painel. */
+.cabinet-monitor-frame { stroke: transparent; stroke-width: 1.5; transition: stroke 120ms ease-out, filter 120ms ease-out; }
+.arcade-cabinet.is-configurable .cabinet-monitor:hover .cabinet-monitor-frame { stroke: var(--cyan); filter: drop-shadow(0 0 3px var(--cyan)); }
+@media (prefers-reduced-motion: reduce) { .cabinet-monitor-frame { transition: none; } }
 /* Mouse no painel de controle: o contorno acende em ciano e o painel brilha, para mostrar que abre
    a configuração dos controles. */
 .cabinet-panel-face { transition: stroke 120ms ease-out, filter 120ms ease-out, fill 120ms ease-out; }
@@ -82,6 +85,12 @@
 /* Modal dos controles: larga, para o gabinete e a lista lado a lado. */
 .emulator-controls-dialog { width: min(1040px, 100%); }
 .emulator-controls-dialog .controller-dialog-body { padding-top: 16px; }
+/* Monitor dos jogos (clique na tela do gabinete): as opções de Configurações › Emulador. */
+.monitor-settings-dialog { width: min(560px, 100%); }
+.monitor-settings-body { display: grid; gap: 14px; padding-top: 16px; }
+.monitor-settings-body > * { margin: 0; }
+.monitor-settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--stroke); }
+.monitor-settings-footer p { margin: 0; }
 .collection-facts { display: flex; flex-direction: column; gap: 9px; margin: 0; font-size: 12px; }
 .collection-facts > div { display: flex; justify-content: space-between; gap: 12px; }
 .collection-facts dt { color: #d7e4e8; }
@@ -181,6 +190,7 @@
 .cabinet-video { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 6px; background: #000; }
 .cabinet-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .cabinet-video { cursor: zoom-in; }
+.cabinet-video.is-clickable { cursor: pointer; }
 /* Barra do vídeo (aparece ao passar o mouse): som, volume e expandir. */
 .cabinet-controls { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex; align-items: center; gap: 5px; padding: 3px 5px; border-radius: 5px; background: #000000b8; opacity: 0; transition: opacity .15s; cursor: default; }
 .cabinet-video:hover .cabinet-controls, .cabinet-controls:focus-within { opacity: 1; }
