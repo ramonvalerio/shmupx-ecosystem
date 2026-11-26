@@ -67,6 +67,8 @@ pub struct Telemetria {
     /// Caravan: tempo vivido na partida em ms (o tempo todo do modo se o relógio zerou), vindo do
     /// evento `result` do motor.
     pub sobrevivencia_ms: Option<i64>,
+    /// Fase mais longe alcançada (1 = a primeira), campo `stage_reached` do motor.
+    pub estagio: Option<i64>,
     pub fim: Option<Fim>,
     /// O jogador zerou o jogo (evento `cleared` do motor, pelo `cleared` do mapa do jogo).
     pub zerou: bool,
@@ -140,6 +142,7 @@ impl Telemetria {
                     }
                 }
                 (Some("bombs_used"), Some(v)) => self.bombas_usadas = Some(v),
+                (Some("stage_reached"), Some(v)) => self.estagio = Some(self.estagio.map_or(v, |e| e.max(v))),
                 _ => {}
             },
             "cleared" if self.run_comecou => self.zerou = true,
@@ -165,6 +168,8 @@ pub struct ResultadoMemoria {
     pub bombas_usadas: Option<i32>,
     /// Caravan: tempo vivido em ms.
     pub sobrevivencia_ms: Option<i32>,
+    /// Fase mais longe alcançada (a coluna PROGRESSO do Hi-Score).
+    pub estagio: Option<i32>,
     /// Zerou o jogo: com 0 continues (o Ranked não tem continue), a run entra também na tabela 1CC.
     pub zerou: bool,
 }
@@ -204,6 +209,7 @@ pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
         rota: Some(t.rota.clone()).filter(|r| !r.is_empty()),
         bombas_usadas: t.bombas_usadas.and_then(|b| i32::try_from(b).ok()),
         sobrevivencia_ms: t.sobrevivencia_ms.and_then(|ms| i32::try_from(ms).ok()),
+        estagio: t.estagio.and_then(|e| i32::try_from(e).ok()),
         zerou: t.zerou,
     }))
 }
@@ -279,6 +285,13 @@ mod tests {
         assert_eq!(t.nave.as_deref(), Some("Type-A (Laser)"));
         assert_eq!(t.sobrevivencia_ms, Some(300_000));
         assert!(t.resultado_mostrado);
+        // Fase: a mais longe alcançada.
+        let fases = run(&[
+            r#"SHMUPX {"ev":"run_start","frame":1}"#,
+            r#"SHMUPX {"ev":"field","name":"stage_reached","value":1,"frame":2}"#,
+            r#"SHMUPX {"ev":"field","name":"stage_reached","value":5,"frame":9000}"#,
+        ]);
+        assert_eq!(fases.estagio, Some(5));
     }
 
     #[test]
@@ -315,7 +328,7 @@ mod tests {
         ]);
         assert_eq!(
             resultado(&t),
-            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), rota: None, bombas_usadas: None, sobrevivencia_ms: None, zerou: false }))
+            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), rota: None, bombas_usadas: None, sobrevivencia_ms: None, estagio: None, zerou: false }))
         );
     }
 

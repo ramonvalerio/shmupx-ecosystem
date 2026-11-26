@@ -15,6 +15,7 @@ export interface LocalRankingEntry {
   bombas?: number | null;
   nave?: string | null;
   sobrevivencia_ms?: number | null;
+  estagio?: number | null;
   modo: string | null;
   /** Quando a run foi aceita (ms). */
   quando: number;

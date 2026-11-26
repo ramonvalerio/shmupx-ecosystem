@@ -32,6 +32,8 @@ pub struct Partida {
     /// Nave ou personagem escolhida (o rótulo do mapa de memória) e, no Caravan, o tempo vivido em ms.
     pub nave: Option<String>,
     pub sobrevivencia_ms: Option<i32>,
+    /// Fase mais longe alcançada (1 = a primeira), nos jogos em que o motor lê a fase.
+    pub estagio: Option<i32>,
     /// O jogador zerou o jogo (`result.cleared`).
     pub zerou: bool,
     pub modo: Option<String>,
@@ -55,6 +57,9 @@ pub struct EntradaJogo {
     pub bombas_usadas: Option<i32>,
     pub nave: Option<String>,
     pub sobrevivencia_ms: Option<i32>,
+    /// Fase alcançada e se zerou com 1 crédito (a coluna PROGRESSO: 1CC ou Stage N).
+    pub estagio: Option<i32>,
+    pub um_credito: bool,
     pub runs: usize,
     pub modo: Option<String>,
     pub versao: Option<String>,
@@ -136,33 +141,84 @@ fn arredondar(valor: f64) -> f64 {
     (valor * 100.0).round() / 100.0
 }
 
-/// O que decide a posição no Caravan: placar, tempo sobrevivido (ms), mortes (vidas perdidas) e bombas.
-/// Campo não lido (run antiga, jogo sem o dado) fica depois de quem tem o valor.
-pub type MarcaCaravan = (i64, Option<i64>, Option<i64>, Option<i64>);
+/// O que decide a posição numa tabela: placar, tempo sobrevivido (ms, Caravan), mortes (vidas
+/// perdidas), bombas, se zerou com 1 crédito (1CC) e a fase alcançada. Campo não lido (run antiga,
+/// jogo sem o dado) fica depois de quem tem o valor.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Marca {
+    pub score: i64,
+    pub sobrevivencia_ms: Option<i64>,
+    pub mortes: Option<i64>,
+    pub bombas: Option<i64>,
+    pub um_credito: bool,
+    pub estagio: Option<i64>,
+}
 
-/// Regra padrão do Caravan Mode: 1º maior placar (mesmo que tenha morrido antes), 2º mais tempo
-/// sobrevivido dentro do limite, 3º menos mortes, 4º menos bombas. O 5º critério é quem registrou a
-/// marca primeiro (`enviada_em`), aplicado por quem chama. `Ordering::Less` = `a` na frente de `b`.
-pub fn ordem_caravan(a: &MarcaCaravan, b: &MarcaCaravan) -> std::cmp::Ordering {
+/// Tabela do ranking, cada uma com a sua regra padrão (regras do Lab por evento/jogo virão depois).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tabela {
+    HiScore,
+    UmCredito,
+    Caravan,
+}
+
+impl Tabela {
+    /// `1cc`, `caravan` (e `caravan-*`); o resto (inclusive sem modo) é Hi-Score.
+    pub fn do_modo(modo: Option<&str>) -> Tabela {
+        match modo {
+            Some("1cc") => Tabela::UmCredito,
+            Some(m) if m.starts_with("caravan") => Tabela::Caravan,
+            _ => Tabela::HiScore,
+        }
+    }
+}
+
+/// Regras padrão. `Ordering::Less` = `a` na frente de `b`; o último critério (quem registrou a marca
+/// primeiro, `enviada_em`) é de quem chama.
+/// - Hi-Score: maior placar, depois 1CC na frente, depois a fase mais longe (sem 1CC), menos mortes e
+///   menos bombas.
+/// - 1CC: maior placar, menos mortes, menos bombas.
+/// - Caravan: maior placar (mesmo que tenha morrido antes), mais tempo sobrevivido dentro do limite,
+///   menos mortes, menos bombas.
+pub fn ordem(tabela: Tabela, a: &Marca, b: &Marca) -> std::cmp::Ordering {
     let menos = |v: Option<i64>| v.unwrap_or(i64::MAX);
-    b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(menos(a.2).cmp(&menos(b.2))).then(menos(a.3).cmp(&menos(b.3)))
+    let placar = b.score.cmp(&a.score);
+    let parcimonia = menos(a.mortes).cmp(&menos(b.mortes)).then(menos(a.bombas).cmp(&menos(b.bombas)));
+    match tabela {
+        Tabela::HiScore => {
+            let progresso = b.um_credito.cmp(&a.um_credito).then(if a.um_credito { std::cmp::Ordering::Equal } else { b.estagio.cmp(&a.estagio) });
+            placar.then(progresso).then(parcimonia)
+        }
+        Tabela::UmCredito => placar.then(parcimonia),
+        Tabela::Caravan => placar.then(b.sobrevivencia_ms.cmp(&a.sobrevivencia_ms)).then(parcimonia),
+    }
 }
 
-fn marca(p: &Partida) -> MarcaCaravan {
-    (p.score, p.sobrevivencia_ms.map(i64::from), p.vidas_perdidas.map(i64::from), p.bombas_usadas.map(i64::from))
+/// A run zerou o jogo com 1 crédito (0 continues), ou é das antigas marcadas `1cc`.
+pub fn e_um_credito(modo: Option<&str>, zerou: bool, continues: i64) -> bool {
+    modo == Some("1cc") || (zerou && continues == 0)
 }
 
-/// Qual partida fica na frente: no Caravan, a regra de `ordem_caravan`; nos outros modos, o maior
-/// placar. `Ordering::Less` = `a` na frente de `b`.
-pub fn ordem_no_ranking(a: &Partida, b: &Partida, caravana: bool) -> std::cmp::Ordering {
-    if caravana { ordem_caravan(&marca(a), &marca(b)) } else { b.score.cmp(&a.score) }
+fn marca(p: &Partida) -> Marca {
+    Marca {
+        score: p.score,
+        sobrevivencia_ms: p.sobrevivencia_ms.map(i64::from),
+        mortes: p.vidas_perdidas.map(i64::from),
+        bombas: p.bombas_usadas.map(i64::from),
+        um_credito: e_um_credito(p.modo.as_deref(), p.zerou, p.continues.into()),
+        estagio: p.estagio.map(i64::from),
+    }
 }
 
-/// Classificação de um jogo: o melhor de cada jogador (`ordem_no_ranking`: no Caravan, menos vidas
-/// perdidas e depois o placar). Empate: quem chegou primeiro fica na frente, mas a posição é a mesma
-/// (1, 2, 2, 4).
+/// Qual partida fica na frente na tabela (`ordem`). `Ordering::Less` = `a` na frente de `b`.
+pub fn ordem_no_ranking(a: &Partida, b: &Partida, tabela: Tabela) -> std::cmp::Ordering {
+    ordem(tabela, &marca(a), &marca(b))
+}
+
+/// Classificação de um jogo: o melhor de cada jogador (`ordem`, com a regra da tabela). Empate em
+/// todos os critérios: quem chegou primeiro fica na frente, mas a posição é a mesma (1, 2, 2, 4).
 pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, versao: Option<&str>) -> Vec<EntradaJogo> {
-    let caravana = modo == Some("caravan");
+    let tabela = Tabela::do_modo(modo);
     let stats = estatisticas(partidas);
     let mut melhores: HashMap<&str, (&Partida, usize)> = HashMap::new();
     for p in partidas.iter().filter(|p| {
@@ -171,21 +227,23 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
         let atual = melhores.entry(p.jogador.as_str()).or_insert((p, 0));
         atual.1 += 1;
         let melhor = atual.0;
-        if ordem_no_ranking(p, melhor, caravana).then(p.enviada_em.cmp(&melhor.enviada_em)).is_lt() {
+        if ordem_no_ranking(p, melhor, tabela).then(p.enviada_em.cmp(&melhor.enviada_em)).is_lt() {
             atual.0 = p;
         }
     }
     let mut lista: Vec<(&Partida, usize)> = melhores.into_values().collect();
     lista.sort_by(|(a, _), (b, _)| {
-        ordem_no_ranking(a, b, caravana).then(a.enviada_em.cmp(&b.enviada_em)).then(a.jogador.cmp(&b.jogador))
+        ordem_no_ranking(a, b, tabela).then(a.enviada_em.cmp(&b.enviada_em)).then(a.jogador.cmp(&b.jogador))
     });
 
     let mut entradas: Vec<EntradaJogo> = Vec::with_capacity(lista.len());
+    let mut anterior: Option<&Partida> = None;
     for (indice, (p, runs)) in lista.into_iter().enumerate() {
-        let posicao = match entradas.last() {
-            Some(anterior) if anterior.score == p.score && (!caravana || (anterior.sobrevivencia_ms, anterior.vidas_perdidas, anterior.bombas_usadas) == (p.sobrevivencia_ms, p.vidas_perdidas, p.bombas_usadas)) => anterior.posicao,
+        let posicao = match (anterior, entradas.last()) {
+            (Some(a), Some(e)) if ordem_no_ranking(a, p, tabela).is_eq() => e.posicao,
             _ => indice + 1,
         };
+        anterior = Some(p);
         entradas.push(EntradaJogo {
             posicao,
             jogador_id: p.jogador.clone(),
@@ -198,6 +256,8 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
             bombas_usadas: p.bombas_usadas,
             nave: p.nave.clone(),
             sobrevivencia_ms: p.sobrevivencia_ms,
+            estagio: p.estagio,
+            um_credito: e_um_credito(p.modo.as_deref(), p.zerou, p.continues.into()),
             runs,
             modo: p.modo.clone(),
             versao: p.versao.clone(),
@@ -272,6 +332,7 @@ mod tests {
             bombas_usadas: None,
             nave: None,
             sobrevivencia_ms: None,
+            estagio: None,
             zerou: false,
             modo: None,
             versao: None,
@@ -313,6 +374,47 @@ mod tests {
         // No Hi-Score continua só o placar.
         let hs: Vec<String> = ranking_do_jogo(&partidas.clone().map(|p| Partida { modo: None, ..p }), "j", Some("highscore"), None).into_iter().map(|e| e.jogador_id).collect();
         assert_eq!(hs.last().map(String::as_str), Some("bia"));
+    }
+
+    #[test]
+    fn hi_score_desempata_por_1cc_fase_mortes_e_bombas() {
+        let hs = |jogador: &str, score: i64, zerou: bool, fase: Option<i32>, mortes: Option<i32>, bombas: Option<i32>| Partida {
+            zerou,
+            estagio: fase,
+            vidas_perdidas: mortes,
+            bombas_usadas: bombas,
+            ..partida(jogador, "j", score)
+        };
+        let partidas = [
+            hs("ana", 900, false, Some(7), Some(0), Some(0)),
+            hs("bia", 900, true, Some(7), Some(3), Some(9)),
+            hs("caio", 900, false, Some(5), Some(0), Some(0)),
+            hs("dani", 900, false, Some(7), Some(1), Some(0)),
+            hs("edu", 900, false, Some(7), Some(1), Some(2)),
+            hs("fabi", 1000, false, Some(1), Some(9), Some(9)),
+        ];
+        let ids = |modo| ranking_do_jogo(&partidas, "j", modo, None).into_iter().map(|e| e.jogador_id).collect::<Vec<_>>();
+        // Maior placar primeiro; no empate, o 1CC; depois a fase mais longe, menos mortes, menos bombas.
+        assert_eq!(ids(Some("highscore")), vec!["fabi", "bia", "ana", "dani", "edu", "caio"]);
+        // 1CC: só as runs zeradas com 1 crédito, da mesma fonte (a run da bia não é duplicada).
+        assert_eq!(ids(Some("1cc")), vec!["bia"]);
+        let r = ranking_do_jogo(&partidas, "j", Some("highscore"), None);
+        assert!(r[1].um_credito && !r[0].um_credito);
+        assert_eq!(r[5].estagio, Some(5));
+    }
+
+    #[test]
+    fn um_cc_ordena_por_placar_mortes_e_bombas_e_fica_vazio_sem_clear() {
+        let cc = |jogador: &str, score: i64, mortes: i32, bombas: i32| Partida {
+            zerou: true,
+            vidas_perdidas: Some(mortes),
+            bombas_usadas: Some(bombas),
+            ..partida(jogador, "j", score)
+        };
+        let partidas = [cc("ana", 500, 2, 0), cc("bia", 500, 1, 5), cc("caio", 500, 1, 3), cc("dani", 800, 9, 9)];
+        let ids: Vec<String> = ranking_do_jogo(&partidas, "j", Some("1cc"), None).into_iter().map(|e| e.jogador_id).collect();
+        assert_eq!(ids, vec!["dani", "caio", "bia", "ana"]);
+        assert!(ranking_do_jogo(&[partida("eva", "j", 999)], "j", Some("1cc"), None).is_empty());
     }
 
     #[test]

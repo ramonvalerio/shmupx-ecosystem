@@ -94,6 +94,9 @@ interface RankRecord {
   /** Nave/personagem e, no Caravan, o tempo vivido (ms). */
   ship?: string | null;
   survivalMs?: number | null;
+  /** PROGRESSO: zerou com 1 crédito (selo 1CC) ou a fase mais longe alcançada (Stage N). */
+  oneCC?: boolean;
+  stage?: number | null;
   runs?: number;
   rating?: number;
   verified?: boolean;
@@ -162,8 +165,8 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
     [runs, room.id, events],
   );
   const localAll = useLocalRanking(uid, room.id, scope === "local" && !events);
-  // O Local respeita o modo escolhido: Hi-Score (runs sem modo incluídas), 1CC (zeradas sem continue) e
-  // Caravan; no Caravan, quem perdeu menos vidas fica na frente e o placar desempata.
+  // O Local respeita o modo escolhido: Hi-Score (runs sem modo incluídas), 1CC (zeradas sem continue, da
+  // mesma lista: nada é duplicado) e Caravan, com as mesmas regras de ordem do servidor.
   const localRanking = useMemo(() => {
     const matches = (entry: (typeof localAll)[number]) => {
       const caravan = entry.modo?.startsWith("caravan") ?? false;
@@ -173,13 +176,17 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
       return true;
     };
     const list = localAll.filter(matches);
-    // Regra padrão do Caravan (a mesma do servidor): placar, tempo vivido, menos mortes, menos bombas e
-    // quem registrou primeiro.
-    if (mode === "caravan") {
-      const last = (value: number | null | undefined) => value ?? Number.MAX_SAFE_INTEGER;
-      list.sort((a, b) => b.score - a.score || (b.sobrevivencia_ms ?? -1) - (a.sobrevivencia_ms ?? -1)
-        || a.vidas_perdidas - b.vidas_perdidas || last(a.bombas) - last(b.bombas) || a.quando - b.quando);
-    }
+    const last = (value: number | null | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+    const oneCC = (entry: (typeof localAll)[number]) => entry.modo === "1cc" || (entry.zerou && entry.continues === 0);
+    const thrift = (a: (typeof localAll)[number], b: (typeof localAll)[number]) =>
+      a.vidas_perdidas - b.vidas_perdidas || last(a.bombas) - last(b.bombas) || a.quando - b.quando;
+    // Regras padrão (as mesmas do servidor). Caravan: placar, tempo vivido, mortes, bombas, quem registrou
+    // primeiro. Hi-Score: placar, 1CC na frente, fase mais longe (sem 1CC), mortes, bombas, quem registrou
+    // primeiro. 1CC: placar, mortes, bombas, quem registrou primeiro.
+    if (mode === "caravan") list.sort((a, b) => b.score - a.score || (b.sobrevivencia_ms ?? -1) - (a.sobrevivencia_ms ?? -1) || thrift(a, b));
+    else if (mode === "1cc") list.sort((a, b) => b.score - a.score || thrift(a, b));
+    else list.sort((a, b) => b.score - a.score || Number(oneCC(b)) - Number(oneCC(a))
+      || (oneCC(a) ? 0 : (b.estagio ?? 0) - (a.estagio ?? 0)) || thrift(a, b));
     return list;
   }, [localAll, mode]);
 
@@ -218,6 +225,8 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
       bombs: entry.bombas_usadas,
       ship: entry.nave,
       survivalMs: entry.sobrevivencia_ms,
+      oneCC: entry.um_credito ?? entry.modo === "1cc",
+      stage: entry.estagio,
       runs: entry.runs,
       rating: entry.nota,
       verified: entry.verificada,
@@ -253,6 +262,8 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
     bombs: entry.bombas,
     ship: entry.nave,
     survivalMs: entry.sobrevivencia_ms,
+    oneCC: entry.modo === "1cc" || (entry.zerou && entry.continues === 0),
+    stage: entry.estagio,
     localStatus: (entry.online ? "online" : "local") as RankRecord["localStatus"],
   }))], [localRuns, localRanking, uid, playerName, myLiveId, t]);
 
@@ -315,12 +326,15 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
   const dash = <span className="rk-none">—</span>;
   // Colunas extras: a Rota no Darius Gaiden e as Bombas onde o motor lê (sempre no Darius Gaiden).
   const showRoute = room.id === "darius-gaiden" || records.some((record) => Boolean(record.rota));
-  const showBombs = room.id === "darius-gaiden" || records.some((record) => typeof record.bombs === "number");
+  // BOMBAS sempre na tabela (— quando o motor não lê as bombas do jogo).
+  const showBombs = true;
   // Sobrevivência só existe no Caravan (tempo vivido dentro do limite). No Espgaluda II a coluna é a do Barrier.
+  // A coluna depois de NAVE / TIPO: SOBREVIVÊNCIA no Caravan; PROGRESSO (1CC ou Stage N) no Hi-Score e no 1CC.
   const showSurvival = mode === "caravan";
+  const scoreLabel = mode === "highscore" ? t("Hi-Score") : t("Score");
   const bombsLabel = room.id === "espgaluda-ii" ? t("Barrier") : t("Bombas");
   const extraColumns = {
-    "--rk-surv": showSurvival ? "124px" : undefined,
+    "--rk-surv": "124px",
     "--rk-route": showRoute ? "130px" : undefined,
     "--rk-bombs": showBombs ? "100px" : undefined,
   } as React.CSSProperties;
@@ -333,6 +347,11 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
   function livesLostCell(record: RankRecord) {
     if (typeof record.livesLost !== "number") return dash;
     return record.livesLost === 0 ? <span className="rk-chip is-clean">{t("No Miss")}</span> : <>{record.livesLost}</>;
+  }
+  /** PROGRESSO: selo 1CC quando zerou com 1 crédito; senão a fase mais longe (Stage 5). */
+  function progressCell(record: RankRecord) {
+    if (record.oneCC) return <span className="rk-chip is-1cc">1CC</span>;
+    return typeof record.stage === "number" ? <>{t("Stage {stage}", { stage: record.stage })}</> : dash;
   }
   /** BOMBAS (Barrier no Espgaluda II): 0 é o selo No Bomb. */
   function bombsCell(record: RankRecord) {
@@ -430,9 +449,9 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
           </header>
           <div className="rk-row is-head" aria-hidden="true">
             <span className="rk-pos">{t("Pos.")}</span><span>{t("Jogador")}</span>
-            <span className="rk-r">{t("Score")}</span>
+            <span className="rk-r">{scoreLabel}</span>
             <span className="rk-c rk-x">{t("Nave / Tipo")}</span>
-            {showSurvival && <span className="rk-c rk-x">{t("Sobrevivência")}</span>}
+            <span className="rk-c rk-x">{showSurvival ? t("Sobrevivência") : t("Progresso")}</span>
             <span className="rk-c rk-x">{t("Mortes")}</span>
             {showRoute && <span className="rk-c rk-x">{t("Rota")}</span>}
             {showBombs && <span className="rk-c rk-x">{bombsLabel}</span>}
@@ -484,7 +503,7 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
                   </span>
                   <span className="rk-r rk-score">{score(record.score, locale)}</span>
                   <span className="rk-c rk-x">{record.ship ?? dash}</span>
-                  {showSurvival && <span className="rk-c rk-x rk-cc">{typeof record.survivalMs === "number" ? formatSurvival(record.survivalMs) : dash}</span>}
+                  <span className="rk-c rk-x rk-cc">{showSurvival ? (typeof record.survivalMs === "number" ? formatSurvival(record.survivalMs) : dash) : progressCell(record)}</span>
                   <span className="rk-c rk-x rk-cc">{livesLostCell(record)}</span>
                   {showRoute && <span className="rk-c rk-x rk-route">{record.rota ?? dash}</span>}
                   {showBombs && <span className="rk-c rk-x rk-cc">{bombsCell(record)}</span>}
@@ -506,7 +525,7 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
                   <span className="rk-initials" aria-hidden="true">_ _ _</span>
                   <span className="rk-r rk-score" aria-hidden="true">· · · · · ·</span>
                   <span className="rk-c rk-x" aria-hidden="true">—</span>
-                  {showSurvival && <span className="rk-c rk-x" aria-hidden="true">—</span>}
+                  <span className="rk-c rk-x" aria-hidden="true">—</span>
                   <span className="rk-c rk-x" aria-hidden="true">—</span>
                   {showRoute && <span className="rk-c rk-x" aria-hidden="true">—</span>}
                   {showBombs && <span className="rk-c rk-x" aria-hidden="true">—</span>}
@@ -539,7 +558,9 @@ export default function RoomRankingView({ room, runs, uid, playerName, events = 
             { label: t("Modo"), value: current.mode ? t(MODE_LABEL[current.mode]) : dash },
             { label: t("Continues"), value: current.continues === undefined ? dash : current.continues === 0 ? t("0 · 1CC") : current.continues },
             { label: t("Nave / Tipo"), value: current.ship ?? dash },
-            ...(showSurvival ? [{ label: t("Sobrevivência"), value: typeof current.survivalMs === "number" ? formatSurvival(current.survivalMs) : dash }] : []),
+            showSurvival
+              ? { label: t("Sobrevivência"), value: typeof current.survivalMs === "number" ? formatSurvival(current.survivalMs) : dash }
+              : { label: t("Progresso"), value: progressCell(current) },
             { label: t("Mortes"), value: current.livesLost ?? dash },
             { label: t("Runs"), value: current.runs ?? dash },
             ...(showRoute ? [{ label: t("Rota"), value: current.rota ?? dash }] : []),

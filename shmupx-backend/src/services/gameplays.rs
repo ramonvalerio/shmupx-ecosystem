@@ -61,6 +61,8 @@ pub struct Resultado {
     pub nave: Option<String>,
     /// Caravan: tempo vivido na partida, em ms (o tempo todo do modo se o relógio zerou).
     pub sobrevivencia_ms: Option<i32>,
+    /// Fase mais longe alcançada (1 = a primeira), nos jogos em que o motor lê a fase.
+    pub estagio: Option<i32>,
     /// `true` quando o jogador zerou o jogo (o fim do jogo, não só o game over). Com 0 continues, a
     /// run de Hi-Score entra também na tabela 1CC.
     pub zerou: Option<bool>,
@@ -365,6 +367,9 @@ pub async fn submeter(
     if resultado.sobrevivencia_ms.is_some_and(|ms| !(0..=MAX_SOBREVIVENCIA_MS).contains(&ms)) {
         return Err(AppError::bad_request("sobrevivencia_ms deve ficar entre 0 e 3.600.000 (1 hora)"));
     }
+    if resultado.estagio.is_some_and(|e| !(1..=99).contains(&e)) {
+        return Err(AppError::bad_request("estagio deve ficar entre 1 e 99"));
+    }
     if !id_valido(run_id) {
         return Err(AppError::bad_request("run_id inválido"));
     }
@@ -448,6 +453,9 @@ async fn submeter_na_transacao(
     if let Some(ms) = resultado.sobrevivencia_ms {
         campos_resultado.insert("survivalMs".into(), inteiro(ms.into()));
     }
+    if let Some(estagio) = resultado.estagio {
+        campos_resultado.insert("stageReached".into(), inteiro(estagio.into()));
+    }
     let escrita = atualizar(
         fs,
         &caminho,
@@ -467,6 +475,7 @@ fn ler_resultado(campos: &Campos) -> Option<Resultado> {
         bombas_usadas: ler_inteiro(campos, "bombsUsed").and_then(|v| v.try_into().ok()),
         nave: ler_texto(campos, "ship"),
         sobrevivencia_ms: ler_inteiro(campos, "survivalMs").and_then(|v| v.try_into().ok()),
+        estagio: ler_inteiro(campos, "stageReached").and_then(|v| v.try_into().ok()),
         zerou: ler_booleano(campos, "cleared"),
     })
 }
@@ -548,7 +557,7 @@ mod tests {
         assert_eq!(ler_inteiro(&carteira, "version"), Some(2));
         fs.desfazer(&leitura).await;
 
-        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0), rota: None, bombas_usadas: None, nave: None, sobrevivencia_ms: None, zerou: None };
+        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0), rota: None, bombas_usadas: None, nave: None, sobrevivencia_ms: None, estagio: None, zerou: None };
 
         // Outro jogador não enxerga nem submete a run.
         assert!(submeter(&fs, "uid-intruso", &run.run_id, &jogo, resultado.clone()).await.is_err());
@@ -607,7 +616,7 @@ mod tests {
         let uid = format!("uid-{}", Uuid::new_v4());
         let tx = fs.iniciar_transacao().await.unwrap();
         fs.confirmar(&tx, vec![criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(600))]))]).await.unwrap();
-        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0), rota: None, bombas_usadas: None, nave: None, sobrevivencia_ms: None, zerou: None };
+        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0), rota: None, bombas_usadas: None, nave: None, sobrevivencia_ms: None, estagio: None, zerou: None };
 
         // Fluxo normal: encerrar (idempotente), depois enviar.
         let run = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();

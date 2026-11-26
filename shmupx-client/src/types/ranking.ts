@@ -14,6 +14,9 @@ export interface GameRankingEntry {
   nave?: string | null;
   /** Caravan: tempo vivido na partida, em ms (o tempo todo do modo se o relógio zerou). */
   sobrevivencia_ms?: number | null;
+  /** Fase mais longe alcançada (1 = a primeira) e se zerou com 1 crédito: a coluna PROGRESSO. */
+  estagio?: number | null;
+  um_credito?: boolean;
   runs: number;
   modo: string | null;
   versao: string | null;

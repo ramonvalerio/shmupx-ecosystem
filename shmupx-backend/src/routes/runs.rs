@@ -15,7 +15,7 @@ use crate::routes::notificacoes::versao_do_client;
 use crate::services::destaques::{self, DepoisDoEnvio};
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
 use crate::services::youtube::YouTube;
-use crate::services::{estatisticas, jogo_aberto, recordes, usuarios, versoes};
+use crate::services::{estatisticas, jogo_aberto, placar, recordes, usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
@@ -127,6 +127,9 @@ struct SubmeterRunPayload {
     nave: Option<String>,
     #[serde(default)]
     sobrevivencia_ms: Option<i32>,
+    /// Opcional: fase mais longe alcançada (1 = a primeira), a coluna PROGRESSO do Hi-Score.
+    #[serde(default)]
+    estagio: Option<i32>,
     /// Opcional: o jogo foi zerado (o fim do jogo). Sem ele, a run não entra na tabela 1CC.
     #[serde(default)]
     zerou: Option<bool>,
@@ -160,14 +163,17 @@ async fn submeter_run(
         bombas_usadas: payload.bombas_usadas,
         nave: payload.nave,
         sobrevivencia_ms: payload.sobrevivencia_ms,
+        estagio: payload.estagio,
         zerou: payload.zerou,
     };
-    let marca = (
-        resultado.score_bruto,
-        resultado.sobrevivencia_ms.map(i64::from),
-        resultado.vidas_perdidas.map(i64::from),
-        resultado.bombas_usadas.map(i64::from),
-    );
+    let marca = placar::Marca {
+        score: resultado.score_bruto,
+        sobrevivencia_ms: resultado.sobrevivencia_ms.map(i64::from),
+        mortes: resultado.vidas_perdidas.map(i64::from),
+        bombas: resultado.bombas_usadas.map(i64::from),
+        um_credito: resultado.zerou == Some(true) && resultado.continues_usados.unwrap_or(0) == 0,
+        estagio: resultado.estagio.map(i64::from),
+    };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
     // O modo da run, lido antes da poda: uma run abaixo do recorde sai do banco.
     let modo = firestore

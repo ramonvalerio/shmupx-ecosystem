@@ -57,38 +57,40 @@ fn canal_oficial() -> Option<String> {
     std::env::var("SHMUPX_YOUTUBE_CANAL_UID").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// Tabela do modo da run: `1cc` e Caravan têm a própria; o resto é Hi-Score.
+/// Filtro da tabela do modo da run: `1cc` e Caravan têm a própria; o resto é Hi-Score.
 fn tabela_do_modo(modo: Option<&str>) -> &'static str {
-    match modo {
-        Some("1cc") => "1cc",
-        Some(m) if m.starts_with("caravan") => "caravan",
-        _ => "highscore",
+    match placar::Tabela::do_modo(modo) {
+        placar::Tabela::HiScore => "highscore",
+        placar::Tabela::UmCredito => "1cc",
+        placar::Tabela::Caravan => "caravan",
     }
 }
 
 /// Posição que um resultado teria na tabela, para a run que não é o recorde do jogador: 1 mais o
-/// número de outros jogadores cujo registro é melhor (Caravan: menos vidas perdidas e depois mais
-/// pontos; nos outros modos, mais pontos). Empate não passa à frente.
-pub(crate) fn posicao_do_resultado(entradas: &[placar::EntradaJogo], uid: &str, marca: placar::MarcaCaravan, caravana: bool) -> usize {
+/// número de outros jogadores cujo registro é melhor pela regra da tabela (`placar::ordem`). Empate
+/// não passa à frente.
+pub(crate) fn posicao_do_resultado(entradas: &[placar::EntradaJogo], uid: &str, marca: placar::Marca, tabela: placar::Tabela) -> usize {
     let melhor = |e: &placar::EntradaJogo| {
-        if caravana {
-            let dele = (e.score, e.sobrevivencia_ms.map(i64::from), e.vidas_perdidas.map(i64::from), e.bombas_usadas.map(i64::from));
-            placar::ordem_caravan(&dele, &marca).is_lt()
-        } else {
-            e.score > marca.0
-        }
+        let dele = placar::Marca {
+            score: e.score,
+            sobrevivencia_ms: e.sobrevivencia_ms.map(i64::from),
+            mortes: e.vidas_perdidas.map(i64::from),
+            bombas: e.bombas_usadas.map(i64::from),
+            um_credito: e.um_credito,
+            estagio: e.estagio.map(i64::from),
+        };
+        placar::ordem(tabela, &dele, &marca).is_lt()
     };
     1 + entradas.iter().filter(|e| e.jogador_id != uid && melhor(e)).count()
 }
 
 /// Posição de uma run que ficou abaixo do recorde do jogador (o servidor a apagou): o RANK que o
 /// placar dela teria. `None` se o jogo ou a tabela não puderem ser lidos.
-pub async fn posicao_fora_do_recorde(fs: &Firestore, uid: &str, game_id: &str, modo: Option<&str>, marca: placar::MarcaCaravan) -> Option<usize> {
+pub async fn posicao_fora_do_recorde(fs: &Firestore, uid: &str, game_id: &str, modo: Option<&str>, marca: placar::Marca) -> Option<usize> {
     let jogos = jogos_publicados(fs).await.ok()?;
     let (partidas, _) = ler_partidas(fs, Some(game_id), &jogos).await.ok()?;
-    let tabela = tabela_do_modo(modo);
-    let entradas = placar::ranking_do_jogo(&partidas, game_id, Some(tabela), None);
-    Some(posicao_do_resultado(&entradas, uid, marca, tabela == "caravan"))
+    let entradas = placar::ranking_do_jogo(&partidas, game_id, Some(tabela_do_modo(modo)), None);
+    Some(posicao_do_resultado(&entradas, uid, marca, placar::Tabela::do_modo(modo)))
 }
 
 /// Posição do jogador se o melhor placar dele na tabela é o desta run.
@@ -248,6 +250,8 @@ mod tests {
             bombas_usadas: None,
             nave: None,
             sobrevivencia_ms: None,
+            estagio: None,
+            um_credito: false,
             runs: 1,
             modo: None,
             versao: None,
@@ -263,23 +267,34 @@ mod tests {
     fn posicao_de_uma_run_abaixo_do_recorde() {
         let mut tabela = [entrada(1, "ana", 900), entrada(2, "bia", 800), entrada(3, "caio", 700)];
         // Hi-Score: 750 fica atrás de Ana e Bia, à frente de Caio; os outros jogadores contam uma vez.
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (750, None, None, None), false), 3);
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (100, None, None, None), false), 4);
+        let pontos = |score: i64| placar::Marca { score, ..Default::default() };
+        assert_eq!(posicao_do_resultado(&tabela, "davi", pontos(750), placar::Tabela::HiScore), 3);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", pontos(100), placar::Tabela::HiScore), 4);
         // O próprio jogador não conta contra si (o recorde dele está na tabela).
-        assert_eq!(posicao_do_resultado(&tabela, "bia", (100, None, None, None), false), 3);
+        assert_eq!(posicao_do_resultado(&tabela, "bia", pontos(100), placar::Tabela::HiScore), 3);
+        // Hi-Score: mesmo placar da Bia (800), mas zerado com 1 crédito: passa à frente dela.
+        assert_eq!(posicao_do_resultado(&tabela, "davi", placar::Marca { um_credito: true, ..pontos(800) }, placar::Tabela::HiScore), 2);
         // Caravan: maior placar; empate, mais tempo vivido, menos mortes e menos bombas.
         for (e, tempo) in tabela.iter_mut().zip([300_000, 300_000, 200_000]) {
             e.sobrevivencia_ms = Some(tempo);
             e.vidas_perdidas = Some(1);
             e.bombas_usadas = Some(0);
         }
+        let caravan = |score: i64, tempo: i64, mortes: i64, bombas: i64| placar::Marca {
+            score,
+            sobrevivencia_ms: Some(tempo),
+            mortes: Some(mortes),
+            bombas: Some(bombas),
+            ..Default::default()
+        };
+        let c = placar::Tabela::Caravan;
         // 850 fica atrás só da Ana (900); 5000 passa todos; 800 com 400 s de tempo passa a Bia (800/300 s).
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (850, Some(10_000), Some(0), Some(0)), true), 2);
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (5000, Some(1_000), Some(9), Some(9)), true), 1);
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (800, Some(400_000), Some(3), Some(3)), true), 2);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", caravan(850, 10_000, 0, 0), c), 2);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", caravan(5000, 1_000, 9, 9), c), 1);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", caravan(800, 400_000, 3, 3), c), 2);
         // Empate em tudo com a Bia: não passa à frente dela.
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (800, Some(300_000), Some(1), Some(0)), true), 2);
-        assert_eq!(posicao_do_resultado(&tabela, "davi", (800, Some(300_000), Some(1), Some(1)), true), 3);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", caravan(800, 300_000, 1, 0), c), 2);
+        assert_eq!(posicao_do_resultado(&tabela, "davi", caravan(800, 300_000, 1, 1), c), 3);
     }
 
     #[test]

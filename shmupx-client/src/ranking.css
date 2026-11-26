@@ -94,6 +94,7 @@
 .rk-cc em { margin-left: 4px; font-style: normal; font-size: 11.5px; letter-spacing: .08em; color: var(--rk-cyan-2); }
 .rk-when { font-variant-numeric: tabular-nums; }
 .rk-chip.is-clean { border-color: var(--rk-green); color: var(--rk-green); }
+.rk-chip.is-1cc { border-color: var(--rk-cyan); background: var(--rk-cyan); color: var(--on-cyan); }
 .rk-row.is-vacant, .rk-row.is-vacant .rk-pos { color: var(--rk-vacant); }
 .rk-initials { font-size: 15px; letter-spacing: .5em; color: #56666b; }
 .rk-row.is-vacant .rk-score { font-size: 20px; letter-spacing: .1em; color: #3d4a4e; }

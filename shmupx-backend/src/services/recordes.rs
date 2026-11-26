@@ -42,6 +42,8 @@ struct Registro {
     /// Caravan: tempo vivido (ms) e bombas usadas, os critérios depois do placar e das mortes.
     sobrevivencia_ms: Option<i64>,
     bombas_usadas: Option<i64>,
+    /// Fase alcançada: no Hi-Score, sem 1CC, quem foi mais longe fica na frente no empate de placar.
+    estagio: Option<i64>,
     enviada_em: Option<DateTime<Utc>>,
 }
 
@@ -59,16 +61,19 @@ fn tabelas(r: &Registro) -> Vec<String> {
     lista
 }
 
-/// A run `a` é melhor que `b` na tabela: no Caravan, a regra de `placar::ordem_caravan` (placar, tempo
-/// vivido, mortes, bombas); nos outros modos, o maior placar. Empate: a mais antiga.
+/// A run `a` é melhor que `b` na tabela, pela regra padrão dela (`placar::ordem`: Hi-Score, 1CC ou
+/// Caravan). Empate em tudo: a mais antiga.
 fn melhor_que(a: &Registro, b: &Registro, tabela: &str) -> bool {
-    let principal = if tabela.starts_with("caravan") {
-        let marca = |r: &Registro| (r.score, r.sobrevivencia_ms, r.vidas_perdidas, r.bombas_usadas);
-        placar::ordem_caravan(&marca(a), &marca(b))
-    } else {
-        b.score.cmp(&a.score)
+    let regra = placar::Tabela::do_modo(tabela.split('|').next());
+    let marca = |r: &Registro| placar::Marca {
+        score: r.score,
+        sobrevivencia_ms: r.sobrevivencia_ms,
+        mortes: r.vidas_perdidas,
+        bombas: r.bombas_usadas,
+        um_credito: placar::e_um_credito(r.modo.as_deref(), r.zerou, r.continues),
+        estagio: r.estagio,
     };
-    principal.then((a.enviada_em, &a.id).cmp(&(b.enviada_em, &b.id))).is_lt()
+    placar::ordem(regra, &marca(a), &marca(b)).then((a.enviada_em, &a.id).cmp(&(b.enviada_em, &b.id))).is_lt()
 }
 
 /// Ids que ficam: o recorde de cada tabela.
@@ -101,6 +106,7 @@ fn registro(id: String, campos: &Campos) -> Option<Registro> {
         vidas_perdidas: ler_inteiro(&resultado, "livesLost"),
         sobrevivencia_ms: ler_inteiro(&resultado, "survivalMs"),
         bombas_usadas: ler_inteiro(&resultado, "bombsUsed"),
+        estagio: ler_inteiro(&resultado, "stageReached"),
         enviada_em: ler_data(&resultado, "submittedAt"),
     })
 }
@@ -143,6 +149,7 @@ mod tests {
             vidas_perdidas: None,
             sobrevivencia_ms: None,
             bombas_usadas: None,
+            estagio: None,
             enviada_em: Some(Utc.with_ymd_and_hms(2026, 11, 26, 10, minuto, 0).unwrap()),
         }
     }
