@@ -11,6 +11,8 @@ import { useDialogFocus } from "./useDialogFocus";
 import { useWallet } from "../data/useWallet";
 import { RANKED_MISTER_OFF, type useGameLauncher } from "./useGameLauncher";
 import { eventRunning, playableEvents, useEvents, type ClientEvent } from "../data/events";
+import { setRecordGameplay, useRecordGameplay } from "../data/recordGameplay";
+import ToggleSwitch from "./ToggleSwitch";
 
 /** Opções do Play Ranked: transmitir no YouTube e se a live é pública. */
 export interface LivePrefs { on: boolean; public: boolean }
@@ -266,6 +268,9 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
       playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t(eventChoices.length > 0 ? "Clique na ficha para jogar: Training Mode, Ranked Mode ou o evento." : "Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
   );
   const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} events={eventChoices} onTraining={playTraining} onRanked={playRanked} onEvent={playEvent} onClose={() => setChoosing(false)} />;
+  const recordGameplay = useRecordGameplay();
+  // Com a live ligada, a partida não grava no PC (a live fica no YouTube): o interruptor desabilita.
+  const liveSwitchOn = liveHereOn ? true : withLive;
   const options = (
       <div className="room-coin-actions">
         {liveHereOn && (
@@ -275,13 +280,18 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
         )}
         {/* Como a partida valendo ranking vai acontecer: com ou sem live, e quem pode assistir. */}
         <div className="ranked-options" role="group" aria-label={t("Opções do Play Ranked")}>
-          <div className="room-setup-group">
-            <span id={`${uidLabel}-live`}>{t("Live no YouTube")}</span>
-            <div className="room-chips" role="radiogroup" aria-labelledby={`${uidLabel}-live`}>
-              <button type="button" role="radio" aria-checked={liveHereOn ? false : !withLive} disabled={optionsLocked} onClick={() => setLivePrefs({ on: false })}>{t("Off")}</button>
-              <button type="button" role="radio" aria-checked={liveHereOn ? true : withLive} disabled={optionsLocked} title={liveUnavailable ?? undefined} onClick={() => setLivePrefs({ on: true })}>
-                {t("On")}
-              </button>
+          <div className="ranked-switches">
+            <div className="room-setup-group">
+              <span id={`${uidLabel}-live`}>{t("Live no YouTube")}</span>
+              <ToggleSwitch on={liveSwitchOn} disabled={optionsLocked} labelledBy={`${uidLabel}-live`} title={liveUnavailable ?? undefined}
+                onChange={(on) => setLivePrefs({ on })} />
+            </div>
+            <div className="room-setup-group">
+              <span id={`${uidLabel}-record`}>{t("Gravar gameplay")}</span>
+              <ToggleSwitch on={recordGameplay === true} disabled={liveSwitchOn || recordGameplay === null || busy} offWhenDisabled={liveSwitchOn}
+                labelledBy={`${uidLabel}-record`}
+                title={liveSwitchOn ? t("Com a live ligada, a partida fica no YouTube e não grava no computador.") : t("Grava o vídeo da partida no seu computador (Configurações › Armazenamento).")}
+                onChange={(on) => void setRecordGameplay(on).catch(() => undefined)} />
             </div>
           </div>
           {/* "On" sem como transmitir (MiSTer ou sem canal): explica aqui, e o Play Ranked segue sem live. */}

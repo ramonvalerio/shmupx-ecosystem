@@ -223,6 +223,8 @@ mod tests {
             origem: None,
             verificada: false,
             conquistado_em: None,
+            run_id: String::new(),
+            youtube_url: None,
         }
     }
 

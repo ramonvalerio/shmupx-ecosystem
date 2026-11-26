@@ -555,6 +555,8 @@
 .ranked-options .room-setup-group.is-muted { opacity: .45; }
 .ranked-options .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #fd4851; }
 .ranked-options .room-chips button[aria-checked=true] .live-dot { box-shadow: 0 0 8px #fd4851; }
+.ranked-switches { display: flex; gap: 18px; }
+.ranked-switches .room-setup-group { flex: 1; min-width: 0; }
 .ranked-options-note { margin: 0; font-size: 11.5px; line-height: 1.4; color: #f2c14e; }
 
 /* Limite de salas abertas atingido: as abas ocupam toda a altura do menu lateral; cada uma parte do

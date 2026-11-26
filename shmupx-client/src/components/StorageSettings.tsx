@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "../i18n";
+import { setRecordGameplay, useRecordGameplay } from "../data/recordGameplay";
 
 interface Destino {
   gravar: boolean;
@@ -56,10 +57,16 @@ export default function StorageSettings({ onShowRuns }: { onShowRuns?: () => voi
     finally { setBusy(false); }
   }
 
+  // A sala muda a mesma opção: acompanha o que ela gravar.
+  const recordGameplay = useRecordGameplay();
+  useEffect(() => {
+    if (recordGameplay !== null) setDestino((atual) => (atual && atual.gravar !== recordGameplay ? { ...atual, gravar: recordGameplay } : atual));
+  }, [recordGameplay]);
+
   async function setRecording(gravar: boolean) {
     setBusy(true);
     setError(null);
-    try { setDestino(await invoke<Destino>("gravacoes_definir_gravar", { gravar })); }
+    try { setDestino(await setRecordGameplay<Destino>(gravar)); }
     catch (failure) { setError(String(failure)); }
     finally { setBusy(false); }
   }

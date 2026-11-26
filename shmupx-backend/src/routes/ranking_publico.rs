@@ -162,6 +162,15 @@ async fn do_jogo(
     for entrada in &mut entradas {
         entrada.nome = nome_ou_padrao(&nomes, &entrada.jogador_id);
     }
+    // Vídeo do registro no canal oficial: o destaque da run, quando já publicado.
+    let caminhos: Vec<String> = entradas.iter().map(|e| format!("highlights/{}", e.run_id)).collect();
+    let destaques = firestore.ler_varios(&caminhos).await?;
+    for entrada in &mut entradas {
+        entrada.youtube_url = destaques
+            .get(&format!("highlights/{}", entrada.run_id))
+            .filter(|d| ler_texto(d, "status").as_deref() == Some("posted"))
+            .and_then(|d| ler_texto(d, "videoUrl"));
+    }
     let valor = json!({
         "jogo_id": jogo_id,
         "titulo": titulo,
@@ -223,16 +232,17 @@ pub(crate) async fn ler_partidas(
     let truncado = documentos.len() >= MAX_GAMEPLAYS;
     let partidas = documentos
         .into_iter()
-        .filter_map(|(_, campos)| partida(&campos))
+        .filter_map(|(id, campos)| partida(id, &campos))
         .filter(|p| publicados.contains_key(&p.jogo))
         .collect();
     Ok((partidas, truncado))
 }
 
-fn partida(campos: &Campos) -> Option<Partida> {
+fn partida(run_id: String, campos: &Campos) -> Option<Partida> {
     let resultado = ler_mapa(campos, "result")?;
     let score = ler_inteiro(&resultado, "score").filter(|s| *s >= 0)?;
     Some(Partida {
+        run_id,
         jogador: ler_texto(campos, "ownerId")?,
         jogo: ler_texto(campos, "gameId")?,
         score,
@@ -295,7 +305,7 @@ mod tests {
             ("mode", texto("1cc")),
             ("result", mapa(campos(&[("score", inteiro(1234)), ("continuesUsed", inteiro(0)), ("submittedAt", data(agora))]))),
         ]);
-        let p = partida(&doc).expect("partida");
+        let p = partida("run".into(), &doc).expect("partida");
         assert_eq!((p.jogador.as_str(), p.jogo.as_str(), p.score, p.verificada), ("ana", "earthion", 1234, false));
         assert_eq!(p.modo.as_deref(), Some("1cc"));
     }
@@ -303,7 +313,7 @@ mod tests {
     #[test]
     fn gameplay_sem_resultado_fica_de_fora() {
         let doc = campos(&[("ownerId", texto("ana")), ("gameId", texto("earthion")), ("status", texto("approved"))]);
-        assert!(partida(&doc).is_none());
+        assert!(partida("run".into(), &doc).is_none());
     }
 
     #[test]

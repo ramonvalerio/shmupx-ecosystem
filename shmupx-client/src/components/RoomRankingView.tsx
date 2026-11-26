@@ -131,6 +131,8 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
   const [selected, setSelected] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [thumbFailed, setThumbFailed] = useState<string | null>(null);
+  /** Vídeo tocando no detalhe do registro (o player do YouTube no lugar da miniatura). */
+  const [playing, setPlaying] = useState<string | null>(null);
 
   const ranking = useGameRanking(scope === "online" ? room.id : "", mode);
   const online = useMemo(() => ranking.data?.entradas ?? [], [ranking.data]);
@@ -218,7 +220,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
 
   // Sem escolha: o 1º lugar (ou a run mais recente) já aparece nos detalhes.
   const current = records.find((record) => record.key === selected) ?? (selected === null ? visible[0] : undefined);
-  useEffect(() => { setThumbFailed(null); }, [current?.key, current?.video?.id]);
+  useEffect(() => { setThumbFailed(null); setPlaying(null); }, [current?.key, current?.video?.id]);
 
   /** Run "Não enviada": analisa o vídeo de novo e envia (ou tira da lista). */
   async function retryRun(runId: string, discard = false) {
@@ -486,9 +488,18 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
             <>
               <div className={`rk-video${current.video ? "" : " is-empty"}`}>
                 <span className="rk-corner is-tl" aria-hidden="true" /><span className="rk-corner is-br" aria-hidden="true" />
-                {current.video ? (
-                  <button type="button" className="rk-video-play" onClick={() => openYouTube(current.video!.id)}
-                    aria-label={current.video.live ? t("Assistir à live no YouTube") : t("Assistir no YouTube")}>
+                {current.video && playing === current.video.id ? (
+                  <iframe
+                    className="rk-video-player"
+                    src={`https://www.youtube.com/embed/${current.video.id}?autoplay=1&playsinline=1&rel=0`}
+                    title={t("Vídeo de {player}", { player: identity(current).nick })}
+                    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                    allowFullScreen
+                    referrerPolicy="strict-origin-when-cross-origin"
+                  />
+                ) : current.video ? (
+                  <button type="button" className="rk-video-play" onClick={() => setPlaying(current.video!.id)}
+                    aria-label={current.video.live ? t("Assistir à live aqui") : t("Assistir ao vídeo aqui")}>
                     {thumbOk && <img src={`https://i.ytimg.com/vi/${current.video.id}/hqdefault.jpg`} alt="" onError={() => setThumbFailed(current.video!.id)} />}
                     <span className="rk-video-btn" aria-hidden="true"><i /></span>
                     {current.video.live && <span className="rk-video-live"><span className="rk-live-dot" aria-hidden="true" />LIVE</span>}

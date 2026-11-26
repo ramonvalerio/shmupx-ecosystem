@@ -659,3 +659,14 @@ button:disabled { opacity: .5; cursor: default; }
 .cabinet-mapper-binding { color: #9aa3a9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cabinet-mapper-row.is-mapped .cabinet-mapper-binding { color: var(--cyan); }
 .cabinet-mapper-actions { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+
+/* Interruptor liga/desliga (ToggleSwitch): Live no YouTube e Gravar gameplay na sala. */
+.toggle-switch { display: inline-flex; align-items: center; gap: 10px; height: 32px; padding: 0; border: 0; background: none; color: #d7e4e8; cursor: pointer; }
+.toggle-switch:disabled { cursor: not-allowed; opacity: .45; }
+.toggle-switch-track { position: relative; width: 46px; height: 24px; border: 1px solid #ffffff26; border-radius: 12px; background: var(--gray-141414); transition: background .15s, border-color .15s; }
+.toggle-switch-knob { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #8a9aa1; transition: transform .15s, background .15s; }
+.toggle-switch.is-on .toggle-switch-track { border-color: var(--cyan); background: color-mix(in srgb, var(--cyan) 22%, transparent); }
+.toggle-switch.is-on .toggle-switch-knob { transform: translateX(22px); background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.toggle-switch-state { min-width: 26px; font-size: 12.5px; letter-spacing: .08em; text-align: left; }
+.toggle-switch.is-on .toggle-switch-state { color: var(--cyan); }
+.toggle-switch:focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; }

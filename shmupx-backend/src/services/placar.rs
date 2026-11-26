@@ -19,6 +19,8 @@ pub const MAX_JOGOS_GLOBAL: usize = 5;
 /// Uma gameplay com resultado, já filtrada pelos estados que contam para o ranking.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Partida {
+    /// Id da gameplay (`gameplays/{run_id}`): liga a partida ao destaque dela no canal oficial.
+    pub run_id: String,
     pub jogador: String,
     pub jogo: String,
     pub score: i64,
@@ -49,6 +51,12 @@ pub struct EntradaJogo {
     pub origem: Option<String>,
     pub verificada: bool,
     pub conquistado_em: Option<DateTime<Utc>>,
+    /// Gameplay do registro (o melhor placar do jogador): não vai na resposta.
+    #[serde(skip)]
+    pub run_id: String,
+    /// Vídeo da live da run no canal oficial da ShmupX (só quem chegou ao top 3 com live tem; o
+    /// registro guarda o vídeo mesmo se cair de posição depois).
+    pub youtube_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -158,6 +166,8 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
             origem: p.origem.clone(),
             verificada: p.verificada,
             conquistado_em: p.enviada_em,
+            run_id: p.run_id.clone(),
+            youtube_url: None,
         });
     }
     entradas
@@ -214,6 +224,7 @@ mod tests {
 
     fn partida(jogador: &str, jogo: &str, score: i64) -> Partida {
         Partida {
+            run_id: format!("{jogador}-{score}"),
             jogador: jogador.into(),
             jogo: jogo.into(),
             score,
