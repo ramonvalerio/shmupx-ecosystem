@@ -10,6 +10,7 @@ import CreditsBadge from "./CreditsBadge";
 import { useDialogFocus } from "./useDialogFocus";
 import { useWallet } from "../data/useWallet";
 import { RANKED_MISTER_OFF, type useGameLauncher } from "./useGameLauncher";
+import { eventRunning, playableEvents, useEvents, type ClientEvent } from "../data/events";
 
 /** Opções do Play Ranked: transmitir no YouTube e se a live é pública. */
 export interface LivePrefs { on: boolean; public: boolean }
@@ -82,9 +83,13 @@ export function useRankedLive(room: GameRoom) {
 const MODE_LABEL: Record<GameMode, string> = { highscore: "Hi-Score", "1cc": "1CC", caravan: "Caravan" };
 const PLATFORM_LABEL: Record<PlayOn, string> = { steam: "Steam", emulator: "Emulador", mister: "MiSTer" };
 
-function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBlocked, onTraining, onRanked, onClose }: {
+/** Event Mode: um evento em que o jogador se inscreveu e que vale neste jogo, e por que não dá para jogar agora. */
+interface EventChoice { event: ClientEvent; blocked: string | null }
+
+function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBlocked, events, onTraining, onRanked, onEvent, onClose }: {
   game: string; mode: GameMode; platform: PlayOn | null; withLive: boolean; livePublic: boolean; rankedBlocked: string | null;
-  onTraining: () => void; onRanked: () => void; onClose: () => void;
+  events: EventChoice[];
+  onTraining: () => void; onRanked: () => void; onEvent: (event: ClientEvent) => void; onClose: () => void;
 }) {
   const { t } = useI18n();
   // O que está marcado no painel: modo de jogo, plataforma e a live (com quem pode assistir).
@@ -94,16 +99,18 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
     ...(withLive ? [{ key: "live", label: `${t("Live")} · ${t(livePublic ? "Pública" : "Só com link")}`, live: true }] : []),
   ];
   const ref = useDialogFocus(true, onClose);
-  // Atalhos: 1 = Training Mode, 2 = Ranked Mode (Esc fecha pelo useDialogFocus).
+  // Atalhos: 1 = Training Mode, 2 = Ranked Mode, 3 em diante = os eventos (Esc fecha pelo useDialogFocus).
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const choice = events[Number(event.key) - 3];
       if (event.key === "1") { event.preventDefault(); onTraining(); }
       else if (event.key === "2" && !rankedBlocked) { event.preventDefault(); onRanked(); }
+      else if (choice && !choice.blocked) { event.preventDefault(); onEvent(choice.event); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onTraining, onRanked, rankedBlocked]);
+  }, [onTraining, onRanked, onEvent, rankedBlocked, events]);
   return (
     <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="play-mode-title" tabIndex={-1} className="controller-dialog play-mode-dialog">
@@ -135,8 +142,26 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
               </>}
             </span>
           </button>
+          {events.map(({ event, blocked }, i) => (
+            <button key={event.id} type="button" className="play-mode-choice is-event" onClick={() => onEvent(event)} disabled={Boolean(blocked)} title={blocked ?? undefined} aria-keyshortcuts={String(i + 3)}>
+              <span className="play-mode-art" aria-hidden="true" style={event.banner_url ? { backgroundImage: `url("${event.banner_url}")` } : undefined}>
+                {!event.banner_url && <img className="play-mode-coin" src="/img/shmupx-token-front.png" alt="" draggable={false} />}
+              </span>
+              <span className="play-mode-text">
+                <strong>{t("Event Mode")} · {event.title}</strong>
+                {blocked ? <small>{blocked}</small> : <>
+                  <span className="play-mode-setup">
+                    <span>{t(MODE_LABEL[event.mode] ?? event.mode)}</span>
+                    {platform && <span>{t(PLATFORM_LABEL[platform])}</span>}
+                    {withLive && <span className="is-live">{t("Live")}</span>}
+                  </span>
+                  <small>{t("Gasta 1 ficha, grava a run e vale para o evento e o ranking.")}</small>
+                </>}
+              </span>
+            </button>
+          ))}
         </div>
-        <footer><span className="play-mode-hint">{t("Aperte 1 ou 2 para escolher")}</span><button type="button" className="secondary-action" onClick={onClose}>{t("Cancelar")}</button></footer>
+        <footer><span className="play-mode-hint">{t(events.length > 0 ? "Aperte 1, 2 ou 3 para escolher" : "Aperte 1 ou 2 para escolher")}</span><button type="button" className="secondary-action" onClick={onClose}>{t("Cancelar")}</button></footer>
       </div>
     </div>
   );
@@ -204,6 +229,13 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     if (target && (kind === "ranked" || target !== "mister")) launcher.playNow(kind, target, mode);
     else launcher.play(kind);
   }
+  /** Event Mode: como o Ranked, valendo no evento (no modo de jogo do evento). */
+  function playEvent(event: ClientEvent) {
+    setChoosing(false);
+    ranked.setLiveError(null);
+    if (!target) return;
+    launcher.playNow(withLive ? "live" : "ranked", target, event.mode, event.id);
+  }
   /** Training Mode: sem ficha, sem ranking, sem gravação e sem live. */
   function playTraining() {
     setChoosing(false);
@@ -216,13 +248,24 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
     ? t("Em breve: o Play Ranked fica disponível quando o jogo tiver o script de validação.")
     : target === "mister" && !room.rankedMister ? t(RANKED_MISTER_OFF)
     : credits !== null && credits < 1 ? t("Sem fichas: o Ranked Mode precisa de 1 ficha.") : null;
+  // Event Mode: um cartão por evento em que o jogador se inscreveu e que vale neste jogo.
+  const { events } = useEvents(Boolean(uid));
+  const eventChoices: EventChoice[] = playableEvents(events, room).map((event) => ({
+    event,
+    blocked: comingSoon ? t("Em breve: o jogo ainda não tem o script de validação.")
+      : target === "mister" ? t("No MiSTer, as partidas de evento ainda não valem: jogue no PC.")
+      : !eventRunning(event) ? (event.starts_at && Date.parse(event.starts_at) > Date.now()
+        ? t("O evento começa em {date}.", { date: new Date(event.starts_at).toLocaleString([], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) })
+        : t("O evento já terminou."))
+      : credits !== null && credits < 1 ? t("Sem fichas: cada partida do evento gasta 1 ficha.") : null,
+  }));
 
   const coin = (
     <CreditsBadge uid={uid} className="room-credits" spin={coinSpin} onPlay={insertCoin} live={withLive}
       playDisabled={launcher.isLaunching || busy || liveOn}
-      playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t("Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
+      playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t(eventChoices.length > 0 ? "Clique na ficha para jogar: Training Mode, Ranked Mode ou o evento." : "Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
   );
-  const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} onTraining={playTraining} onRanked={playRanked} onClose={() => setChoosing(false)} />;
+  const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} events={eventChoices} onTraining={playTraining} onRanked={playRanked} onEvent={playEvent} onClose={() => setChoosing(false)} />;
   const options = (
       <div className="room-coin-actions">
         {liveHereOn && (

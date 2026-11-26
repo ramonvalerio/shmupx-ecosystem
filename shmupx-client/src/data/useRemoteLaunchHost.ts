@@ -5,7 +5,7 @@ import type { GameRoom } from "../types/room";
 import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
 import { readEmulatorSettings } from "./emulatorSettings";
 import { readEmulatorControls } from "./emulatorControls";
-import { setPendingRunMode } from "./gameModes";
+import { setPendingRunEvent, setPendingRunMode } from "./gameModes";
 import { stillInstalled, usePlatformOwnership } from "./platforms";
 import {
   COMMAND_TTL_MS, DESKTOP_HEARTBEAT_MS, publishDesktop, publishResult, remoteRef,
@@ -89,6 +89,7 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
           return;
         }
         if (!training && command.mode) setPendingRunMode(room.id, command.mode);
+        setPendingRunEvent(room.id, null);
         if (command.platform === "steam") {
           if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
           await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training });

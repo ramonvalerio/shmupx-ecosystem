@@ -1,0 +1,62 @@
+/* Eventos na sala (EventsCarousel) e o Event Mode da ficha (RankedPanel). Share Tech só no peso normal:
+   o destaque vem do tamanho e da cor. */
+
+/* Cabeçalho da sala: gabinete | números empilhados | opções e ficha | eventos (o resto, à direita). */
+.game-room-header.has-events { grid-template-columns: auto auto auto minmax(0, 1fr); }
+.game-room-header.has-events .game-room-main { justify-content: center; }
+.game-room-header.has-events .game-room-stats { flex-direction: column; flex-wrap: nowrap; gap: 8px; }
+.game-room-header.has-events .game-room-stats div { gap: 1px; }
+.game-room-header.has-events .game-room-stats dt { font-size: 13px; }
+.game-room-header.has-events .game-room-stats dd { font-size: 22px; }
+.game-room-header.has-events .room-header-side { justify-content: flex-start; margin-right: 0; margin-left: 8px; }
+
+/* Carrossel: um banner por vez, com PARTICIPAR e a navegação embaixo. */
+.events-carousel { position: relative; align-self: stretch; min-width: 260px; display: flex; flex-direction: column; gap: 6px; margin-left: 12px; }
+.events-carousel.is-empty { justify-content: center; align-items: center; border: 1px dashed var(--stroke); border-radius: 6px; }
+.events-carousel-empty { margin: 0; padding: 12px; font-size: 13px; color: #8a9aa1; text-align: center; }
+.event-banner { position: relative; flex: 1; min-height: 150px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 14px 16px; overflow: hidden; border: 1px solid var(--stroke); border-radius: 6px; background: radial-gradient(120% 140% at 100% 0%, #3b2a0e 0%, #14181b 55%, #0d1013 100%) center / cover no-repeat; animation: event-banner-in .45s ease; }
+.event-banner.has-image { background-color: #0d1013; }
+.event-banner-shade { position: absolute; inset: 0; background: linear-gradient(to right, #05090df2 0%, #05090dcc 45%, #05090d33 100%); pointer-events: none; }
+.event-banner-body { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.event-banner-body h3 { margin: 2px 0 0; font-size: 24px; font-weight: 400; line-height: 1.1; color: #f0fcff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-banner-meta { margin: 0; font-size: 13px; color: #b6c6cf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-banner-badge { align-self: flex-start; padding: 2px 8px; border-radius: 3px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #06181b; background: #f2c14e; }
+.event-banner-badge.is-open { background: var(--cyan); }
+.event-banner-badge.is-joined { background: #3fd98b; }
+.event-banner-cta { position: relative; flex-shrink: 0; padding: 10px 18px; border: 1px solid #f2c14e; border-radius: 4px; font-size: 15px; letter-spacing: .12em; color: #06181b; background: #f2c14e; cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.event-banner-cta:hover, .event-banner-cta:focus-visible { transform: translateY(-1px); box-shadow: 0 0 18px #f2c14e66; }
+.events-carousel-nav { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.events-carousel-nav > button { width: 22px; height: 22px; padding: 0; border: 1px solid var(--stroke); border-radius: 50%; font-size: 15px; line-height: 1; color: #b6c6cf; background: transparent; cursor: pointer; }
+.events-carousel-nav > button:hover { color: var(--cyan); border-color: var(--cyan); }
+.events-carousel-dots { display: flex; gap: 6px; }
+.events-carousel-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #ffffff33; cursor: pointer; }
+.events-carousel-dots button[aria-current="true"] { background: #f2c14e; }
+@keyframes event-banner-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .event-banner { animation: none; } }
+
+/* Telas estreitas: os eventos descem para baixo do cabeçalho. */
+@media (max-width: 1250px) {
+  .game-room-header.has-events { grid-template-columns: auto auto auto; }
+  .game-room-header.has-events .events-carousel { grid-column: 1 / -1; margin: 10px 0 0; }
+  .game-room-header.has-events .event-banner { min-height: 110px; }
+}
+
+/* PARTICIPAR: o resumo do evento e a inscrição em fichas. */
+.join-event-dialog { width: min(560px, 100%); overflow: hidden; }
+.join-event-banner { display: block; width: 100%; aspect-ratio: 3 / 1; object-fit: cover; border-bottom: 1px solid var(--stroke); }
+.join-event-body { display: flex; flex-direction: column; gap: 12px; padding-top: 16px; }
+.join-event-body > p { margin: 0; line-height: 1.5; color: #cfd8dc; }
+.join-event-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+.join-event-facts dt { color: #8a9aa1; }
+.join-event-facts dd { margin: 0; color: #f0fcff; }
+.join-event-fee { font-size: 18px; color: #f2c14e !important; }
+.join-event-fee small { font-size: 13px; color: #8a9aa1; }
+.join-event-body .text-action { align-self: flex-start; }
+
+/* Event Mode na escolha da ficha: um cartão por evento, ao lado do Training e do Ranked. */
+.play-mode-dialog:has(.is-event) { width: min(1040px, 100%); }
+.play-mode-choices:has(.is-event) { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.is-event .play-mode-art { background: radial-gradient(120% 120% at 50% 0%, #4a3510 0%, #14181b 60%, #0d1013 100%) center / cover no-repeat; }
+.is-event .play-mode-art[style] { background-size: cover; background-position: center; }
+.play-mode-choice.is-event strong { color: #f2c14e; font-size: 20px; text-shadow: 0 0 14px #f2c14e55; }
+.play-mode-choice.is-event:hover:not(:disabled), .play-mode-choice.is-event:focus-visible { border-color: #f2c14e; box-shadow: 0 0 0 1px #f2c14e, 0 0 26px #f2c14e44; }

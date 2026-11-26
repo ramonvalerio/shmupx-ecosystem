@@ -4,6 +4,7 @@
 //! sem depender de um `invoke` vindo do frontend no momento exato em que isso acontece.
 
 pub mod commands;
+pub mod eventos;
 pub mod mister;
 pub mod notificacoes;
 pub mod perfil;

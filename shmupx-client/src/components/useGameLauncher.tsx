@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { misterEntryMatches, playableMode, playModesFor, setPendingRunMode } from "../data/gameModes";
+import { misterEntryMatches, playableMode, playModesFor, setPendingRunEvent, setPendingRunMode } from "../data/gameModes";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { readEmulatorControls } from "../data/emulatorControls";
@@ -131,8 +131,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   /**
    * Abre direto, com o modo e a plataforma já escolhidos no cabeçalho da sala (sem a janela).
    * Live: a sala põe a live no ar (o MiSTer fica de fora, porque a live captura a janela no PC).
+   * `eventId`: partida valendo no evento (Event Mode); sem ele, a run não vale em nenhum evento.
    */
-  function playNow(kind: PlayKind, platform: PlayOn, wanted: GameMode) {
+  function playNow(kind: PlayKind, platform: PlayOn, wanted: GameMode, eventId?: string) {
     // Só Hi-Score (e Caravan quando sair): o 1CC sai da run de Hi-Score.
     const chosen = playableMode(room, wanted);
     setError(null);
@@ -143,6 +144,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     setMode(chosen);
     // Live: a run ranked começa quando a live abrir o jogo; leva o modo escolhido também.
     if (kind !== "training" && platform !== "mister") setPendingRunMode(room.id, chosen);
+    setPendingRunEvent(room.id, kind !== "training" && platform !== "mister" ? eventId ?? null : null);
     if (kind === "live") { onLive?.(platform, chosen); return; }
     void launchOn(platform, kind === "training", chosen);
   }
@@ -157,6 +159,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     setMode(chosen);
     // A run começa quando o jogo abrir (PC; com live, depois que ela entra no ar): leva o modo.
     if (kind !== "training" && platform !== "mister") setPendingRunMode(room.id, chosen);
+    setPendingRunEvent(room.id, null);
     if (kind === "live") { onLive?.(platform, chosen); return; }
     void launchOn(platform, kind === "training", chosen);
   }

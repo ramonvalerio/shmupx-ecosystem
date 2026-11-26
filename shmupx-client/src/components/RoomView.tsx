@@ -23,6 +23,7 @@ import { useRoomPlay } from "../data/roomPlay";
 import PlaySetup from "./PlaySetup";
 import { isSupported } from "../data/validation";
 import RankedPanel, { useRankedLive } from "./RankedPanel";
+import EventsCarousel from "./EventsCarousel";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 
 
@@ -283,7 +284,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   return (
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
       <div className="game-room-column">
-        <header className="game-room-header">
+        <header className="game-room-header has-events">
           {/* O gabinete arcade no lugar do card da arte; como em Minhas coleções, o painel mexe com o
               controle e o clique abre os controles do emulador. O nome do jogo já está no menu do topo. */}
           <ArcadeCabinet room={room} className="game-room-cabinet" controls />
@@ -310,6 +311,8 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
           <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping}
             setup={<PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} compact />} />
+          {/* O espaço que sobra à direita: os eventos do Lab, com PARTICIPAR. */}
+          <EventsCarousel room={room} uid={playerId} />
         </header>
 
         {isRecording && <p className="room-banner recording" role="status"><span className="status-dot" /> {t("GRAVANDO RUN")}</p>}

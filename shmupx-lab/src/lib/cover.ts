@@ -5,6 +5,21 @@ import type { Area } from "react-easy-crop";
 export const COVER_ASPECT = 16 / 9;
 export const COVER_WIDTH = 1280;
 export const COVER_HEIGHT = 720;
+
+/** Formato da imagem enviada pelo Lab: a capa do card do jogo ou o banner de um evento. */
+export interface ImageFormat {
+  label: string;
+  aspect: number;
+  width: number;
+  height: number;
+  /** Pasta no site: `covers` (`catalog/covers/`) ou `banners` (`events/banners/`). */
+  folder: "covers" | "banners";
+  /** Classe de proporção da prévia (Tailwind). */
+  aspectClass: string;
+}
+export const COVER_FORMAT: ImageFormat = { label: "Imagem do card", aspect: COVER_ASPECT, width: COVER_WIDTH, height: COVER_HEIGHT, folder: "covers", aspectClass: "aspect-video" };
+/** Banner do carrossel de eventos na sala do Client: faixa larga 3:1, exportada em 1500×500. */
+export const BANNER_FORMAT: ImageFormat = { label: "Banner do evento", aspect: 3, width: 1500, height: 500, folder: "banners", aspectClass: "aspect-[3/1]" };
 const QUALITY = 0.86;
 
 export interface CoverAdjust {
@@ -33,7 +48,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Recorta a área escolhida (em pixels da imagem já girada, como o react-easy-crop entrega),
  * aplica espelho e ajustes e redimensiona para 1280×720 em WebP.
  */
-export async function renderCover(src: string, area: Area, adjust: CoverAdjust): Promise<Uint8Array<ArrayBuffer>> {
+export async function renderCover(src: string, area: Area, adjust: CoverAdjust, format: ImageFormat = COVER_FORMAT): Promise<Uint8Array<ArrayBuffer>> {
   const image = await loadImage(src);
   const radians = (adjust.rotation * Math.PI) / 180;
   const sin = Math.abs(Math.sin(radians));
@@ -55,21 +70,21 @@ export async function renderCover(src: string, area: Area, adjust: CoverAdjust):
 
   // 2) recorte redimensionado direto para o tamanho final, com suavização alta
   const out = document.createElement("canvas");
-  out.width = COVER_WIDTH;
-  out.height = COVER_HEIGHT;
+  out.width = format.width;
+  out.height = format.height;
   const octx = out.getContext("2d");
   if (!octx) throw new Error("Canvas indisponível.");
   octx.imageSmoothingEnabled = true;
   octx.imageSmoothingQuality = "high";
   octx.fillStyle = "#1f1f1f";
-  octx.fillRect(0, 0, COVER_WIDTH, COVER_HEIGHT);
-  octx.drawImage(rotated, area.x, area.y, area.width, area.height, 0, 0, COVER_WIDTH, COVER_HEIGHT);
+  octx.fillRect(0, 0, format.width, format.height);
+  octx.drawImage(rotated, area.x, area.y, area.width, area.height, 0, 0, format.width, format.height);
 
   const blob = await new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/webp", QUALITY));
   if (!blob || blob.type !== "image/webp") throw new Error("Este sistema não conseguiu gerar WebP.");
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** Envia a capa ao S3 (credenciais do OpenBao, pelo Lab) e devolve a URL pública. */
-export const publishCover = (gameId: string, bytes: Uint8Array) =>
-  invoke<string>("publicar_capa", { gameId, bytes: Array.from(bytes) });
+/** Envia a imagem ao S3 (credenciais do OpenBao, pelo Lab) e devolve a URL pública. `id`: o do jogo ou do evento. */
+export const publishCover = (id: string, bytes: Uint8Array, folder: ImageFormat["folder"] = "covers") =>
+  invoke<string>("publicar_capa", { gameId: id, bytes: Array.from(bytes), pasta: folder });

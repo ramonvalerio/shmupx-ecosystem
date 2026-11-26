@@ -6,6 +6,8 @@ import { Field, Select, TextInput } from "../../components/ui/Field";
 import { IconAlert, IconRefresh } from "../../components/ui/Icons";
 import { deleteEvent, listEvents, saveEvent, type CatalogGame, type EventMode, type LabEvent } from "../../lib/backend";
 import { formatDateTime, toLocalInput } from "../coins/options";
+import CoverField from "../catalog/CoverField";
+import { BANNER_FORMAT } from "../../lib/cover";
 
 const MODES: { value: EventMode; label: string }[] = [
   { value: "highscore", label: "Hi-Score" },
@@ -14,18 +16,19 @@ const MODES: { value: EventMode; label: string }[] = [
 ];
 const TEXTAREA = "w-full rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/15";
 
-interface Draft { id: string; title: string; description: string; games: string[]; mode: EventMode; starts: string; ends: string; rules: string; prizes: string; published: boolean }
+interface Draft { id: string; title: string; description: string; games: string[]; mode: EventMode; starts: string; ends: string; rules: string; prizes: string; published: boolean; fee: string; banner: string; page: string }
 const empty = (): Draft => {
   const start = new Date(Date.now() + 7 * 86_400_000);
   start.setHours(20, 0, 0, 0);
   const end = new Date(start.getTime() + 30 * 86_400_000);
   end.setHours(23, 59, 0, 0);
-  return { id: "", title: "", description: "", games: [], mode: "highscore", starts: toLocalInput(start), ends: toLocalInput(end), rules: "", prizes: "", published: false };
+  return { id: "", title: "", description: "", games: [], mode: "highscore", starts: toLocalInput(start), ends: toLocalInput(end), rules: "", prizes: "", published: false, fee: "0", banner: "", page: "" };
 };
 const toDraft = (e: LabEvent): Draft => ({
   id: e.id, title: e.title, description: e.description, games: e.game_ids, mode: e.mode,
   starts: e.starts_at ? toLocalInput(new Date(e.starts_at)) : "", ends: e.ends_at ? toLocalInput(new Date(e.ends_at)) : "",
   rules: e.rules.join("\n"), prizes: e.prizes.join("\n"), published: e.published,
+  fee: String(e.entry_fee ?? 0), banner: e.banner_url ?? "", page: e.page_url ?? "",
 });
 const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -77,6 +80,9 @@ export default function EventsView({ games }: { games: CatalogGame[] }) {
     if (!id) { setError("Dê um título ao evento."); return; }
     if (draft.games.length === 0) { setError("Escolha pelo menos um jogo."); return; }
     if (!draft.starts || !draft.ends || new Date(draft.ends) <= new Date(draft.starts)) { setError("O fim precisa ser depois do começo."); return; }
+    const fee = Number(draft.fee || "0");
+    if (!Number.isInteger(fee) || fee < 0 || fee > 1000) { setError("O custo da inscrição vai de 0 a 1000 fichas."); return; }
+    if (draft.page.trim() && !draft.page.trim().startsWith("https://")) { setError("O link da página precisa começar com https://."); return; }
     setSaving(true);
     setError(null);
     try {
@@ -84,6 +90,7 @@ export default function EventsView({ games }: { games: CatalogGame[] }) {
         title: draft.title, description: draft.description, game_ids: draft.games, mode: draft.mode,
         starts_at: new Date(draft.starts).toISOString(), ends_at: new Date(draft.ends).toISOString(),
         rules: draft.rules.split("\n"), prizes: draft.prizes.split("\n"), published: draft.published,
+        entry_fee: fee, banner_url: draft.banner, page_url: draft.page.trim(),
       });
       setEvents((current) => [...current.filter((e) => e.id !== saved.id), saved].sort((a, b) => (b.starts_at ?? "").localeCompare(a.starts_at ?? "")));
       edit(saved);
@@ -137,7 +144,7 @@ export default function EventsView({ games }: { games: CatalogGame[] }) {
             ) : (
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-zinc-950 text-[11px] tracking-wider text-zinc-500 uppercase">
-                  <tr><th className="px-4 py-3 font-semibold">Evento</th><th className="px-4 py-3 font-semibold">Jogos</th><th className="px-4 py-3 font-semibold">Período</th><th className="px-4 py-3 font-semibold">Situação</th></tr>
+                  <tr><th className="px-4 py-3 font-semibold">Evento</th><th className="px-4 py-3 font-semibold">Jogos</th><th className="px-4 py-3 font-semibold">Período</th><th className="px-4 py-3 font-semibold">Inscrição</th><th className="px-4 py-3 font-semibold">Situação</th></tr>
                 </thead>
                 <tbody>
                   {events.map((e) => {
@@ -147,6 +154,7 @@ export default function EventsView({ games }: { games: CatalogGame[] }) {
                         <td className="px-4 py-3"><p className="font-medium text-zinc-100">{e.title}</p><p className="text-[11px] text-zinc-500">{MODES.find((m) => m.value === e.mode)?.label}</p></td>
                         <td className="px-4 py-3 text-xs text-zinc-400">{e.game_ids.map((g) => titles.get(g) ?? g).join(", ")}</td>
                         <td className="px-4 py-3 text-xs text-zinc-400 tabular-nums">{formatDateTime(e.starts_at ?? undefined)} → {formatDateTime(e.ends_at ?? undefined)}</td>
+                        <td className="px-4 py-3 text-xs text-zinc-400 tabular-nums">{e.entry_fee > 0 ? `${e.entry_fee} fichas` : "Grátis"}</td>
                         <td className="px-4 py-3"><span className="flex flex-wrap gap-1"><Badge tone={p.tone}>{p.label}</Badge>{!e.published && <Badge tone="warning">Rascunho</Badge>}</span></td>
                       </tr>
                     );
@@ -166,6 +174,11 @@ export default function EventsView({ games }: { games: CatalogGame[] }) {
             <Field label="Começa"><TextInput type="datetime-local" className="[color-scheme:dark]" value={draft.starts} onChange={(e) => setDraft({ ...draft, starts: e.target.value })} /></Field>
             <Field label="Termina"><TextInput type="datetime-local" className="[color-scheme:dark]" value={draft.ends} onChange={(e) => setDraft({ ...draft, ends: e.target.value })} /></Field>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Inscrição (fichas)" hint="0 = grátis."><TextInput type="number" min={0} max={1000} step={1} value={draft.fee} onChange={(e) => setDraft({ ...draft, fee: e.target.value })} /></Field>
+            <Field label="Página do evento" hint="Link com tudo sobre o evento."><TextInput type="url" value={draft.page} onChange={(e) => setDraft({ ...draft, page: e.target.value })} placeholder="https://www.shmupx.com/…" /></Field>
+          </div>
+          <CoverField gameId={id ? `evento-${id}` : ""} title={draft.title} value={draft.banner} onChange={(banner) => setDraft({ ...draft, banner })} format={BANNER_FORMAT} />
           <Field label="Modo" hint="A tabela do ranking que vale no evento."><Select value={draft.mode} onChange={(e) => setDraft({ ...draft, mode: e.target.value as EventMode })}>{MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</Select></Field>
           <div>
             <span className="mb-1.5 block text-xs font-medium text-zinc-400">Jogos ({draft.games.length})</span>

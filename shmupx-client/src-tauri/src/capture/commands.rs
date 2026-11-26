@@ -32,6 +32,8 @@ pub async fn iniciar_corrida_safe(
     steam_app_id: Option<u32>,
     // Modo escolhido no Play Ranked (`highscore`, `1cc`, `caravan`): vai para a gameplay.
     modo: Option<String>,
+    // Evento em que a partida vale (o jogador se inscreveu): o backend confere e grava o `eventId`.
+    evento: Option<String>,
 ) -> Result<u32, String> {
     // Uma live no ar só transmite a run ranked do jogo dela (Play Ranked com live): a run sai
     // ligada à live, para o destaque do top 3. Live de outro jogo barra a run.
@@ -83,7 +85,7 @@ pub async fn iniciar_corrida_safe(
 
     // Débito de ficha + abertura da "ficha ativa" no backend com a captura já confirmada. Se o
     // backend recusar (sem saldo, jogo não publicado, token inválido), a captura é descartada.
-    let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref(), live_broadcast.as_deref()).await {
+    let inicio = match backend::iniciar_run(&token, &jogo_id, modo.as_deref(), live_broadcast.as_deref(), evento.as_deref()).await {
         Ok(inicio) => inicio,
         Err(e) => {
             let _ = child.kill().await;

@@ -46,6 +46,9 @@ struct IniciarRunPayload {
     /// Ranked com live: id da live no YouTube que transmite a partida.
     #[serde(default)]
     live_broadcast_id: Option<String>,
+    /// Partida valendo num evento em que o jogador se inscreveu.
+    #[serde(default)]
+    evento_id: Option<String>,
 }
 
 /// `POST /api/runs/start`: debita 1 ficha e abre a gameplay (ver `services::gameplays`). Antes,
@@ -66,7 +69,8 @@ async fn iniciar_run(
         versoes::exigir_versao_em_dia(&firestore, versao_do_client(&headers).as_deref()).await?;
     }
     let live_broadcast_id = payload.live_broadcast_id.filter(|id| !id.is_empty());
-    let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem, live_broadcast_id };
+    let evento_id = payload.evento_id.filter(|id| !id.is_empty());
+    let detalhes = Detalhes { modo: payload.modo, versao: payload.versao, origem, live_broadcast_id, evento_id };
     let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
     Ok((StatusCode::CREATED, Json(run)))
 }

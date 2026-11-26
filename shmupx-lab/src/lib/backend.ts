@@ -402,6 +402,12 @@ export interface LabEvent {
   rules: string[];
   prizes: string[];
   published: boolean;
+  /** Fichas para se inscrever (0 = grátis). */
+  entry_fee: number;
+  /** Banner do carrossel na sala do Client (`events/banners/` no site); vazio = só o título. */
+  banner_url: string;
+  /** Página com tudo sobre o evento; vazio = sem link. */
+  page_url: string;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -415,6 +421,9 @@ export interface LabEventInput {
   rules: string[];
   prizes: string[];
   published: boolean;
+  entry_fee: number;
+  banner_url: string;
+  page_url: string;
 }
 
 export function listEvents(): Promise<LabEvent[]> {

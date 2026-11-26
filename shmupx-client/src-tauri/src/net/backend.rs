@@ -63,6 +63,9 @@ struct IniciarRunPayload<'a> {
     /// Ranked com live: a live que transmite a partida (o destaque do top 3 sai dela).
     #[serde(skip_serializing_if = "Option::is_none")]
     live_broadcast_id: Option<&'a str>,
+    /// Partida valendo num evento em que o jogador se inscreveu.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evento_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,11 +79,17 @@ pub struct IniciarRunResponse {
 /// Chamada por `capture::commands::iniciar_corrida_safe` antes de sequer abrir o FFmpeg — se o
 /// backend recusar (sem fichas, jogador/jogo inexistente, token inválido), a run nem começa a
 /// gravar localmente.
-pub async fn iniciar_run(token: &str, jogo_id: &str, modo: Option<&str>, live_broadcast_id: Option<&str>) -> Result<IniciarRunResponse, String> {
+pub async fn iniciar_run(
+    token: &str,
+    jogo_id: &str,
+    modo: Option<&str>,
+    live_broadcast_id: Option<&str>,
+    evento_id: Option<&str>,
+) -> Result<IniciarRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs/start"))
         .bearer_auth(token)
-        .json(&IniciarRunPayload { jogo_id, modo, live_broadcast_id })
+        .json(&IniciarRunPayload { jogo_id, modo, live_broadcast_id, evento_id })
         .send()
         .await
         .map_err(|e| format!("falha de rede ao iniciar a run no backend: {e}"))?;

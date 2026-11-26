@@ -6,6 +6,7 @@ import { I18nProvider } from "./i18n";
 import { installDesktopFeel } from "./desktopFeel";
 import "./index.css";
 import "./room.css";
+import "./events.css";
 import "./ranking.css";
 import "./tutorial.css";
 import "./collection.css";

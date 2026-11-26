@@ -3,6 +3,7 @@
 
 pub mod admin;
 pub mod auth;
+pub mod eventos;
 pub mod health;
 pub mod jogos;
 pub mod me;

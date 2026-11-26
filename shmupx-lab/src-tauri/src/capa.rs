@@ -1,5 +1,6 @@
 //! Capa do card do jogo no Client: o Lab recorta e comprime a imagem (WebP 16:9) no front e
 //! este comando a envia a `www.shmupx.com/catalog/covers/`, no mesmo bucket e CloudFront do site.
+//! O banner de um evento (WebP 3:1) vai pelo mesmo caminho para `www.shmupx.com/events/banners/`.
 //!
 //! O nome leva o id do jogo e o instante do envio: cada versão da capa é um arquivo novo, então
 //! pode ficar em cache para sempre e trocar a capa nunca mostra a antiga por engano.
@@ -10,7 +11,14 @@ use tokio::process::Command;
 
 use crate::instalador::{credenciais_aws, BUCKET};
 
-const URL_CAPAS: &str = "https://www.shmupx.com/catalog/covers";
+/// Pastas aceitas no site: a capa do card do jogo e o banner do carrossel de eventos.
+fn pasta_no_site(pasta: Option<&str>) -> Option<&'static str> {
+    match pasta.unwrap_or("covers") {
+        "covers" => Some("catalog/covers"),
+        "banners" => Some("events/banners"),
+        _ => None,
+    }
+}
 /// Bem acima de um WebP 1280×720 (~100–300 KB); barra envio de arquivo errado.
 const TAMANHO_MAXIMO: usize = 3 * 1024 * 1024;
 
@@ -25,10 +33,11 @@ fn e_webp(bytes: &[u8]) -> bool {
 
 /// Envia a capa (WebP) do jogo ao S3 e devolve a URL pública para gravar no catálogo.
 #[tauri::command]
-pub async fn publicar_capa(game_id: String, bytes: Vec<u8>) -> Result<String, String> {
+pub async fn publicar_capa(game_id: String, bytes: Vec<u8>, pasta: Option<String>) -> Result<String, String> {
     if !id_valido(&game_id) {
-        return Err("id do jogo inválido".into());
+        return Err("id inválido".into());
     }
+    let destino = pasta_no_site(pasta.as_deref()).ok_or("pasta de imagem inválida")?;
     if !e_webp(&bytes) {
         return Err("a capa precisa estar em WebP".into());
     }
@@ -47,7 +56,7 @@ pub async fn publicar_capa(game_id: String, bytes: Vec<u8>) -> Result<String, St
             .arg("s3")
             .arg("cp")
             .arg(&temporario)
-            .arg(format!("s3://{BUCKET}/catalog/covers/{nome}"))
+            .arg(format!("s3://{BUCKET}/{destino}/{nome}"))
             .args(["--content-type", "image/webp"])
             .args(["--cache-control", "public,max-age=31536000,immutable"])
             .arg("--only-show-errors")
@@ -63,7 +72,7 @@ pub async fn publicar_capa(game_id: String, bytes: Vec<u8>) -> Result<String, St
     if !saida.status.success() {
         return Err(format!("falha ao enviar a capa ao S3: {}", String::from_utf8_lossy(&saida.stderr).trim()));
     }
-    Ok(format!("{URL_CAPAS}/{nome}"))
+    Ok(format!("https://www.shmupx.com/{destino}/{nome}"))
 }
 
 #[cfg(test)]
@@ -75,6 +84,9 @@ mod tests {
         assert!(id_valido("earthion"));
         assert!(!id_valido("../x"));
         assert!(e_webp(b"RIFF\0\0\0\0WEBPVP8 "));
+        assert_eq!(pasta_no_site(None), Some("catalog/covers"));
+        assert_eq!(pasta_no_site(Some("banners")), Some("events/banners"));
+        assert_eq!(pasta_no_site(Some("../downloads")), None);
         assert!(!e_webp(b"\x89PNG\r\n\x1a\n...."));
     }
 }

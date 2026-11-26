@@ -53,6 +53,22 @@ export function takePendingRunMode(roomId: string): string | null {
   return mode ? RUN_MODE[mode] : null;
 }
 
+/**
+ * Evento em que a próxima run da sala vale (Event Mode). Toda partida que começa pela ficha grava
+ * ou limpa este valor, para um evento escolhido numa tentativa que não abriu não passar para um
+ * Ranked comum depois.
+ */
+const pendingEvent = new Map<string, string>();
+export function setPendingRunEvent(roomId: string, eventId: string | null) {
+  if (eventId) pendingEvent.set(roomId, eventId);
+  else pendingEvent.delete(roomId);
+}
+export function takePendingRunEvent(roomId: string): string | null {
+  const eventId = pendingEvent.get(roomId) ?? null;
+  pendingEvent.delete(roomId);
+  return eventId;
+}
+
 /** Entrada do menu do MiSTer que corresponde ao modo (pelo nome do modo no menu). */
 export function misterEntryMatches(menuMode: string, mode: GameMode): boolean {
   const name = menuMode.toLowerCase().replace(/[^a-z0-9]/g, "");

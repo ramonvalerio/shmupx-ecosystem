@@ -65,6 +65,9 @@ pub struct Detalhes {
     /// Id da live no YouTube que transmitiu a partida (Ranked com live). Se a run entrar no top 3,
     /// a live vai para o canal oficial da ShmupX (`services::destaques`).
     pub live_broadcast_id: Option<String>,
+    /// Evento em que a partida vale (o jogador se inscreveu pagando as fichas do evento). A run
+    /// continua gastando 1 ficha e entra no ranking; o evento guarda a run pelo `eventId`.
+    pub evento_id: Option<String>,
 }
 
 /// Modos de partida e o modo do catálogo (`games.modes`) a que pertencem. No 1CC a partida usa
@@ -109,6 +112,9 @@ pub async fn iniciar(fs: &Firestore, uid: &str, game_id: &str, detalhes: &Detalh
     if detalhes.live_broadcast_id.as_deref().is_some_and(|id| !crate::services::youtube::id_valido(id)) {
         return Err(AppError::bad_request("id da live inválido"));
     }
+    if detalhes.evento_id.as_deref().is_some_and(|id| !id_valido(id)) {
+        return Err(AppError::bad_request("id do evento inválido"));
+    }
     let tx = fs.iniciar_transacao().await?;
     let resultado = iniciar_na_transacao(fs, &tx, uid, game_id, detalhes).await;
     if resultado.is_err() {
@@ -143,44 +149,15 @@ async fn iniciar_na_transacao(
     }
     let max_duracao = ler_inteiro(&jogo, "maxDurationSeconds").unwrap_or(DURACAO_PADRAO_SEGUNDOS).clamp(1, 7200);
 
-    let caminho_carteira = format!("wallets/{uid}");
-    let carteira = fs.ler(&caminho_carteira, tx).await?;
-    let nova = carteira.is_none();
-    let saldo = carteira.as_ref().and_then(|c| ler_inteiro(c, "balance")).unwrap_or(FICHAS_INICIAIS);
-    let versao = carteira.as_ref().and_then(|c| ler_inteiro(c, "version")).unwrap_or(0);
-    if saldo <= 0 {
-        return Err(AppError::bad_request("saldo de fichas insuficiente"));
-    }
-
+    // Partida de evento: só para quem se inscreveu, durante o evento, num jogo e modo do evento.
     let agora = Utc::now();
-    let run_id = Uuid::new_v4().to_string();
-    let saldo_final = saldo - 1;
-
-    let mut escritas = Vec::new();
-    let mut campos_carteira = campos(&[
-        ("balance", inteiro(saldo_final)),
-        ("version", inteiro(versao + 1)),
-        ("updatedAt", data(agora)),
-    ]);
-    if nova {
-        campos_carteira.insert("createdAt".into(), data(agora));
-        escritas.push(criar(fs, &format!("{caminho_carteira}/entries/{}", Uuid::new_v4()), campos(&[
-            ("type", texto("grant")),
-            ("amount", inteiro(FICHAS_INICIAIS)),
-            ("reason", texto("initial_grant")),
-            ("balanceAfter", inteiro(FICHAS_INICIAIS)),
-            ("createdAt", data(agora)),
-        ])));
+    if let Some(evento_id) = &detalhes.evento_id {
+        crate::services::eventos::exigir_partida_de_evento(fs, tx, uid, evento_id, game_id, detalhes.modo.as_deref(), agora).await?;
     }
-    escritas.push(atualizar(fs, &caminho_carteira, campos_carteira, None));
-    escritas.push(criar(fs, &format!("{caminho_carteira}/entries/{}", Uuid::new_v4()), campos(&[
-        ("type", texto("debit")),
-        ("amount", inteiro(-1)),
-        ("reason", texto("run_start")),
-        ("runId", texto(&run_id)),
-        ("balanceAfter", inteiro(saldo_final)),
-        ("createdAt", data(agora)),
-    ])));
+
+    let run_id = Uuid::new_v4().to_string();
+    let carteira = fs.ler(&format!("wallets/{uid}"), tx).await?;
+    let (mut escritas, _) = debito_na_carteira(fs, uid, carteira.as_ref(), 1, "run_start", ("runId", &run_id), agora)?;
     let mut campos_gameplay = campos(&[
         ("ownerId", texto(uid)),
         ("gameId", texto(game_id)),
@@ -199,6 +176,9 @@ async fn iniciar_na_transacao(
     if let Some(versao) = &detalhes.versao {
         campos_gameplay.insert("gameVersion".into(), texto(versao));
     }
+    if let Some(evento_id) = &detalhes.evento_id {
+        campos_gameplay.insert("eventId".into(), texto(evento_id));
+    }
     if let Some(id) = &detalhes.live_broadcast_id {
         campos_gameplay.insert("live".into(), mapa(campos(&[
             ("broadcastId", texto(id)),
@@ -209,6 +189,50 @@ async fn iniciar_na_transacao(
 
     fs.confirmar(tx, escritas).await?;
     Ok(RunIniciada { run_id, server_started_at: agora, max_duration_segundos: max_duracao as i32 })
+}
+
+/// Escritas que debitam `valor` fichas da carteira (`wallets/{uid}`, já lida na transação) com o
+/// lançamento imutável em `entries` (`motivo` e a referência, ex.: `("runId", id)`), e o saldo que
+/// sobra. Carteira inexistente nasce com `FICHAS_INICIAIS` (e o lançamento do bônus inicial).
+/// Saldo menor que `valor`: recusa sem escrever nada.
+pub(crate) fn debito_na_carteira(
+    fs: &Firestore,
+    uid: &str,
+    carteira: Option<&Campos>,
+    valor: i64,
+    motivo: &str,
+    referencia: (&str, &str),
+    agora: DateTime<Utc>,
+) -> Result<(Vec<Value>, i64), AppError> {
+    let caminho = format!("wallets/{uid}");
+    let saldo = carteira.and_then(|c| ler_inteiro(c, "balance")).unwrap_or(FICHAS_INICIAIS);
+    let versao = carteira.and_then(|c| ler_inteiro(c, "version")).unwrap_or(0);
+    if saldo < valor.max(1) {
+        return Err(AppError::bad_request("saldo de fichas insuficiente"));
+    }
+    let saldo_final = saldo - valor;
+    let mut escritas = Vec::new();
+    let mut campos_carteira = campos(&[("balance", inteiro(saldo_final)), ("version", inteiro(versao + 1)), ("updatedAt", data(agora))]);
+    if carteira.is_none() {
+        campos_carteira.insert("createdAt".into(), data(agora));
+        escritas.push(criar(fs, &format!("{caminho}/entries/{}", Uuid::new_v4()), campos(&[
+            ("type", texto("grant")),
+            ("amount", inteiro(FICHAS_INICIAIS)),
+            ("reason", texto("initial_grant")),
+            ("balanceAfter", inteiro(FICHAS_INICIAIS)),
+            ("createdAt", data(agora)),
+        ])));
+    }
+    escritas.push(atualizar(fs, &caminho, campos_carteira, None));
+    escritas.push(criar(fs, &format!("{caminho}/entries/{}", Uuid::new_v4()), campos(&[
+        ("type", texto("debit")),
+        ("amount", inteiro(-valor)),
+        ("reason", texto(motivo)),
+        (referencia.0, texto(referencia.1)),
+        ("balanceAfter", inteiro(saldo_final)),
+        ("createdAt", data(agora)),
+    ])));
+    Ok((escritas, saldo_final))
 }
 
 /// A gameplay (do início ao aviso de encerramento) coube no tempo da ficha, com a tolerância.
@@ -388,7 +412,7 @@ fn campos(pares: &[(&str, Value)]) -> Campos {
 }
 
 /// Cria o documento; falha se ele já existir (IDs novos nunca colidem com dados anteriores).
-fn criar(fs: &Firestore, caminho: &str, campos: Campos) -> Value {
+pub(crate) fn criar(fs: &Firestore, caminho: &str, campos: Campos) -> Value {
     json!({ "update": { "name": fs.nome(caminho), "fields": campos }, "currentDocument": { "exists": false } })
 }
 

@@ -16,7 +16,7 @@ import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, applyRunHighlight, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type RunHighlightEvent, type SessionRun } from "./types/submission";
 import { useDialogFocus } from "./components/useDialogFocus";
-import { takePendingRunMode } from "./data/gameModes";
+import { takePendingRunEvent, takePendingRunMode } from "./data/gameModes";
 import { useRemoteLaunchHost } from "./data/useRemoteLaunchHost";
 import { useRemoteLaunch } from "./data/remoteLaunch";
 import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
@@ -139,7 +139,7 @@ export default function App() {
     if (!isTauri()) return;
     // Jogo aberto (Steam ou emulador): começa a run, vigiando o processo dele.
     const startRun = (roomId: string, pid: number, steamAppId: number | null) => {
-      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId, modo: takePendingRunMode(roomId) })
+      invoke<number>("iniciar_corrida_safe", { jogoId: roomId, jogoPid: pid, steamAppId, modo: takePendingRunMode(roomId), evento: takePendingRunEvent(roomId) })
         .then((nativePid) => {
           const run: SessionRun = { id: crypto.randomUUID(), nativePid, gameId: roomId, startedAt: Date.now(), status: "recording" };
           setRuns((current) => [run, ...current]);

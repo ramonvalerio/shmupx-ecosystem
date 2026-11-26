@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEv
 import Cropper, { type Area } from "react-easy-crop";
 import Button from "../../components/ui/Button";
 import { IconClose } from "../../components/ui/Icons";
-import { adjustFilter, COVER_ASPECT, DEFAULT_ADJUST, publishCover, renderCover, type CoverAdjust } from "../../lib/cover";
+import { adjustFilter, COVER_FORMAT, DEFAULT_ADJUST, publishCover, renderCover, type CoverAdjust, type ImageFormat } from "../../lib/cover";
 
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 
@@ -11,10 +11,12 @@ interface CoverFieldProps {
   title: string;
   value: string;
   onChange: (url: string) => void;
+  /** Capa do card (padrão) ou banner de evento. */
+  format?: ImageFormat;
 }
 
 /** Imagem do card do jogo no Client: escolher, recortar/ajustar, enviar. */
-export default function CoverField({ gameId, title, value, onChange }: CoverFieldProps) {
+export default function CoverField({ gameId, title, value, onChange, format = COVER_FORMAT }: CoverFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -52,12 +54,12 @@ export default function CoverField({ gameId, title, value, onChange }: CoverFiel
 
   return (
     <div>
-      <p className="mb-1.5 text-xs font-medium text-zinc-400">Imagem do card</p>
+      <p className="mb-1.5 text-xs font-medium text-zinc-400">{format.label}</p>
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`group relative aspect-video w-full overflow-hidden rounded-lg ring-1 transition-colors ${dragging ? "bg-cyan-400/10 ring-cyan-400/60" : "bg-zinc-900 ring-white/10"}`}
+        className={`group relative ${format.aspectClass} w-full overflow-hidden rounded-lg ring-1 transition-colors ${dragging ? "bg-cyan-400/10 ring-cyan-400/60" : "bg-zinc-900 ring-white/10"}`}
       >
         {value ? (
           <img src={value} alt={`Capa de ${title || "jogo"}`} className="h-full w-full object-cover" />
@@ -80,6 +82,7 @@ export default function CoverField({ gameId, title, value, onChange }: CoverFiel
         <CoverEditor
           source={source}
           gameId={gameId}
+          format={format}
           title={title}
           onCancel={closeEditor}
           onDone={(url) => { onChange(url); closeEditor(); }}
@@ -107,7 +110,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: string; gameId: string; title: string; onCancel: () => void; onDone: (url: string) => void }) {
+function CoverEditor({ source, gameId, title, format, onCancel, onDone }: { source: string; gameId: string; title: string; format: ImageFormat; onCancel: () => void; onDone: (url: string) => void }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [adjust, setAdjust] = useState<CoverAdjust>(DEFAULT_ADJUST);
@@ -129,7 +132,7 @@ function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: stri
     let url: string | null = null;
     const timer = setTimeout(async () => {
       try {
-        const bytes = await renderCover(source, area, adjust);
+        const bytes = await renderCover(source, area, adjust, format);
         url = URL.createObjectURL(new Blob([bytes], { type: "image/webp" }));
         setPreview((old) => { if (old) URL.revokeObjectURL(old); return url; });
       } catch { /* a prévia é só visual */ }
@@ -145,12 +148,12 @@ function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: stri
 
   async function apply() {
     if (!area) return;
-    if (!gameId.trim()) return setError("Defina o ID do jogo antes de enviar a capa.");
+    if (!gameId.trim()) return setError("Defina o ID antes de enviar a imagem.");
     setBusy(true);
     setError(null);
     try {
-      const bytes = await renderCover(source, area, adjust);
-      onDone(await publishCover(gameId.trim(), bytes));
+      const bytes = await renderCover(source, area, adjust, format);
+      onDone(await publishCover(gameId.trim(), bytes, format.folder));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -162,7 +165,7 @@ function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: stri
       <div className="flex max-h-full w-full max-w-[1100px] flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0e0e11] shadow-2xl">
         <header className="flex items-center justify-between border-b border-white/5 px-5 py-3">
           <div>
-            <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">Imagem do card</p>
+            <p className="text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">{format.label}</p>
             <h3 className="text-sm font-semibold text-zinc-100">{title || "Novo jogo"} · recorte 16:9</h3>
           </div>
           <button type="button" onClick={onCancel} disabled={busy} aria-label="Fechar" className="rounded-md p-1.5 text-zinc-500 hover:bg-white/5 hover:text-zinc-200"><IconClose /></button>
@@ -175,7 +178,7 @@ function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: stri
               crop={crop}
               zoom={zoom}
               rotation={adjust.rotation}
-              aspect={COVER_ASPECT}
+              aspect={format.aspect}
               minZoom={0.5}
               maxZoom={5}
               zoomSpeed={0.15}
@@ -211,7 +214,7 @@ function CoverEditor({ source, gameId, title, onCancel, onDone }: { source: stri
 
             <Group title="Prévia no Client">
               <div className="overflow-hidden rounded-md bg-[#262626] ring-1 ring-white/10">
-                <div className="aspect-video bg-[#1f1f1f]">{preview && <img src={preview} alt="" className="h-full w-full object-cover" />}</div>
+                <div className={`${format.aspectClass} bg-[#1f1f1f]`}>{preview && <img src={preview} alt="" className="h-full w-full object-cover" />}</div>
                 <p className="truncate px-3 py-2 text-xs font-semibold text-zinc-100">{title || "Novo jogo"}</p>
               </div>
               <p className="text-xs text-zinc-500">Sai em WebP 1280×720.</p>

@@ -117,6 +117,7 @@ async fn servidor() {
         .merge(routes::mister::router(firestore.clone(), email.clone()))
         .merge(routes::perfil::router(firestore.clone(), email))
         .merge(routes::notificacoes::router(firestore.clone()))
+        .merge(routes::eventos::router(firestore.clone()))
         .merge(routes::youtube::router(firestore.clone(), youtube.clone()))
         .merge(routes::notificacoes::router_publico(firestore.clone()))
         .merge(routes::ranking_publico::router(firestore.clone()))
