@@ -18,7 +18,7 @@ use crate::services::usuarios::{self, Moderacao, ModeracaoEntrada, UsuarioAdmin}
 use crate::services::email::Ses;
 use crate::services::notificacoes;
 use crate::services::robotx::{self, ConhecimentoEntrada, ItemRobotx};
-use crate::services::versoes::{self, Instalador, Mudanca, OpcoesAgendamento, Versao, VersaoEntrada};
+use crate::services::versoes::{self, Instalador, Mudanca, OpcoesAgendamento, Portatil, Versao, VersaoEntrada};
 
 /// Rotas do Lab. Exigem ID token do Firebase e, além disso, admin (`ADMIN_EMAILS`): o servidor
 /// decide a permissão a cada chamada; o app do Lab não carrega credencial nem segredo.
@@ -36,6 +36,7 @@ where
         .route("/api/admin/releases/{version}", put(salvar_versao))
         .route("/api/admin/releases/{version}/auto/{key}", delete(remover_auto))
         .route("/api/admin/releases/{version}/installer", put(definir_instalador))
+        .route("/api/admin/releases/{version}/portable", put(definir_portatil))
         .route("/api/admin/releases/{version}/schedule", post(agendar_versao))
         .route("/api/admin/releases/{version}/cancel", post(cancelar_versao))
         .route("/api/admin/coins/grants", get(listar_distribuicoes).post(criar_distribuicao))
@@ -200,6 +201,20 @@ async fn definir_instalador(
     exigir_admin(&usuario)?;
     let salva = versoes::definir_instalador(&firestore, &versao, instalador).await?;
     println!("versões: {} ligou o instalador de {}", usuario.uid, salva.version);
+    Ok(Json(salva))
+}
+
+/// `PUT /api/admin/releases/{version}/portable`: liga o ShmupX Portable (já enviado ao S3 pelo Lab)
+/// e o SHA-256 dele ao rascunho.
+async fn definir_portatil(
+    Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(usuario): Extension<FirebaseUser>,
+    Path(versao): Path<String>,
+    Json(portatil): Json<Portatil>,
+) -> Result<Json<Versao>, AppError> {
+    exigir_admin(&usuario)?;
+    let salva = versoes::definir_portatil(&firestore, &versao, portatil).await?;
+    println!("versões: {} ligou a versão portátil de {}", usuario.uid, salva.version);
     Ok(Json(salva))
 }
 

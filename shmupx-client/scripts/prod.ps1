@@ -58,7 +58,7 @@ Write-Host "Tudo o que você fizer (chat, runs, perfil) vale para os jogadores r
 
 # 2. Recursos do instalador.
 if ($Emulador) { $Preparar = $true }
-if ($Preparar -or -not (Test-Path "$bundle\engine\shmupx-engine.exe")) {
+if ($Preparar -or -not (Test-Path "$bundle\engine\shmupx-engine.exe") -or -not (Test-Path "$bundle\runtime\DirectML.dll")) {
     $opcoes = @{ ReusarMotor = $true }
     if ($Emulador) { $opcoes.Emulador = $Emulador }
     & (Join-Path $PSScriptRoot "prepare-bundle.ps1") @opcoes
@@ -77,7 +77,7 @@ Get-Process shmupx-engine -ErrorAction SilentlyContinue |
 Set-Location $client
 npm run build
 if ($LASTEXITCODE) { throw "falha ao compilar a interface" }
-npx tauri build --no-bundle --config src-tauri/tauri.bundle.conf.json
+npx tauri build --no-bundle --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.bundle.windows.conf.json
 if ($LASTEXITCODE) { throw "falha ao compilar o Client" }
 if (-not (Test-Path $exe)) { throw "não achei o executável em $exe" }
 
@@ -87,6 +87,8 @@ foreach ($pasta in "engine", "validator", "games", "ffmpeg") {
     if (Test-Path $destino) { Remove-Item -Recurse -Force $destino }
     Copy-Item -Recurse (Join-Path $bundle $pasta) $destino
 }
+# Runtime (Visual C++ e DirectML) solto ao lado do exe, como o instalador põe.
+Copy-Item (Join-Path $bundle "runtime\*.dll") $release
 
 # 5. Abre fora do terminal.
 Write-Host "Abrindo $exe"

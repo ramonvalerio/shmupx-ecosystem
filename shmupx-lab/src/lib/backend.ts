@@ -123,6 +123,8 @@ export interface ClientRelease {
   /** Itens gerados pelas alterações no Lab (só em rascunho); juntam-se ao texto ao agendar. */
   auto: ReleaseAutoItem[];
   installer?: ReleaseInstaller;
+  /** ShmupX Portable (Windows, um `.exe` só), enviado junto com o instalador. */
+  portable?: ReleasePortable;
   /** Liberada, o Client baixa e instala sozinho. */
   auto_update: boolean;
   /** Sem instalador: só notas (mudanças de catálogo), não pede atualização do Client. */
@@ -141,6 +143,12 @@ export interface ReleaseAutoItem {
 export interface ReleaseInstaller {
   url: string;
   signature: string;
+  size?: number;
+}
+
+export interface ReleasePortable {
+  url: string;
+  sha256: string;
   size?: number;
 }
 
@@ -169,6 +177,14 @@ export function setReleaseInstaller(version: string, installer: ReleaseInstaller
   return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/installer`, {
     method: "PUT",
     body: JSON.stringify(installer),
+  });
+}
+
+/** Liga o ShmupX Portable já publicado no S3 ao rascunho. */
+export function setReleasePortable(version: string, portable: ReleasePortable): Promise<ClientRelease> {
+  return adminRequest<ClientRelease>(`/api/admin/releases/${encodeURIComponent(version)}/portable`, {
+    method: "PUT",
+    body: JSON.stringify(portable),
   });
 }
 
@@ -296,7 +312,7 @@ export interface AdminUser {
   connected_seconds: number;
 }
 
-export type DownloadPlatform = "windows" | "appimage" | "deb" | "android";
+export type DownloadPlatform = "windows" | "portable" | "appimage" | "deb" | "android";
 
 /** Client Manager: cliques nos instaladores do site, visitantes anônimos e versões em uso. */
 export interface ClientOverview {
@@ -305,7 +321,7 @@ export interface ClientOverview {
   /** Um item por visitante anônimo: os dias em que clicou. */
   visitors: string[][];
   versions: { version: string; players: number; active_7d: number }[];
-  downloads: Partial<Record<"windows" | "appimage" | "deb", { version: string; url: string; size?: number }>>;
+  downloads: Partial<Record<"windows" | "portable" | "appimage" | "deb", { version: string; url: string; size?: number }>>;
 }
 
 export function getClientOverview(): Promise<ClientOverview> {

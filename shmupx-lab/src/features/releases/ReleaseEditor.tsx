@@ -10,6 +10,7 @@ import {
   saveRelease,
   scheduleRelease,
   setReleaseInstaller,
+  setReleasePortable,
   type ClientRelease,
   type ReleaseLead,
   type ReleaseSection,
@@ -215,10 +216,11 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
   function onPublishInstaller() {
     if (!release) return;
     void run(async () => {
-      const published = await publishInstaller(release.version);
-      const saved = await setReleaseInstaller(release.version, published);
+      const { portable, ...installer } = await publishInstaller(release.version);
+      await setReleaseInstaller(release.version, installer);
+      const saved = await setReleasePortable(release.version, portable);
       setAutoUpdate(true);
-      onSaved(saved, `Instalador da versão ${saved.version} publicado (${formatSize(published.size)}).`);
+      onSaved(saved, `Instalador (${formatSize(installer.size)}) e ShmupX Portable (${formatSize(portable.size)}) da versão ${saved.version} publicados.`);
     });
   }
 
@@ -386,6 +388,7 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
                 {release?.installer ? (
                   <p className="text-emerald-300">
                     Publicado: <span className="font-mono break-all">{release.installer.url}</span> ({formatSize(release.installer.size)})
+                    {release.portable && <><br />Portátil: <span className="font-mono break-all">{release.portable.url}</span> ({formatSize(release.portable.size)})</>}
                   </p>
                 ) : (
                   <p className="text-zinc-400">Ainda sem instalador. {hasScripts ? "Esta versão leva scripts de validação, então precisa de um." : "Sem instalador, a versão só traz notas e não atualiza o Client."}</p>
@@ -394,6 +397,7 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
                   <p className="text-zinc-500">
                     Build local: {formatSize(local.size)} · gerado em {formatDateTime(local.built_at_ms ? new Date(local.built_at_ms) : undefined)}
                     {local.signed ? " · assinado" : " · sem assinatura do updater: gere de novo (a chave vem do OpenBao, shmupx/updater)"}
+                    {local.portable_found ? ` · portátil ${formatSize(local.portable_size)}` : " · sem o ShmupX Portable: gere de novo"}
                   </p>
                 ) : (
                   <p className="text-zinc-500">
@@ -418,7 +422,7 @@ export default function ReleaseEditor({ release, suggestedVersion, scripts, onCl
                     title={`Ajusta o Client para a versão ${version}, gera e assina o instalador neste PC (npm run bundle)`}>
                     {local?.found ? "Gerar de novo" : "Gerar instalador"}
                   </Button>
-                  <Button size="sm" variant="info" onClick={onPublishInstaller} disabled={busy || Boolean(build?.running) || !local?.found || !local.signed} loading={busy}>
+                  <Button size="sm" variant="info" onClick={onPublishInstaller} disabled={busy || Boolean(build?.running) || !local?.found || !local.signed || !local.portable_found} loading={busy}>
                     {release?.installer ? "Enviar de novo" : "Enviar instalador"}
                   </Button>
                 </div>

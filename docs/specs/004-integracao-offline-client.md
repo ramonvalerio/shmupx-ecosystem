@@ -32,10 +32,18 @@ O jogador não instala Python nem FFmpeg. O `.exe` é o mesmo motor Python compi
 npm run bundle
 # FFmpeg de outro lugar, ou reaproveitando o motor já compilado:
 powershell -File scripts\prepare-bundle.ps1 -Ffmpeg C:fmpeginfmpeg.exe -ReusarMotor
-npm run tauri build -- --config src-tauri/tauri.bundle.conf.json
+npm run tauri build -- --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.bundle.windows.conf.json
 ```
 
 O `prepare-bundle.ps1` só empacota scripts aprovados e confere que o motor empacotado os enxerga completos. O `tauri dev` não usa `tauri.bundle.conf.json`. O FFmpeg do PATH costuma ser um build GPL (com libx264): a licença vai junto em `ffmpeg/LICENSE.txt`, e a distribuição precisa cumprir a GPL do FFmpeg.
+
+O instalador do Windows também leva, ao lado do `shmupx-client.exe`, as DLLs do Visual C++ (`msvcp140*`, `vcruntime140*`, exigidas pelo ONNX Runtime) e o `DirectML.dll` 1.15 (`src-tauriundleuntime\`, via `tauri.bundle.windows.conf.json`), e embute o instalador do WebView2. Assim o Client abre num Windows recém-instalado, sem o jogador instalar o Visual C++ Redistributable.
+
+### ShmupX Portable
+
+O `npm run bundle` também gera `targeteleaseundle\portable\ShmupX-Portable-<versão>.exe` (`scripts\make-portable.ps1`): o lançador `shmupx-client\portable` (compilado com `+crt-static`, sem depender do Visual C++) com a pasta do Client inteira anexada num `.zip`. Dois cliques: na primeira vez de cada versão ele descompacta em `%LOCALAPPDATA%\ShmupX Portablepp\<versão>\` (instala o WebView2 pelo instalador oficial se faltar) e abre o Client; nas seguintes abre direto. Um `.exe` antigo abre a versão mais nova já descompactada, nunca volta de versão.
+
+Com a marca `.portable` ao lado do exe, o Client guarda `roms` e `recordings` em `ShmupX Portable\`, fora da pasta da versão, e a atualização automática baixa o próximo ShmupX Portable (SHA-256 conferido com o backend) em vez do instalador NSIS. O Lab envia os dois juntos (`PUT /api/admin/releases/{versão}/installer` e `.../portable`); o site oferece o portátil pelo `portable` de `GET /api/client/downloads`.
 
 ## Pendências para uso real
 

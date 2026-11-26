@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ReleaseInstaller } from "./backend";
+import type { ReleaseInstaller, ReleasePortable } from "./backend";
 
 /** Build local do Client para a versão (`target/release/bundle/nsis` na raiz do ecosystem). */
 export interface LocalInstaller {
@@ -10,12 +10,16 @@ export interface LocalInstaller {
   file: string;
   size?: number;
   built_at_ms?: number;
+  /** O ShmupX Portable da mesma versão também foi gerado. */
+  portable_found: boolean;
+  portable_size?: number;
 }
 
 export const getLocalInstaller = (versao: string) => invoke<LocalInstaller>("instalador_local", { versao });
 
-/** Envia o instalador assinado ao S3 (credenciais do OpenBao) e devolve URL e assinatura. */
-export const publishInstaller = (versao: string) => invoke<Required<ReleaseInstaller>>("publicar_instalador", { versao });
+/** Envia o instalador assinado e o ShmupX Portable ao S3 (credenciais do OpenBao) e devolve URLs, assinatura e SHA-256. */
+export const publishInstaller = (versao: string) =>
+  invoke<Required<ReleaseInstaller> & { portable: Required<ReleasePortable> }>("publicar_instalador", { versao });
 
 /**
  * Gera o instalador assinado da versão no shmupx-client (`npm run bundle`): ajusta a versão do

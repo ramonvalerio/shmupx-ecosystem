@@ -5496,6 +5496,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "shmupx-portable"
+version = "0.1.0"
+dependencies = [
+ "tauri-winres",
+ "windows 0.62.2",
+ "zip",
+]
+
+[[package]]
 name = "signal-hook-registry"
 version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7906,6 +7915,7 @@ checksum = "63e50f7b2212e4635244be3c363b53273d159f2523eb7db3096c1d2861c1b603"
 dependencies = [
  "constant_time_eq",
  "crc32fast",
+ "flate2",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
  "libc",

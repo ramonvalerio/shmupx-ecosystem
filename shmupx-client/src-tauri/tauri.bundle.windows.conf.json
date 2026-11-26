@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "resources": {
+      "bundle/runtime/msvcp140.dll": "msvcp140.dll",
+      "bundle/runtime/msvcp140_1.dll": "msvcp140_1.dll",
+      "bundle/runtime/vcruntime140.dll": "vcruntime140.dll",
+      "bundle/runtime/vcruntime140_1.dll": "vcruntime140_1.dll",
+      "bundle/runtime/DirectML.dll": "DirectML.dll"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      }
+    }
+  }
+}

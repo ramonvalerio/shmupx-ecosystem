@@ -82,10 +82,11 @@ fn gravavel(pasta: &Path) -> bool {
 }
 
 /// Pasta padrão: `recordings` ao lado do Client instalado (junto de `validator`, `games` e
-/// `ffmpeg`); se não der para gravar nela, ou em desenvolvimento, a dos dados do app.
+/// `ffmpeg`), ou na raiz do ShmupX Portable; se não der para gravar nela, ou em desenvolvimento,
+/// a dos dados do app.
 fn pasta_padrao(app: &AppHandle) -> Result<PathBuf, String> {
     if !cfg!(debug_assertions) {
-        if let Some(instalacao) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) {
+        if let Some(instalacao) = crate::portatil::pasta_do_jogador() {
             let pasta = instalacao.join("recordings");
             if gravavel(&pasta) {
                 return Ok(pasta);

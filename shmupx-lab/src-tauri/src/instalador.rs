@@ -1,5 +1,6 @@
 //! Instalador do ShmupX Client para uma versão: o Lab acha o build local (assinado pelo updater
-//! do Tauri) e o publica em `www.shmupx.com/downloads/`, no mesmo bucket e CloudFront do site.
+//! do Tauri) e o publica em `www.shmupx.com/downloads/`, no mesmo bucket e CloudFront do site,
+//! junto com o ShmupX Portable (um `.exe` só, sem instalação) gerado pelo mesmo `npm run bundle`.
 //!
 //! Credenciais da AWS vêm do OpenBao (`shmupx/infra/aws`), lidas na hora do envio e passadas só
 //! ao processo do `aws`: nada é gravado em disco nem guardado pelo Lab.
@@ -44,6 +45,18 @@ fn arquivos_do_build(versao: &str) -> Result<(PathBuf, PathBuf), String> {
     Ok((exe, sig))
 }
 
+/// Saída do `scripts/make-portable.ps1`: o ShmupX Portable e o SHA-256 dele.
+fn portatil_do_build(versao: &str) -> Result<(PathBuf, PathBuf), String> {
+    if !versao_valida(versao) {
+        return Err("versão inválida".into());
+    }
+    let client = pasta_client()?;
+    let raiz = client.parent().ok_or("pasta do shmupx-client sem pasta acima")?;
+    let exe = raiz.join(format!("target/release/bundle/portable/ShmupX-Portable-{versao}.exe"));
+    let sha = exe.with_extension("exe.sha256");
+    Ok((exe, sha))
+}
+
 #[derive(Debug, Serialize)]
 pub struct InstaladorLocal {
     pub found: bool,
@@ -52,12 +65,17 @@ pub struct InstaladorLocal {
     pub size: Option<u64>,
     /// Modificação do `.exe` em ms desde 1970, para o admin conferir se é o build certo.
     pub built_at_ms: Option<u64>,
+    /// O ShmupX Portable da mesma versão (com o `.sha256`) também está no build.
+    pub portable_found: bool,
+    pub portable_size: Option<u64>,
 }
 
 /// O que existe no build local para a versão (sem enviar nada).
 #[tauri::command]
 pub async fn instalador_local(versao: String) -> Result<InstaladorLocal, String> {
     let (exe, sig) = arquivos_do_build(&versao)?;
+    let (portatil, sha) = portatil_do_build(&versao)?;
+    let meta_portatil = std::fs::metadata(&portatil).ok().filter(|_| sha.is_file());
     let meta = std::fs::metadata(&exe).ok();
     let built_at_ms = meta
         .as_ref()
@@ -70,6 +88,8 @@ pub async fn instalador_local(versao: String) -> Result<InstaladorLocal, String>
         file: exe.to_string_lossy().into_owned(),
         size: meta.map(|m| m.len()),
         built_at_ms,
+        portable_found: meta_portatil.is_some(),
+        portable_size: meta_portatil.map(|m| m.len()),
     })
 }
 
@@ -77,6 +97,15 @@ pub async fn instalador_local(versao: String) -> Result<InstaladorLocal, String>
 pub struct InstaladorPublicado {
     pub url: String,
     pub signature: String,
+    pub size: i64,
+    /// O ShmupX Portable enviado junto (vai ao backend em `PUT .../portable`).
+    pub portable: PortatilPublicado,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PortatilPublicado {
+    pub url: String,
+    pub sha256: String,
     pub size: i64,
 }
 
@@ -109,7 +138,8 @@ pub(crate) async fn credenciais_aws() -> Result<CredenciaisAws, String> {
     Ok(segredo.data.data)
 }
 
-/// Envia o instalador assinado da versão ao S3 e devolve URL e assinatura para o backend.
+/// Envia o instalador assinado e o ShmupX Portable da versão ao S3 e devolve URLs, assinatura e
+/// SHA-256 para o backend.
 #[tauri::command]
 pub async fn publicar_instalador(versao: String) -> Result<InstaladorPublicado, String> {
     let (exe, sig) = arquivos_do_build(&versao)?;
@@ -118,33 +148,57 @@ pub async fn publicar_instalador(versao: String) -> Result<InstaladorPublicado, 
         .len();
     let assinatura = std::fs::read_to_string(&sig)
         .map_err(|_| format!("assinatura {} não encontrada: gere o build com a chave do updater", sig.display()))?;
+    let (portatil, sha) = portatil_do_build(&versao)?;
+    let tamanho_portatil = std::fs::metadata(&portatil)
+        .map_err(|_| format!("ShmupX Portable da versão {versao} não encontrado: gere o instalador de novo ({})", portatil.display()))?
+        .len();
+    let sha256 = std::fs::read_to_string(&sha)
+        .map_err(|_| format!("SHA-256 {} não encontrado: gere o instalador de novo", sha.display()))?
+        .trim()
+        .to_ascii_lowercase();
+    if sha256.len() != 64 || !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("SHA-256 inválido em {}", sha.display()));
+    }
 
-    let nome = format!("ShmupX-Setup-{versao}.exe");
     let credenciais = credenciais_aws().await?;
+    let nome = format!("ShmupX-Setup-{versao}.exe");
+    enviar_ao_s3(&exe, &nome, &credenciais).await?;
+    let nome_portatil = format!("ShmupX-Portable-{versao}.exe");
+    enviar_ao_s3(&portatil, &nome_portatil, &credenciais).await?;
+    Ok(InstaladorPublicado {
+        url: format!("{URL_DOWNLOADS}/{nome}"),
+        signature: assinatura.trim().to_string(),
+        size: i64::try_from(tamanho).unwrap_or(i64::MAX),
+        portable: PortatilPublicado {
+            url: format!("{URL_DOWNLOADS}/{nome_portatil}"),
+            sha256,
+            size: i64::try_from(tamanho_portatil).unwrap_or(i64::MAX),
+        },
+    })
+}
+
+/// Um arquivo em `downloads/<nome>` no bucket do site.
+async fn enviar_ao_s3(arquivo: &Path, nome: &str, credenciais: &CredenciaisAws) -> Result<(), String> {
     let saida = Command::new("aws")
         .arg("s3")
         .arg("cp")
-        .arg(&exe)
+        .arg(arquivo)
         .arg(format!("s3://{BUCKET}/downloads/{nome}"))
         .args(["--content-type", "application/octet-stream"])
         .args(["--content-disposition", &format!("attachment; filename=\"{nome}\"")])
         // Nome com a versão: o arquivo nunca muda, então pode ficar em cache.
         .args(["--cache-control", "public,max-age=31536000,immutable"])
         .arg("--only-show-errors")
-        .env("AWS_ACCESS_KEY_ID", credenciais.AWS_ACCESS_KEY_ID)
-        .env("AWS_SECRET_ACCESS_KEY", credenciais.AWS_SECRET_ACCESS_KEY)
+        .env("AWS_ACCESS_KEY_ID", &credenciais.AWS_ACCESS_KEY_ID)
+        .env("AWS_SECRET_ACCESS_KEY", &credenciais.AWS_SECRET_ACCESS_KEY)
         .env("AWS_DEFAULT_REGION", "us-east-1")
         .output()
         .await
         .map_err(|e| format!("AWS CLI (aws) indisponível: {e}"))?;
     if !saida.status.success() {
-        return Err(format!("falha ao enviar ao S3: {}", String::from_utf8_lossy(&saida.stderr).trim()));
+        return Err(format!("falha ao enviar {nome} ao S3: {}", String::from_utf8_lossy(&saida.stderr).trim()));
     }
-    Ok(InstaladorPublicado {
-        url: format!("{URL_DOWNLOADS}/{nome}"),
-        signature: assinatura.trim().to_string(),
-        size: i64::try_from(tamanho).unwrap_or(i64::MAX),
-    })
+    Ok(())
 }
 
 /// Endereço do backend de produção, embutido no Client quando o OpenBao não traz outro.
@@ -239,6 +293,11 @@ pub async fn gerar_instalador(app: AppHandle, versao: String) -> Result<(), Stri
         let resultado = resultado.and_then(|()| match arquivos_do_build(&versao) {
             Ok((exe, sig)) if exe.is_file() && sig.is_file() => Ok(()),
             Ok(_) => Err("o build terminou, mas o instalador assinado não apareceu na pasta do bundle".into()),
+            Err(e) => Err(e),
+        });
+        let resultado = resultado.and_then(|()| match portatil_do_build(&versao) {
+            Ok((exe, sha)) if exe.is_file() && sha.is_file() => Ok(()),
+            Ok(_) => Err("o build terminou, mas o ShmupX Portable não apareceu em target/release/bundle/portable".into()),
             Err(e) => Err(e),
         });
         match resultado {

@@ -1,0 +1,32 @@
+[package]
+name = "shmupx-portable"
+version = "0.1.0"
+description = "ShmupX Portable: um único .exe com o ShmupX Client dentro, sem instalação"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "shmupx-portable"
+path = "src/main.rs"
+
+[[bin]]
+name = "shmupx-portable-pack"
+path = "src/bin/pack.rs"
+
+[dependencies]
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+tauri-winres = "0.3"

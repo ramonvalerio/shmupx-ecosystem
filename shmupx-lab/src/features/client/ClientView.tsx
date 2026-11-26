@@ -17,6 +17,7 @@ const PERIODS: { id: Period; label: string; days: number; bucket: "day" | "week"
 
 const PLATFORM_LABEL: Record<DownloadPlatform, string> = {
   windows: "Windows",
+  portable: "Windows · Portátil",
   appimage: "Linux · AppImage",
   deb: "Linux · .deb",
   android: "Android · Lite",

@@ -12,6 +12,7 @@ pub mod chat;
 pub mod input;
 pub mod live;
 pub mod net;
+pub mod portatil;
 pub mod session;
 pub mod steam;
 
@@ -35,6 +36,9 @@ pub fn run() {
         .manage(steam::controles::CapturaState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
+            portatil::portatil_ativo,
+            portatil::portatil_baixar,
+            portatil::portatil_instalar,
             capture::commands::iniciar_corrida_safe,
             capture::commands::finalizar_corrida_manual,
             capture::commands::runs_pendentes,
@@ -106,6 +110,7 @@ pub fn run() {
 
             capture::ffmpeg::usar_empacotado(app.path().resource_dir().ok());
             input::spawn_listener(app.handle().clone());
+            portatil::limpar_atualizacoes();
 
             Ok(())
         })

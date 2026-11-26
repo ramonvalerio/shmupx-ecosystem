@@ -121,6 +121,9 @@ pub struct Versao {
     /// Pacotes Linux por formato (`appimage`, `deb`), cada um com a assinatura do updater.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub linux_installers: BTreeMap<String, Instalador>,
+    /// ShmupX Portable do Windows (um `.exe` só, sem instalação).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub portable: Option<Portatil>,
     /// Liberada, o Client baixa e instala sozinho (exige `installer`).
     pub auto_update: bool,
     /// Versão sem instalador: só notas, não pede atualização do Client.
@@ -157,6 +160,17 @@ pub struct Instalador {
     pub url: String,
     /// Conteúdo do `.sig` gerado pelo `tauri build` com a chave do updater.
     pub signature: String,
+    #[serde(default)]
+    pub size: Option<i64>,
+}
+
+/// ShmupX Portable da versão, já publicado em `www.shmupx.com/downloads/`. Sem assinatura do
+/// updater: o Client portátil confere o `sha256` antes de abrir a versão nova.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Portatil {
+    pub url: String,
+    pub sha256: String,
     #[serde(default)]
     pub size: Option<i64>,
 }
@@ -246,6 +260,11 @@ fn ler_instalador(campos: &Campos) -> Option<Instalador> {
     instalador_de(&ler_mapa(campos, "installer")?)
 }
 
+fn ler_portatil(campos: &Campos) -> Option<Portatil> {
+    let mapa = ler_mapa(campos, "portable")?;
+    Some(Portatil { url: ler_texto(&mapa, "url")?, sha256: ler_texto(&mapa, "sha256")?, size: ler_inteiro(&mapa, "size") })
+}
+
 /// `linuxInstallers` (`{formato: {url, signature, size}}`).
 fn ler_instaladores_linux(campos: &Campos) -> BTreeMap<String, Instalador> {
     ler_mapa(campos, "linuxInstallers")
@@ -302,6 +321,7 @@ fn versao_de(version: String, campos: &Campos, agora: DateTime<Utc>) -> Versao {
         auto: ler_auto(campos),
         installer: ler_instalador(campos),
         linux_installers: ler_instaladores_linux(campos),
+        portable: ler_portatil(campos),
         auto_update: ler_booleano(campos, "autoUpdate").unwrap_or(false),
         notes_only: ler_booleano(campos, "notesOnly").unwrap_or(false),
         version,
@@ -489,14 +509,19 @@ async fn gravar_itens_auto(fs: &Firestore, versao: &str, itens: &[ItemAuto]) -> 
 /// Onde os instaladores ficam publicados (mesmo bucket e CloudFront do site).
 const PREFIXO_DOWNLOADS: &str = "https://www.shmupx.com/downloads/";
 
+/// Arquivo publicado em `www.shmupx.com/downloads/`, com nome simples (sem subpastas nem `?`).
+fn url_de_download_valida(url: &str) -> bool {
+    let nome = url.strip_prefix(PREFIXO_DOWNLOADS).unwrap_or_default();
+    !nome.is_empty() && nome.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+}
+
 /// Liga o instalador já publicado ao rascunho.
 pub async fn definir_instalador(fs: &Firestore, versao: &str, instalador: Instalador) -> Result<Versao, AppError> {
     let atual = obter(fs, versao).await?;
     if atual.status != "draft" {
         return Err(AppError::conflict("só rascunhos podem receber instalador"));
     }
-    let nome = instalador.url.strip_prefix(PREFIXO_DOWNLOADS).unwrap_or_default();
-    if nome.is_empty() || !nome.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) {
+    if !url_de_download_valida(&instalador.url) {
         return Err(AppError::bad_request(format!("o instalador deve estar em {PREFIXO_DOWNLOADS}")));
     }
     let assinatura = instalador.signature.trim();
@@ -513,6 +538,32 @@ pub async fn definir_instalador(fs: &Firestore, versao: &str, instalador: Instal
     campos.insert("installer".into(), mapa(interno));
     campos.insert("updatedAt".into(), data(Utc::now()));
     fs.gravar(&format!("releases/{versao}"), campos, &["installer", "updatedAt"]).await?;
+    obter(fs, versao).await
+}
+
+/// Liga o ShmupX Portable já publicado ao rascunho (enviado pelo Lab junto com o instalador).
+pub async fn definir_portatil(fs: &Firestore, versao: &str, portatil: Portatil) -> Result<Versao, AppError> {
+    let atual = obter(fs, versao).await?;
+    if atual.status != "draft" {
+        return Err(AppError::conflict("só rascunhos podem receber a versão portátil"));
+    }
+    if !url_de_download_valida(&portatil.url) {
+        return Err(AppError::bad_request(format!("a versão portátil deve estar em {PREFIXO_DOWNLOADS}")));
+    }
+    let sha256 = portatil.sha256.trim().to_ascii_lowercase();
+    if sha256.len() != 64 || !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(AppError::bad_request("SHA-256 da versão portátil inválido"));
+    }
+    let mut interno = Campos::new();
+    interno.insert("url".into(), texto(&portatil.url));
+    interno.insert("sha256".into(), texto(&sha256));
+    if let Some(tamanho) = portatil.size {
+        interno.insert("size".into(), inteiro(tamanho));
+    }
+    let mut campos = Campos::new();
+    campos.insert("portable".into(), mapa(interno));
+    campos.insert("updatedAt".into(), data(Utc::now()));
+    fs.gravar(&format!("releases/{versao}"), campos, &["portable", "updatedAt"]).await?;
     obter(fs, versao).await
 }
 
@@ -585,6 +636,9 @@ pub struct Download {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<i64>,
+    /// Só na versão portátil: o Client portátil confere o arquivo antes de abrir.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 /// O que a página de Download do site oferece: por sistema, o instalador da versão mais nova já
@@ -594,6 +648,8 @@ pub struct Downloads {
     pub windows: Option<Download>,
     pub appimage: Option<Download>,
     pub deb: Option<Download>,
+    /// ShmupX Portable (Windows): a versão mais nova liberada que tem o `.exe` portátil.
+    pub portable: Option<Download>,
 }
 
 pub fn downloads(versoes: &[Versao]) -> Downloads {
@@ -603,12 +659,19 @@ pub fn downloads(versoes: &[Versao]) -> Downloads {
             .filter(|v| v.status == "released")
             .filter_map(|v| Some((ler_versao(&v.version)?, v, plataforma.instalador(v)?)))
             .max_by_key(|(n, _, _)| *n)
-            .map(|(_, v, i)| Download { version: v.version.clone(), url: i.url.clone(), size: i.size })
+            .map(|(_, v, i)| Download { version: v.version.clone(), url: i.url.clone(), size: i.size, sha256: None })
     };
+    let portable = versoes
+        .iter()
+        .filter(|v| v.status == "released")
+        .filter_map(|v| Some((ler_versao(&v.version)?, v, v.portable.as_ref()?)))
+        .max_by_key(|(n, _, _)| *n)
+        .map(|(_, v, p)| Download { version: v.version.clone(), url: p.url.clone(), size: p.size, sha256: Some(p.sha256.clone()) });
     Downloads {
         windows: mais_nova(Plataforma::Windows),
         appimage: mais_nova(Plataforma::Linux("appimage".into())),
         deb: mais_nova(Plataforma::Linux("deb".into())),
+        portable,
     }
 }
 
@@ -838,7 +901,28 @@ mod tests {
         assert_eq!(d.windows.unwrap().version, "0.2.0", "a agendada ainda não aparece");
         assert_eq!(d.appimage.unwrap().url, "a.AppImage");
         assert_eq!(d.deb.unwrap().version, "0.1.5");
-        assert_eq!(downloads(&[]), Downloads { windows: None, appimage: None, deb: None });
+        assert_eq!(downloads(&[]), Downloads { windows: None, appimage: None, deb: None, portable: None });
+    }
+
+    #[test]
+    fn portatil_do_site_e_o_da_mais_nova_liberada_que_tem_portatil() {
+        let portatil = |url: &str| Portatil { url: url.into(), sha256: "ab".repeat(32), size: Some(20) };
+        let agendada = Versao { portable: Some(portatil("p3.exe")), ..versao("0.3.0", "scheduled", false) };
+        let sem_portatil = Versao { installer: Some(instalador()), ..versao("0.2.0", "released", false) };
+        let com_portatil = Versao { installer: Some(instalador()), portable: Some(portatil("p1.exe")), ..versao("0.1.5", "released", false) };
+        let d = downloads(&[agendada, sem_portatil, com_portatil]);
+        assert_eq!(d.windows.unwrap().version, "0.2.0");
+        let p = d.portable.unwrap();
+        assert_eq!((p.version.as_str(), p.url.as_str(), p.size), ("0.1.5", "p1.exe", Some(20)));
+        assert_eq!(p.sha256, Some("ab".repeat(32)));
+    }
+
+    #[test]
+    fn so_downloads_do_site_sao_aceitos() {
+        assert!(url_de_download_valida("https://www.shmupx.com/downloads/ShmupX-Portable-0.1.18.exe"));
+        assert!(!url_de_download_valida("https://www.shmupx.com/downloads/"));
+        assert!(!url_de_download_valida("https://www.shmupx.com/downloads/a/b.exe"));
+        assert!(!url_de_download_valida("https://evil.example/downloads/x.exe"));
     }
 
     #[test]

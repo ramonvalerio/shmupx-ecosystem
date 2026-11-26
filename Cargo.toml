@@ -4,6 +4,7 @@ cargo-features = ["profile-rustflags"]
 resolver = "3"
 members = [
     "shmupx-client/src-tauri",
+    "shmupx-client/portable",
     "shmupx-lab/src-tauri",
     "shmupx-mobile/src-tauri",
     "shmupx-mister-link",

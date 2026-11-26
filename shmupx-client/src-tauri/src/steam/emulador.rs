@@ -177,11 +177,12 @@ fn pastas_para_ler(inst: &Instalacao, padrao: Option<&Path>) -> Vec<PathBuf> {
 }
 
 /// Pasta padrão dos ROMs: `roms` ao lado do Client instalado (o instalador cria, com escrita liberada
-/// aos usuários, para o jogador copiar os ROMs). Se ela não existir nem puder ser criada (Linux, que
+/// aos usuários, para o jogador copiar os ROMs), ou na raiz do ShmupX Portable (fora da pasta da
+/// versão, para não sumir na atualização). Se ela não existir nem puder ser criada (Linux, que
 /// instala em pasta do sistema), e em desenvolvimento, `roms` na pasta de dados do app.
 pub fn pasta_padrao_de_roms(app: &AppHandle) -> Option<PathBuf> {
     if !cfg!(debug_assertions) {
-        if let Some(instalacao) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) {
+        if let Some(instalacao) = crate::portatil::pasta_do_jogador() {
             let pasta = instalacao.join("roms");
             if pasta.is_dir() || std::fs::create_dir_all(&pasta).is_ok() {
                 return Some(pasta);

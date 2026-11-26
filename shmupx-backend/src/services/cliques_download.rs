@@ -19,7 +19,7 @@ use crate::error::AppError;
 use crate::firestore::valor::{data, ler_data, ler_inteiro, ler_lista_de_textos, ler_mapa, ler_texto, texto};
 use crate::firestore::{Campos, Firestore};
 
-pub const PLATAFORMAS: [&str; 4] = ["windows", "appimage", "deb", "android"];
+pub const PLATAFORMAS: [&str; 5] = ["windows", "portable", "appimage", "deb", "android"];
 const CLIQUES_POR_HORA: u32 = 20;
 
 #[derive(Debug, Deserialize)]
