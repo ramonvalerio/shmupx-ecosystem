@@ -15,6 +15,13 @@ export interface MyPublicProfile {
 export const DEFAULT_AVATAR = "/img/avatar-default.png";
 const EVENT = "shmupx:my-public-profile";
 
+/** O último perfil público lido (nick e avatar), para quem não é tela (o cartão do Caravan). */
+let latest: MyPublicProfile | null = null;
+if (typeof window !== "undefined") window.addEventListener(EVENT, (event) => { latest = (event as CustomEvent<MyPublicProfile>).detail; });
+export function readMyPublicProfile(): MyPublicProfile | null {
+  return latest;
+}
+
 /** Meu perfil público; `refresh` relê do backend e avisa todas as telas. */
 export function useMyPublicProfile(displayName: string) {
   const [profile, setProfile] = useState<MyPublicProfile | null>(null);

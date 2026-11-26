@@ -126,9 +126,20 @@ fn arredondar(valor: f64) -> f64 {
     (valor * 100.0).round() / 100.0
 }
 
-/// Classificação de um jogo: o melhor placar de cada jogador. Empate no placar: quem chegou
-/// primeiro fica na frente, mas a posição é a mesma (1, 2, 2, 4).
+/// Qual partida fica na frente: no Caravan, quem perdeu menos vidas, com o placar desempatando
+/// (partida sem vidas lidas fica depois das que têm); nos outros modos, o maior placar.
+/// `Ordering::Less` = `a` na frente de `b`.
+pub fn ordem_no_ranking(a: &Partida, b: &Partida, caravana: bool) -> std::cmp::Ordering {
+    let vidas = |p: &Partida| p.vidas_perdidas.unwrap_or(i32::MAX);
+    let principal = if caravana { vidas(a).cmp(&vidas(b)) } else { std::cmp::Ordering::Equal };
+    principal.then(b.score.cmp(&a.score))
+}
+
+/// Classificação de um jogo: o melhor de cada jogador (`ordem_no_ranking`: no Caravan, menos vidas
+/// perdidas e depois o placar). Empate: quem chegou primeiro fica na frente, mas a posição é a mesma
+/// (1, 2, 2, 4).
 pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, versao: Option<&str>) -> Vec<EntradaJogo> {
+    let caravana = modo == Some("caravan");
     let stats = estatisticas(partidas);
     let mut melhores: HashMap<&str, (&Partida, usize)> = HashMap::new();
     for p in partidas.iter().filter(|p| {
@@ -137,19 +148,19 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
         let atual = melhores.entry(p.jogador.as_str()).or_insert((p, 0));
         atual.1 += 1;
         let melhor = atual.0;
-        if p.score > melhor.score || (p.score == melhor.score && p.enviada_em < melhor.enviada_em) {
+        if ordem_no_ranking(p, melhor, caravana).then(p.enviada_em.cmp(&melhor.enviada_em)).is_lt() {
             atual.0 = p;
         }
     }
     let mut lista: Vec<(&Partida, usize)> = melhores.into_values().collect();
     lista.sort_by(|(a, _), (b, _)| {
-        b.score.cmp(&a.score).then(a.enviada_em.cmp(&b.enviada_em)).then(a.jogador.cmp(&b.jogador))
+        ordem_no_ranking(a, b, caravana).then(a.enviada_em.cmp(&b.enviada_em)).then(a.jogador.cmp(&b.jogador))
     });
 
     let mut entradas: Vec<EntradaJogo> = Vec::with_capacity(lista.len());
     for (indice, (p, runs)) in lista.into_iter().enumerate() {
         let posicao = match entradas.last() {
-            Some(anterior) if anterior.score == p.score => anterior.posicao,
+            Some(anterior) if anterior.score == p.score && (!caravana || anterior.vidas_perdidas == p.vidas_perdidas) => anterior.posicao,
             _ => indice + 1,
         };
         entradas.push(EntradaJogo {
@@ -243,6 +254,21 @@ mod tests {
     fn sem_partidas_os_rankings_ficam_vazios() {
         assert!(ranking_do_jogo(&[], "earthion", None, None).is_empty());
         assert!(ranking_global(&[]).is_empty());
+    }
+
+    #[test]
+    fn caravan_ordena_por_menos_vidas_perdidas_e_depois_pelo_placar() {
+        let caravan = |jogador: &str, score: i64, vidas: Option<i32>| Partida {
+            modo: Some("caravan-classic".into()),
+            vidas_perdidas: vidas,
+            ..partida(jogador, "j", score)
+        };
+        let partidas = [caravan("ana", 900, Some(3)), caravan("bia", 500, Some(0)), caravan("caio", 700, Some(0)), caravan("dani", 999, None)];
+        let ordem: Vec<String> = ranking_do_jogo(&partidas, "j", Some("caravan"), None).into_iter().map(|e| e.jogador_id).collect();
+        assert_eq!(ordem, vec!["caio", "bia", "ana", "dani"]);
+        // No Hi-Score continua o placar.
+        let hs: Vec<String> = ranking_do_jogo(&partidas.map(|p| Partida { modo: None, ..p }), "j", Some("highscore"), None).into_iter().map(|e| e.jogador_id).collect();
+        assert_eq!(hs, vec!["dani", "ana", "caio", "bia"]);
     }
 
     #[test]

@@ -5,6 +5,7 @@ import { liveActive, useLive, useYouTube, type LiveLaunch } from "../data/useLiv
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { caravanSecondsOf } from "../data/gameModes";
+import { caravanLaunchFields } from "../data/playerCard";
 import { readEmulatorControls } from "../data/emulatorControls";
 import { isSupported } from "../data/validation";
 import CreditsBadge from "./CreditsBadge";
@@ -63,7 +64,7 @@ export function useRankedLive(room: GameRoom) {
     const launch: LiveLaunch = platform === "steam"
       ? { platform: "steam", steamAppId: room.steamAppId }
       : { platform: "emulator", roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
-        caravanSegundos: mode === "caravan" ? caravanSecondsOf(room) : null };
+        ...(await caravanLaunchFields(caravanSecondsOf(room), mode === "caravan")) };
     try {
       await live.start(room.id, `${room.title} · Ranked · ShmupX`, prefs.public, launch);
     } catch (error) {

@@ -272,9 +272,9 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
     return record.platform ? t(PLATFORM_LABEL[record.platform]) : undefined;
   }
 
-  function continuesCell(record: RankRecord) {
-    if (record.continues === undefined) return dash;
-    return record.continues === 0 ? <>0<em>· 1CC</em></> : <>{record.continues}</>;
+  /** Vidas perdidas na run (no Caravan, quem perdeu menos fica na frente). */
+  function livesLostCell(record: RankRecord) {
+    return typeof record.livesLost === "number" ? <>{record.livesLost}</> : dash;
   }
 
   /** Ícone do vídeo na tabela: LIVE (vermelho), VOD (botão) ou apagado quando a run não tem vídeo. */
@@ -344,8 +344,6 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
                 <span className="rk-handle">{[real ?? (handle ? `@${handle}` : undefined), leader.you ? t("Você") : undefined].filter(Boolean).join(" · ") || "\u00a0"}</span>
                 <div className="rk-tags">
                   {leader.mode && <span className="rk-tag is-mode">{t(MODE_LABEL[leader.mode])}</span>}
-                  {leader.continues !== undefined && <span className="rk-tag">{leader.continues === 0 ? t("0 continues · 1CC") : t("{count} continues", { count: leader.continues })}</span>}
-                  {leader.verified === false && <span className="rk-tag is-review">* {t("Em revisão")}</span>}
                 </div>
               </div>
               <div className="rk-leader-score">
@@ -371,7 +369,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
             <span className="rk-pos">{t("Pos.")}</span><span>{t("Jogador")}</span>
             <span className="rk-r">{online_ ? modeLabel : t("Placar")}</span>
             <span className="rk-c">{online_ ? t("Modo") : t("Status")}</span>
-            <span className="rk-c">{t("Continues")}</span>
+            <span className="rk-c">{t("Vidas perdidas")}</span>
             <span className="rk-c">{online_ ? t("Plataforma") : t("Duração")}</span>
             <span>{dateLabel}</span>
             <span className="rk-c">{t("Vídeo")}</span>
@@ -424,7 +422,7 @@ export default function RoomRankingView({ room, runs, uid, playerName }: RoomRan
                       ? record.mode ? <span className="rk-chip">{t(MODE_LABEL[record.mode])}</span> : dash
                       : <span className={`run-badge run-${status.tone}`}>{status.label}</span>}
                   </span>
-                  <span className="rk-c rk-cc">{continuesCell(record)}</span>
+                  <span className="rk-c rk-cc">{livesLostCell(record)}</span>
                   <span className="rk-c">
                     {online_
                       ? platformText(record) ?? <span className="rk-none" title={t("Plataforma ainda não informada pelo servidor")}>—</span>

@@ -3,7 +3,8 @@
 //! ninguém, e as leituras do ranking não crescem com o número de partidas jogadas.
 //!
 //! Depois do envio de uma run, as gameplays com resultado do jogador naquele jogo são comparadas:
-//! fica só a de maior placar de cada tabela, e as outras saem do banco (o lançamento da ficha na
+//! fica só o recorde de cada tabela (maior placar; no Caravan, menos vidas perdidas e depois o
+//! placar), e as outras saem do banco (o lançamento da ficha na
 //! carteira continua). A comparação é sempre da run atual com o que está no banco: mexer no
 //! ranking local não muda nada aqui.
 //!
@@ -35,6 +36,8 @@ struct Registro {
     evento: Option<String>,
     zerou: bool,
     continues: i64,
+    /// Vidas perdidas (`result.livesLost`): no Caravan, quem perdeu menos fica na frente.
+    vidas_perdidas: Option<i64>,
     enviada_em: Option<DateTime<Utc>>,
 }
 
@@ -52,14 +55,21 @@ fn tabelas(r: &Registro) -> Vec<String> {
     lista
 }
 
-/// Ids que ficam: o recorde de cada tabela (maior placar; no empate, o mais antigo).
+/// A run `a` é melhor que `b` na tabela: no Caravan, menos vidas perdidas e depois o maior placar
+/// (sem vidas lidas, depois das que têm); nos outros modos, o maior placar. Empate: a mais antiga.
+fn melhor_que(a: &Registro, b: &Registro, tabela: &str) -> bool {
+    let vidas = |r: &Registro| r.vidas_perdidas.unwrap_or(i64::MAX);
+    let principal = if tabela.starts_with("caravan") { vidas(a).cmp(&vidas(b)) } else { std::cmp::Ordering::Equal };
+    principal.then(b.score.cmp(&a.score)).then((a.enviada_em, &a.id).cmp(&(b.enviada_em, &b.id))).is_lt()
+}
+
+/// Ids que ficam: o recorde de cada tabela.
 fn recordes(registros: &[Registro]) -> HashSet<String> {
     let mut melhor: HashMap<String, &Registro> = HashMap::new();
     for r in registros {
         for tabela in tabelas(r) {
-            let atual = melhor.entry(tabela).or_insert(r);
-            let antes = |a: &Registro, b: &Registro| (a.enviada_em, &a.id) < (b.enviada_em, &b.id);
-            if r.score > atual.score || (r.score == atual.score && antes(r, atual)) {
+            let atual = melhor.entry(tabela.clone()).or_insert(r);
+            if melhor_que(r, atual, &tabela) {
                 *atual = r;
             }
         }
@@ -80,6 +90,7 @@ fn registro(id: String, campos: &Campos) -> Option<Registro> {
         evento: ler_texto(campos, "eventId"),
         zerou: ler_booleano(&resultado, "cleared") == Some(true),
         continues: ler_inteiro(&resultado, "continuesUsed").unwrap_or(0),
+        vidas_perdidas: ler_inteiro(&resultado, "livesLost"),
         enviada_em: ler_data(&resultado, "submittedAt"),
     })
 }
@@ -119,6 +130,7 @@ mod tests {
             evento: None,
             zerou,
             continues: 0,
+            vidas_perdidas: None,
             enviada_em: Some(Utc.with_ymd_and_hms(2026, 11, 26, 10, minuto, 0).unwrap()),
         }
     }
@@ -143,6 +155,18 @@ mod tests {
         outra_versao.versao = Some("pc-1.0".into());
         let ficam = recordes(&[r("hs", 900, None, false, 3), r("caravan", 10, Some("caravan-sprint"), false, 4), evento, outra_versao]);
         assert_eq!(ficam.len(), 4);
+    }
+
+    #[test]
+    fn no_caravan_fica_quem_perdeu_menos_vidas() {
+        let vidas = |id: &str, score: i64, perdidas: Option<i64>, minuto: u32| {
+            Registro { vidas_perdidas: perdidas, ..r(id, score, Some("caravan-classic"), false, minuto) }
+        };
+        // Menos vidas vence mesmo com placar menor; com as mesmas vidas, o placar desempata.
+        let ficam = recordes(&[vidas("mais-pontos", 900, Some(2), 1), vidas("menos-vidas", 500, Some(0), 2), vidas("sem-vidas", 999, None, 3)]);
+        assert_eq!(ficam, HashSet::from(["menos-vidas".to_string()]));
+        let ficam = recordes(&[vidas("a", 400, Some(1), 1), vidas("b", 700, Some(1), 2)]);
+        assert_eq!(ficam, HashSet::from(["b".to_string()]));
     }
 
     #[test]

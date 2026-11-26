@@ -84,6 +84,8 @@ pub enum Abertura {
         /// Live Ranked em Caravan: o tempo do Caravan do jogo (contador e fim no motor).
         #[serde(default, rename = "caravanSegundos")]
         caravan_segundos: Option<u32>,
+        #[serde(default, rename = "cartaoJogador")]
+        cartao_jogador: Option<bool>,
     },
 }
 
@@ -387,8 +389,8 @@ fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
 async fn abrir_jogo(app: &AppHandle, jogo_id: &str, abertura: &Abertura) -> Result<(), String> {
     let aberto = match abertura.clone() {
         Abertura::Steam { steam_app_id } => crate::steam::commands::inicializar_jogo_steam(app.clone(), steam_app_id, Some(false)).await,
-        Abertura::Emulator { roms, pasta, motor_video, motor_controles, caravan_segundos } => {
-            crate::steam::commands::inicializar_jogo_emulador(app.clone(), jogo_id.to_string(), roms, pasta, Some(false), Some(false), motor_video, motor_controles, caravan_segundos).await
+        Abertura::Emulator { roms, pasta, motor_video, motor_controles, caravan_segundos, cartao_jogador } => {
+            crate::steam::commands::inicializar_jogo_emulador(app.clone(), jogo_id.to_string(), roms, pasta, Some(false), Some(false), motor_video, motor_controles, caravan_segundos, cartao_jogador).await
         }
     };
     aberto.map_err(|e| {

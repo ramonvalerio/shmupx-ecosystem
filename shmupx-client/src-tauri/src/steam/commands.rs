@@ -2,7 +2,7 @@ use std::io;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::detector;
 
@@ -135,7 +135,15 @@ pub async fn inicializar_jogo_emulador(
     motor_controles: Option<Vec<super::controles::ControleMapeado>>,
     // Partida Caravan: o tempo do Caravan do jogo (Lab), para o contador e o fim no motor.
     caravan_segundos: Option<u32>,
+    // Caravan: a interface salvou o cartão do jogador (salvar_cartao_jogador) para a tela final.
+    cartao_jogador: Option<bool>,
 ) -> Result<(), String> {
+    let caravan_segundos = caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino.unwrap_or(false));
+    let cartao_jogador = if caravan_segundos.is_some() && cartao_jogador.unwrap_or(false) {
+        caminho_do_cartao(&app).filter(|c| c.is_file())
+    } else {
+        None
+    };
     let janela = janela.unwrap_or(false);
     let escolhida = super::emulador::pasta_escolhida(&app);
     let padrao = super::emulador::pasta_padrao_de_roms(&app);
@@ -146,7 +154,8 @@ pub async fn inicializar_jogo_emulador(
             ranking: !treino,
             video: motor_video.unwrap_or_default(),
             controles: motor_controles.unwrap_or_default(),
-            caravan_segundos: caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino),
+            caravan_segundos,
+            cartao_jogador,
             ..m
         });
     // Ranked de jogo validado só pela memória (sem script de vídeo): só com o ROM mapeado (outra
@@ -200,6 +209,56 @@ pub async fn emulador_biblioteca(app: AppHandle, pasta: Option<String>) -> super
 #[tauri::command]
 pub fn emulador_monitores(app: AppHandle) -> Vec<super::emulador::MonitorDoPc> {
     super::emulador::monitores(&app)
+}
+
+/// Cartão do jogador (avatar e nick, PNG gerado pela interface) para a tela final do Caravan.
+pub(crate) fn caminho_do_cartao(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_cache_dir().ok().map(|pasta| pasta.join("caravana-jogador.png"))
+}
+
+/// Guarda o cartão do jogador do Caravan (PNG em base64, até 4 MB), que o motor mostra no fim do tempo.
+#[tauri::command]
+pub fn salvar_cartao_jogador(app: AppHandle, png_base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(png_base64.as_bytes()).map_err(|e| format!("cartão inválido: {e}"))?;
+    if bytes.len() > 4 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("cartão inválido: não é um PNG".into());
+    }
+    let caminho = caminho_do_cartao(&app).ok_or("sem pasta de cache do app")?;
+    if let Some(pasta) = caminho.parent() {
+        std::fs::create_dir_all(pasta).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&caminho, bytes).map_err(|e| e.to_string())
+}
+
+/// Imagem de outro site (o avatar do Google, por exemplo) como `data:` URL, para a interface poder
+/// desenhá-la num canvas e exportar o cartão. Só https e só imagens, até 3 MB.
+#[tauri::command]
+pub async fn imagem_como_data_url(url: String) -> Result<String, String> {
+    use base64::Engine;
+    if !url.starts_with("https://") {
+        return Err("só imagens https".into());
+    }
+    let resposta = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("falha ao baixar a imagem: {e}"))?;
+    if !resposta.status().is_success() {
+        return Err(format!("imagem indisponível ({})", resposta.status()));
+    }
+    let tipo = resposta.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    if !tipo.starts_with("image/") {
+        return Err("o endereço não é uma imagem".into());
+    }
+    let bytes = resposta.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 3 * 1024 * 1024 {
+        return Err("imagem grande demais".into());
+    }
+    Ok(format!("data:{tipo};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)))
 }
 
 /// Mostra o número do monitor no meio dele por 3 segundos, ao escolher o monitor dos jogos.
