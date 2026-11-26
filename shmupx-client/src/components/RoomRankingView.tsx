@@ -134,7 +134,8 @@ const NO_EVENTS = { status: "ready" as const, data: { jogo_id: "", titulo: "", m
 export default function RoomRankingView({ room, runs, uid, playerName, events = false }: RoomRankingViewProps) {
   const { t, locale } = useI18n();
   const [scope, setScope] = useState<Scope>("online");
-  const [mode, setMode] = useState<GameMode>("highscore");
+  // A tabela padrão é a do Caravan Mode.
+  const [mode, setMode] = useState<GameMode>("caravan");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
