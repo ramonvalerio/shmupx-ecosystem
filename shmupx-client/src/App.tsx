@@ -22,6 +22,7 @@ import { useRemoteLaunch } from "./data/remoteLaunch";
 import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
 import { runLibrarySync } from "./data/librarySync";
+import { publishPlacement } from "./data/playerCard";
 
 interface GameLaunchedPayload {
   app_id: number;
@@ -185,6 +186,8 @@ export default function App() {
 
     const unlistenAnalysis = listen<RunAnalysisEvent>("run://analysis", (event) => {
       setRuns((current) => applyRunAnalysis(current, event.payload, Date.now()));
+      // Run aceita com posição no ranking: a tela final do motor (janela ainda aberta) a mostra.
+      if (event.payload.status === "submitted" && typeof event.payload.position === "number") void publishPlacement(event.payload.position);
     });
 
     // Live Ranked no top 3: o envio da live ao canal oficial da ShmupX.

@@ -60,6 +60,10 @@ pub struct Telemetria {
     pub vidas_no_inicio: Option<i64>,
     pub vidas: Option<i64>,
     pub nave: Option<String>,
+    /// Rota percorrida: uma letra maiúscula por zona, em sequência (Darius Gaiden: `ABDHLQV`).
+    pub rota: String,
+    /// Bombas usadas na run (o motor conta as bombas que o jogador gastou).
+    pub bombas_usadas: Option<i64>,
     pub fim: Option<Fim>,
     /// O jogador zerou o jogo (evento `cleared` do motor, pelo `cleared` do mapa do jogo).
     pub zerou: bool,
@@ -121,6 +125,15 @@ impl Telemetria {
                     self.vidas = Some(v);
                 }
                 (Some("ship"), _) => self.nave = evento.label.or(evento.value.map(|v| v.to_string())),
+                // A letra da zona (rótulo do campo `route`): entra na rota quando a zona muda.
+                (Some("route"), _) => {
+                    if let Some(letra) = evento.label.as_deref().and_then(|l| l.chars().next()).filter(char::is_ascii_uppercase) {
+                        if !self.rota.ends_with(letra) {
+                            self.rota.push(letra);
+                        }
+                    }
+                }
+                (Some("bombs_used"), Some(v)) => self.bombas_usadas = Some(v),
                 _ => {}
             },
             "cleared" if self.run_comecou => self.zerou = true,
@@ -141,6 +154,9 @@ pub struct ResultadoMemoria {
     pub vidas_perdidas: i32,
     pub game_over: bool,
     pub nave: Option<String>,
+    /// Rota percorrida (letras maiúsculas seguidas) e bombas usadas, nos jogos que o motor lê.
+    pub rota: Option<String>,
+    pub bombas_usadas: Option<i32>,
     /// Zerou o jogo: com 0 continues (o Ranked não tem continue), a run entra também na tabela 1CC.
     pub zerou: bool,
 }
@@ -175,7 +191,12 @@ pub fn resultado(t: &Telemetria) -> Result<Option<ResultadoMemoria>, String> {
         (Some(inicio), Some(fim)) => (inicio - fim).max(0) as i32,
         _ => 0,
     };
-    Ok(Some(ResultadoMemoria { placar, vidas_perdidas, game_over, nave: t.nave.clone(), zerou: t.zerou }))
+    Ok(Some(ResultadoMemoria { placar, vidas_perdidas, game_over,
+        nave: t.nave.clone(),
+        rota: Some(t.rota.clone()).filter(|r| !r.is_empty()),
+        bombas_usadas: t.bombas_usadas.and_then(|b| i32::try_from(b).ok()),
+        zerou: t.zerou,
+    }))
 }
 
 fn registro() -> &'static Mutex<HashMap<u32, Telemetria>> {
@@ -238,6 +259,22 @@ mod tests {
         t
     }
 
+    #[test]
+    fn rota_e_bombas_vem_do_motor() {
+        let t = run(&[
+            INICIO,
+            r#"SHMUPX {"ev":"run_start","frame":10}"#,
+            r#"SHMUPX {"ev":"field","name":"route","value":0,"label":"A","frame":10}"#,
+            r#"SHMUPX {"ev":"field","name":"bombs_used","value":0,"frame":10}"#,
+            r#"SHMUPX {"ev":"field","name":"route","value":1,"label":"B","frame":900}"#,
+            r#"SHMUPX {"ev":"field","name":"route","value":1,"label":"B","frame":901}"#,
+            r#"SHMUPX {"ev":"field","name":"bombs_used","value":2,"frame":1200}"#,
+            r#"SHMUPX {"ev":"field","name":"route","value":3,"label":"D","frame":2000}"#,
+        ]);
+        assert_eq!(t.rota, "ABD");
+        assert_eq!(t.bombas_usadas, Some(2));
+    }
+
     const INICIO: &str = r#"SHMUPX {"ev":"start","rom":"sonicwi2","map":"ok","ranked":true,"start_state":true,"frame":0}"#;
 
     #[test]
@@ -256,7 +293,7 @@ mod tests {
         ]);
         assert_eq!(
             resultado(&t),
-            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), zerou: false }))
+            Ok(Some(ResultadoMemoria { placar: 123400, vidas_perdidas: 3, game_over: true, nave: Some("Rafale".into()), rota: None, bombas_usadas: None, zerou: false }))
         );
     }
 

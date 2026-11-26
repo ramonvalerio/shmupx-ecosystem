@@ -292,6 +292,9 @@ pub struct Motor {
     pub caravan_segundos: Option<u32>,
     /// Caravan: cartão do jogador (avatar e nick) para a tela final (`SHMUPX_JOGADOR_CARTAO`).
     pub cartao_jogador: Option<PathBuf>,
+    /// Ranked: arquivo onde o Client grava a posição no ranking, que o motor mostra na tela final
+    /// (`SHMUPX_POSICAO_ARQUIVO`).
+    pub posicao_arquivo: Option<PathBuf>,
 }
 
 /// Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Valores ausentes ficam
@@ -511,7 +514,7 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     }
     let exe = pastas.into_iter().map(|p| p.join(MOTOR_EXE)).find(|e| e.is_file())?;
     let dados = app.path().app_data_dir().ok()?.join("engine");
-    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None })
+    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None })
 }
 
 /// Nome curto de ROM (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
@@ -600,11 +603,17 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     if motor.ranking {
         comando.arg("-shmupx_ranked");
     }
-    // Caravan: o plugin do ShmupX desenha o contador e fecha o jogo no fim do tempo.
+    // Caravan: o plugin do ShmupX desenha o contador e o resultado no fim do tempo.
     if let Some(segundos) = motor.caravan_segundos.filter(|_| motor.ranking) {
         comando.env("SHMUPX_CARAVAN_SEGUNDOS", segundos.to_string());
+    }
+    // Tela final da partida ranked (game over ou fim do tempo): o cartão do jogador e a posição.
+    if motor.ranking {
         if let Some(cartao) = &motor.cartao_jogador {
             comando.env("SHMUPX_JOGADOR_CARTAO", cartao);
+        }
+        if let Some(arquivo) = &motor.posicao_arquivo {
+            comando.env("SHMUPX_POSICAO_ARQUIVO", arquivo);
         }
     }
     let scanlines_disponiveis = pasta_do_motor.join("bgfx").join("chains").join(format!("{CADEIA_SCANLINES}.json")).is_file();

@@ -10,6 +10,9 @@ export interface LocalRankingEntry {
   vidas_perdidas: number;
   continues: number;
   zerou: boolean;
+  /** Rota percorrida (letras maiúsculas seguidas) e bombas usadas, nos jogos em que o motor lê. */
+  rota?: string | null;
+  bombas?: number | null;
   modo: string | null;
   /** Quando a run foi aceita (ms). */
   quando: number;

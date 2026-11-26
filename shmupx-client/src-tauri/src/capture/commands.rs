@@ -294,6 +294,8 @@ struct Placar {
     vidas_perdidas: i32,
     continues: i32,
     zerou: bool,
+    rota: Option<String>,
+    bombas_usadas: Option<i32>,
 }
 
 /// Resultado aceito: guarda a run no ranking local, avisa a interface (placar, posição, pódio e se
@@ -309,6 +311,8 @@ fn run_enviada(app: &AppHandle, job: &AnaliseJob, placar: Placar, resposta: back
         vidas_perdidas: placar.vidas_perdidas,
         continues: placar.continues,
         zerou: placar.zerou,
+        rota: placar.rota.clone(),
+        bombas: placar.bombas_usadas,
         modo: job.modo.clone(),
         quando: agora,
         online: resposta.online,
@@ -437,8 +441,8 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             if resultado.game_over { "game over" } else { "encerrada antes do game over" },
             if resultado.zerou { ", zerou" } else { "" }
         );
-        match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0, Some(resultado.zerou)).await {
-            Ok(resposta) => run_enviada(app, &job, Placar { score: resultado.placar, vidas_perdidas: resultado.vidas_perdidas, continues: 0, zerou: resultado.zerou }, resposta),
+        match backend::submeter_run(&token_atual(app, &job.token), &job.run_id, &job.jogo_id, resultado.placar, resultado.vidas_perdidas, 0, Some(resultado.zerou), resultado.rota.as_deref(), resultado.bombas_usadas).await {
+            Ok(resposta) => run_enviada(app, &job, Placar { score: resultado.placar, vidas_perdidas: resultado.vidas_perdidas, continues: 0, zerou: resultado.zerou, rota: resultado.rota.clone(), bombas_usadas: resultado.bombas_usadas }, resposta),
             Err(error) => {
                 log::warn!("capture: run {} (memória) não enviada: {error}", job.run_id);
                 emit_run(app, &job.jogo_id, job.pid, Some(&job.run_id), "failed", Some(format!("falha ao enviar resultado: {error}")), None);
@@ -465,10 +469,12 @@ async fn analisar_e_enviar(app: &AppHandle, job: AnaliseJob) {
             result.vidas_perdidas,
             result.continues_usados,
             None,
+            None,
+            None,
         )
         .await
         .map_err(|error| format!("vídeo preservado; falha ao enviar resultado: {error}"))?;
-        let placar = Placar { score: result.score_bruto, vidas_perdidas: result.vidas_perdidas, continues: result.continues_usados, zerou: false };
+        let placar = Placar { score: result.score_bruto, vidas_perdidas: result.vidas_perdidas, continues: result.continues_usados, zerou: false, rota: None, bombas_usadas: None };
         Ok::<(Placar, backend::SubmeterRunResponse), String>((placar, resposta))
     }
     .await;

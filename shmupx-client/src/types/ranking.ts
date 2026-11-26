@@ -7,6 +7,9 @@ export interface GameRankingEntry {
   nota: number;
   continues: number;
   vidas_perdidas: number | null;
+  /** Rota percorrida, uma letra maiúscula por zona (Darius Gaiden: ABDHLQV) e bombas usadas. */
+  rota?: string | null;
+  bombas_usadas?: number | null;
   runs: number;
   modo: string | null;
   versao: string | null;

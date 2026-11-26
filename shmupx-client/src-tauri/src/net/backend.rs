@@ -110,6 +110,11 @@ struct SubmeterRunPayload<'a> {
     /// O jogo foi zerado (só pela memória); sem ele, a run não entra na tabela 1CC.
     #[serde(skip_serializing_if = "Option::is_none")]
     zerou: Option<bool>,
+    /// Rota (letras maiúsculas seguidas) e bombas usadas, quando o motor lê do jogo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rota: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bombas_usadas: Option<i32>,
 }
 
 /// Um dos 3 primeiros do Hi-Score do jogo (o pódio da sala), já com a run enviada.
@@ -193,6 +198,8 @@ pub async fn submeter_run(
     vidas_perdidas: i32,
     continues_usados: i32,
     zerou: Option<bool>,
+    rota: Option<&str>,
+    bombas_usadas: Option<i32>,
 ) -> Result<SubmeterRunResponse, String> {
     let response = client()?
         .post(format!("{BACKEND_BASE_URL}/api/runs"))
@@ -204,6 +211,8 @@ pub async fn submeter_run(
             vidas_perdidas,
             continues_usados,
             zerou,
+            rota,
+            bombas_usadas,
         })
         .send()
         .await

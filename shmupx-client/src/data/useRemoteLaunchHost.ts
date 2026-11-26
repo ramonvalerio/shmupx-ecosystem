@@ -6,7 +6,7 @@ import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
 import { readEmulatorSettings } from "./emulatorSettings";
 import { readEmulatorControls } from "./emulatorControls";
 import { caravanSecondsOf, setPendingRunEvent, setPendingRunMode } from "./gameModes";
-import { caravanLaunchFields } from "./playerCard";
+import { rankedLaunchFields } from "./playerCard";
 import { stillInstalled, usePlatformOwnership } from "./platforms";
 import {
   COMMAND_TTL_MS, DESKTOP_HEARTBEAT_MS, publishDesktop, publishResult, remoteRef,
@@ -96,7 +96,7 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
           await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training });
         } else {
           await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
-            ...(await caravanLaunchFields(caravanSecondsOf(room), !training && command.mode === "caravan")) });
+            ...(await rankedLaunchFields(caravanSecondsOf(room), command.mode === "caravan", !training)) });
         }
         awaitingRun.current = training ? null : { id: command.id, gameId: room.id };
         answer(command.id, "started", training

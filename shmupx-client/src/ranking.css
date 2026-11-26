@@ -68,7 +68,7 @@
 .rk-table-head h2 { margin: 0; font-size: 13px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; color: var(--rk-cyan); }
 .rk-table-head > span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--rk-muted); }
 .rk-list { flex: 1; min-height: 0; margin: 0; padding: 0; list-style: none; overflow-y: auto; scrollbar-width: thin; }
-.rk-row { position: relative; display: grid; grid-template-columns: 96px minmax(0, 1fr) 200px 130px 120px 130px 190px 80px; align-items: center; height: 54px; padding-right: 22px; border-top: 1px solid var(--rk-rule); font-size: 14px; color: var(--rk-text-2); }
+.rk-row { position: relative; display: grid; grid-template-columns: 96px minmax(0, 1fr) 200px 130px 120px var(--rk-route,) var(--rk-bombs,) 130px 190px 80px; align-items: center; height: 54px; padding-right: 22px; border-top: 1px solid var(--rk-rule); font-size: 14px; color: var(--rk-text-2); }
 .rk-row > :not(.rk-hit) { position: relative; z-index: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .rk-row .rk-yt:not(.is-off) { pointer-events: auto; }
 .rk-row.is-head { height: 34px; background: var(--rk-well); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--rk-label); }
@@ -173,7 +173,7 @@
   .rk { grid-template-columns: minmax(0, 1fr) 380px; }
   .rk-leader { grid-template-columns: 150px 112px minmax(0, 1fr) auto; }
   .rk-leader-meta { display: none; }
-  .rk-row { grid-template-columns: 84px minmax(0, 1fr) 170px 110px 110px 110px 170px 70px; }
+  .rk-row { grid-template-columns: 84px minmax(0, 1fr) 170px 110px 110px var(--rk-route,) var(--rk-bombs,) 110px 170px 70px; }
 }
 @media (max-width: 1400px) {
   .rk-leader { height: 160px; }
@@ -181,7 +181,7 @@
   .rk-leader-num { font-size: 56px; }
   .rk-leader-who h2 { font-size: 30px; }
   .rk-leader-avatar { width: 72px; height: 72px; }
-  .rk-row { grid-template-columns: 72px minmax(0, 1fr) 140px 100px 96px 100px 150px 60px; }
+  .rk-row { grid-template-columns: 72px minmax(0, 1fr) 140px 100px 96px var(--rk-route,) var(--rk-bombs,) 100px 150px 60px; }
 }
 @media (max-width: 1100px) {
   .rk { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; overflow-y: auto; }
@@ -212,3 +212,6 @@
 @media (max-width: 1700px) { .rk-pos { padding-left: 18px; } }
 @media (max-width: 1400px) { .rk-pos { padding-left: 12px; } .rk-pos-medal { width: 20px; height: 20px; } }
 @media (max-width: 820px) { .rk-pos { padding-left: 8px; } .rk-pos-medal { width: 18px; height: 18px; } .rk-row .rk-pos { gap: 3px; } }
+
+/* Rota do Darius Gaiden (ABDHLQV): letras coladas, espaçadas, em ciano. */
+.rk-route { letter-spacing: .16em; color: var(--rk-cyan); }

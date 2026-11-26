@@ -50,6 +50,10 @@ pub struct Resultado {
     pub score_bruto: i64,
     pub vidas_perdidas: Option<i32>,
     pub continues_usados: Option<i32>,
+    /// Rota percorrida, uma letra maiúscula por zona, em sequência (Darius Gaiden: `ABDHLQV`).
+    pub rota: Option<String>,
+    /// Bombas usadas na run (só nos jogos em que o mapa de memória lê as bombas).
+    pub bombas_usadas: Option<i32>,
     /// `true` quando o jogador zerou o jogo (o fim do jogo, não só o game over). Com 0 continues, a
     /// run de Hi-Score entra também na tabela 1CC.
     pub zerou: Option<bool>,
@@ -341,8 +345,12 @@ pub async fn submeter(
     if resultado.score_bruto < 0
         || resultado.vidas_perdidas.is_some_and(|v| v < 0)
         || resultado.continues_usados.is_some_and(|c| c < 0)
+        || resultado.bombas_usadas.is_some_and(|b| !(0..=9999).contains(&b))
     {
-        return Err(AppError::bad_request("score_bruto, vidas_perdidas e continues_usados não podem ser negativos"));
+        return Err(AppError::bad_request("score_bruto, vidas_perdidas, continues_usados e bombas_usadas não podem ser negativos"));
+    }
+    if resultado.rota.as_deref().is_some_and(|r| r.is_empty() || r.len() > 24 || !r.bytes().all(|b| b.is_ascii_uppercase())) {
+        return Err(AppError::bad_request("rota deve ter só letras maiúsculas (ex.: ABDHLQV)"));
     }
     if !id_valido(run_id) {
         return Err(AppError::bad_request("run_id inválido"));
@@ -415,6 +423,12 @@ async fn submeter_na_transacao(
     if let Some(zerou) = resultado.zerou {
         campos_resultado.insert("cleared".into(), booleano(zerou));
     }
+    if let Some(rota) = &resultado.rota {
+        campos_resultado.insert("route".into(), texto(rota));
+    }
+    if let Some(bombas) = resultado.bombas_usadas {
+        campos_resultado.insert("bombsUsed".into(), inteiro(bombas.into()));
+    }
     let escrita = atualizar(
         fs,
         &caminho,
@@ -430,6 +444,8 @@ fn ler_resultado(campos: &Campos) -> Option<Resultado> {
         score_bruto: ler_inteiro(campos, "score")?,
         vidas_perdidas: ler_inteiro(campos, "livesLost").and_then(|v| v.try_into().ok()),
         continues_usados: ler_inteiro(campos, "continuesUsed").and_then(|v| v.try_into().ok()),
+        rota: ler_texto(campos, "route"),
+        bombas_usadas: ler_inteiro(campos, "bombsUsed").and_then(|v| v.try_into().ok()),
         zerou: ler_booleano(campos, "cleared"),
     })
 }
@@ -511,7 +527,7 @@ mod tests {
         assert_eq!(ler_inteiro(&carteira, "version"), Some(2));
         fs.desfazer(&leitura).await;
 
-        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0), zerou: None };
+        let resultado = Resultado { score_bruto: 123_456, vidas_perdidas: Some(2), continues_usados: Some(0), rota: None, bombas_usadas: None, zerou: None };
 
         // Outro jogador não enxerga nem submete a run.
         assert!(submeter(&fs, "uid-intruso", &run.run_id, &jogo, resultado.clone()).await.is_err());
@@ -570,7 +586,7 @@ mod tests {
         let uid = format!("uid-{}", Uuid::new_v4());
         let tx = fs.iniciar_transacao().await.unwrap();
         fs.confirmar(&tx, vec![criar(&fs, &format!("games/{jogo}"), campos(&[("published", json!({ "booleanValue": true })), ("maxDurationSeconds", inteiro(600))]))]).await.unwrap();
-        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0), zerou: None };
+        let resultado = Resultado { score_bruto: 9_180_800, vidas_perdidas: Some(0), continues_usados: Some(0), rota: None, bombas_usadas: None, zerou: None };
 
         // Fluxo normal: encerrar (idempotente), depois enviar.
         let run = iniciar(&fs, &uid, &jogo, &Detalhes::default()).await.unwrap();

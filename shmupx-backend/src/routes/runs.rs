@@ -116,6 +116,11 @@ struct SubmeterRunPayload {
     vidas_perdidas: Option<i32>,
     #[serde(default)]
     continues_usados: Option<i32>,
+    /// Opcionais: rota (letras maiúsculas seguidas) e bombas usadas, nos jogos com mapa de memória.
+    #[serde(default)]
+    rota: Option<String>,
+    #[serde(default)]
+    bombas_usadas: Option<i32>,
     /// Opcional: o jogo foi zerado (o fim do jogo). Sem ele, a run não entra na tabela 1CC.
     #[serde(default)]
     zerou: Option<bool>,
@@ -145,6 +150,8 @@ async fn submeter_run(
         score_bruto: payload.score_bruto,
         vidas_perdidas: payload.vidas_perdidas,
         continues_usados: payload.continues_usados,
+        rota: payload.rota,
+        bombas_usadas: payload.bombas_usadas,
         zerou: payload.zerou,
     };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;

@@ -27,6 +27,11 @@ pub struct EntradaLocal {
     /// O jogador zerou o jogo.
     #[serde(default)]
     pub zerou: bool,
+    /// Rota percorrida (letras maiúsculas seguidas) e bombas usadas, nos jogos em que o motor lê.
+    #[serde(default)]
+    pub rota: Option<String>,
+    #[serde(default)]
+    pub bombas: Option<i32>,
     /// `highscore`, `caravan-sprint`...; `None` nas runs sem modo escolhido.
     #[serde(default)]
     pub modo: Option<String>,
@@ -100,7 +105,7 @@ mod tests {
     use super::*;
 
     fn e(run: &str, uid: &str, quando: u64) -> EntradaLocal {
-        EntradaLocal { run_id: run.into(), jogo_id: "aero".into(), uid: Some(uid.into()), score: 10, vidas_perdidas: 0, continues: 0, zerou: false, modo: None, quando, online: false }
+        EntradaLocal { run_id: run.into(), jogo_id: "aero".into(), uid: Some(uid.into()), score: 10, vidas_perdidas: 0, continues: 0, zerou: false, rota: None, bombas: None, modo: None, quando, online: false }
     }
 
     #[test]

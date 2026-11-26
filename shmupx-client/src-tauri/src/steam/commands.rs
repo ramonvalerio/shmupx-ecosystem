@@ -135,15 +135,20 @@ pub async fn inicializar_jogo_emulador(
     motor_controles: Option<Vec<super::controles::ControleMapeado>>,
     // Partida Caravan: o tempo do Caravan do jogo (Lab), para o contador e o fim no motor.
     caravan_segundos: Option<u32>,
-    // Caravan: a interface salvou o cartão do jogador (salvar_cartao_jogador) para a tela final.
+    // Partida ranked: a interface salvou o cartão do jogador (salvar_cartao_jogador) para a tela final.
     cartao_jogador: Option<bool>,
 ) -> Result<(), String> {
     let caravan_segundos = caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino.unwrap_or(false));
-    let cartao_jogador = if caravan_segundos.is_some() && cartao_jogador.unwrap_or(false) {
+    let cartao_jogador = if !treino.unwrap_or(false) && cartao_jogador.unwrap_or(false) {
         caminho_do_cartao(&app).filter(|c| c.is_file())
     } else {
         None
     };
+    // A imagem da posição é desta partida: a de uma partida anterior não pode aparecer.
+    let posicao_arquivo = caminho_da_posicao(&app).filter(|_| !treino.unwrap_or(false));
+    if let Some(arquivo) = &posicao_arquivo {
+        let _ = std::fs::remove_file(arquivo);
+    }
     let janela = janela.unwrap_or(false);
     let escolhida = super::emulador::pasta_escolhida(&app);
     let padrao = super::emulador::pasta_padrao_de_roms(&app);
@@ -156,6 +161,7 @@ pub async fn inicializar_jogo_emulador(
             controles: motor_controles.unwrap_or_default(),
             caravan_segundos,
             cartao_jogador,
+            posicao_arquivo,
             ..m
         });
     // Ranked de jogo validado só pela memória (sem script de vídeo): só com o ROM mapeado (outra
@@ -231,19 +237,38 @@ pub(crate) fn caminho_do_cartao(app: &AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_cache_dir().ok().map(|pasta| pasta.join("caravana-jogador.png"))
 }
 
-/// Guarda o cartão do jogador do Caravan (PNG em base64, até 4 MB), que o motor mostra no fim do tempo.
-#[tauri::command]
-pub fn salvar_cartao_jogador(app: AppHandle, png_base64: String) -> Result<(), String> {
+/// Imagem da posição no ranking (medalha no top 3 e "1º LUGAR") para a tela final do motor.
+pub(crate) fn caminho_da_posicao(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_cache_dir().ok().map(|pasta| pasta.join("resultado-posicao.png"))
+}
+
+/// Grava um PNG (base64, até 4 MB) no `caminho`, de forma atômica: o motor lê o arquivo enquanto o
+/// painel está aberto e nunca pode pegá-lo pela metade.
+fn gravar_png(caminho: &std::path::Path, png_base64: &str) -> Result<(), String> {
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(png_base64.as_bytes()).map_err(|e| format!("cartão inválido: {e}"))?;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(png_base64.as_bytes()).map_err(|e| format!("imagem inválida: {e}"))?;
     if bytes.len() > 4 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Err("cartão inválido: não é um PNG".into());
+        return Err("imagem inválida: não é um PNG".into());
     }
-    let caminho = caminho_do_cartao(&app).ok_or("sem pasta de cache do app")?;
     if let Some(pasta) = caminho.parent() {
         std::fs::create_dir_all(pasta).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&caminho, bytes).map_err(|e| e.to_string())
+    let temporario = caminho.with_extension("tmp");
+    std::fs::write(&temporario, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&temporario, caminho).map_err(|e| e.to_string())
+}
+
+/// Guarda o cartão do jogador (avatar e nick) que o motor mostra na tela final da partida ranked.
+#[tauri::command]
+pub fn salvar_cartao_jogador(app: AppHandle, png_base64: String) -> Result<(), String> {
+    gravar_png(&caminho_do_cartao(&app).ok_or("sem pasta de cache do app")?, &png_base64)
+}
+
+/// Guarda a imagem da posição no ranking, que chega depois que o servidor aceita a run; o motor a
+/// mostra abaixo do FIM DE JOGO assim que o arquivo aparece.
+#[tauri::command]
+pub fn salvar_posicao_jogador(app: AppHandle, png_base64: String) -> Result<(), String> {
+    gravar_png(&caminho_da_posicao(&app).ok_or("sem pasta de cache do app")?, &png_base64)
 }
 
 /// Imagem de outro site (o avatar do Google, por exemplo) como `data:` URL, para a interface poder

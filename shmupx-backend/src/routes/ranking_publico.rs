@@ -248,6 +248,8 @@ fn partida(run_id: String, campos: &Campos) -> Option<Partida> {
         score,
         continues: ler_inteiro(&resultado, "continuesUsed").and_then(|c| c.try_into().ok()).unwrap_or(0),
         vidas_perdidas: ler_inteiro(&resultado, "livesLost").and_then(|v| v.try_into().ok()),
+        rota: ler_texto(&resultado, "route"),
+        bombas_usadas: ler_inteiro(&resultado, "bombsUsed").and_then(|v| v.try_into().ok()),
         zerou: ler_booleano(&resultado, "cleared") == Some(true),
         modo: ler_texto(campos, "mode"),
         versao: ler_texto(campos, "gameVersion"),

@@ -2,8 +2,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { DEFAULT_AVATAR, readMyPublicProfile } from "./publicProfile";
 
 /**
- * Cartão do jogador para a tela final do Caravan no ShmupX Emulator: o avatar num círculo com o aro
- * ciano e o nick em Share Tech, num PNG transparente. O motor não desenha texto livre: o Client gera
+ * Cartão do jogador para a tela final do Caravan no ShmupX Emulator: a foto do avatar em círculo, sem
+ * borda, e o nick em Share Tech, num PNG transparente. O motor não desenha texto livre: o Client gera
  * a imagem e o plugin do ShmupX a mostra acima dos pontos e das vidas perdidas. Devolve `true`
  * quando o cartão ficou salvo (o Rust passa o caminho ao motor).
  */
@@ -14,9 +14,9 @@ export async function preparePlayerCard(fallbackName: string): Promise<boolean> 
     const name = (mine?.handle || fallbackName || "").trim();
     if (!name) return false;
     const avatar = await loadImage(await avatarSource(mine?.avatar || DEFAULT_AVATAR));
-    await document.fonts.load('72px "Share Tech"');
+    await document.fonts.load('84px "Share Tech"');
 
-    const AVATAR = 144, RING = 6, GAP = 28, FONT = 72;
+    const AVATAR = 176, GAP = 30, FONT = 84;
     const measure = document.createElement("canvas").getContext("2d")!;
     measure.font = `${FONT}px "Share Tech"`;
     const textWidth = Math.ceil(measure.measureText(name).width);
@@ -24,19 +24,13 @@ export async function preparePlayerCard(fallbackName: string): Promise<boolean> 
     canvas.width = AVATAR + GAP + textWidth + 8;
     canvas.height = AVATAR;
     const ctx = canvas.getContext("2d")!;
-    // Aro ciano e o avatar recortado em círculo.
-    ctx.fillStyle = "#57fcff";
-    ctx.beginPath();
-    ctx.arc(AVATAR / 2, AVATAR / 2, AVATAR / 2, 0, Math.PI * 2);
-    ctx.fill();
+    // A foto pura, recortada em círculo, sem aro nem borda.
     ctx.save();
     ctx.beginPath();
-    ctx.arc(AVATAR / 2, AVATAR / 2, AVATAR / 2 - RING, 0, Math.PI * 2);
+    ctx.arc(AVATAR / 2, AVATAR / 2, AVATAR / 2, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = "#101010";
-    ctx.fillRect(0, 0, AVATAR, AVATAR);
     const side = Math.min(avatar.naturalWidth, avatar.naturalHeight);
-    ctx.drawImage(avatar, (avatar.naturalWidth - side) / 2, (avatar.naturalHeight - side) / 2, side, side, RING, RING, AVATAR - RING * 2, AVATAR - RING * 2);
+    ctx.drawImage(avatar, (avatar.naturalWidth - side) / 2, (avatar.naturalHeight - side) / 2, side, side, 0, 0, AVATAR, AVATAR);
     ctx.restore();
     // Nick em branco com contorno escuro, como os números do contador.
     ctx.font = `${FONT}px "Share Tech"`;
@@ -72,10 +66,52 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Campos de abertura do ShmupX Emulator para a partida Caravan: o tempo do Caravan do jogo e o
- * cartão do jogador da tela final. Fora do Caravan, nada.
+ * Campos de abertura do ShmupX Emulator para uma partida ranked: o tempo do Caravan (só no Caravan) e
+ * o cartão do jogador da tela final (game over ou fim do tempo). Em treino, nada.
  */
-export async function caravanLaunchFields(seconds: number, caravan: boolean): Promise<{ caravanSegundos: number | null; cartaoJogador: boolean }> {
-  if (!caravan) return { caravanSegundos: null, cartaoJogador: false };
-  return { caravanSegundos: seconds, cartaoJogador: await preparePlayerCard("") };
+export async function rankedLaunchFields(seconds: number, caravan: boolean, ranked: boolean): Promise<{ caravanSegundos: number | null; cartaoJogador: boolean }> {
+  if (!ranked) return { caravanSegundos: null, cartaoJogador: false };
+  return { caravanSegundos: caravan ? seconds : null, cartaoJogador: await preparePlayerCard("") };
+}
+
+/**
+ * Imagem da posição no ranking para a tela final do motor: a medalha (ouro, prata ou bronze) no top
+ * 3 e "1º LUGAR" (valor em branco, rótulo em azul). Chega depois que o servidor aceita a run; o
+ * motor a mostra assim que o arquivo aparece. Fora do app desktop, nada.
+ */
+export async function publishPlacement(position: number): Promise<void> {
+  if (!isTauri() || !Number.isInteger(position) || position < 1) return;
+  try {
+    await document.fonts.load('64px "Share Tech"');
+    const HEIGHT = 112, GAP = 20;
+    const medal = position <= 3 ? await loadImage(`/img/medals/medal-${position}.png`) : null;
+    const number = `${position}º`;
+    const measure = document.createElement("canvas").getContext("2d")!;
+    measure.font = `${HEIGHT * 0.62}px "Share Tech"`;
+    const numberWidth = Math.ceil(measure.measureText(number).width);
+    measure.font = `${HEIGHT * 0.34}px "Share Tech"`;
+    const labelWidth = Math.ceil(measure.measureText("LUGAR").width);
+    const canvas = document.createElement("canvas");
+    canvas.width = (medal ? HEIGHT + GAP : 0) + numberWidth + GAP + labelWidth + 8;
+    canvas.height = HEIGHT;
+    const ctx = canvas.getContext("2d")!;
+    let x = 0;
+    if (medal) { ctx.drawImage(medal, 0, 0, HEIGHT, HEIGHT); x = HEIGHT + GAP; }
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = "#100e2c";
+    // Posição em branco (valor) e o rótulo em azul, com o mesmo contorno escuro dos números do motor.
+    ctx.font = `${HEIGHT * 0.62}px "Share Tech"`;
+    ctx.strokeText(number, x, HEIGHT / 2 + 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(number, x, HEIGHT / 2 + 2);
+    ctx.font = `${HEIGHT * 0.34}px "Share Tech"`;
+    ctx.strokeText("LUGAR", x + numberWidth + GAP, HEIGHT / 2 + 8);
+    ctx.fillStyle = "#57fcff";
+    ctx.fillText("LUGAR", x + numberWidth + GAP, HEIGHT / 2 + 8);
+    await invoke("salvar_posicao_jogador", { pngBase64: canvas.toDataURL("image/png").split(",")[1] });
+  } catch (error) {
+    console.warn("posição do jogador não gerada:", error);
+  }
 }

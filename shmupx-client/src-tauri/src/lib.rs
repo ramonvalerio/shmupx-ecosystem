@@ -58,6 +58,7 @@ pub fn run() {
             steam::commands::emulador_monitores,
             steam::commands::emulador_identificar_monitor,
             steam::commands::salvar_cartao_jogador,
+            steam::commands::salvar_posicao_jogador,
             steam::commands::imagem_como_data_url,
             steam::commands::emulador_definir_pasta,
             steam::commands::emulador_baixar_roms,

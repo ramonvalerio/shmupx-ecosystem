@@ -67,8 +67,10 @@ fn tabela_do_modo(modo: Option<&str>) -> &'static str {
 }
 
 /// Posição do jogador se o melhor placar dele na tabela é o desta run.
-fn posicao_da_run(entradas: &[placar::EntradaJogo], uid: &str, score: i64) -> Option<usize> {
-    entradas.iter().find(|e| e.jogador_id == uid).filter(|e| e.score == score).map(|e| e.posicao)
+fn posicao_da_run(entradas: &[placar::EntradaJogo], uid: &str, run_id: &str) -> Option<usize> {
+    // A run é o registro do jogador na tabela (o recorde dele: no Caravan, menos vidas perdidas e
+    // depois o placar); só então ela tem posição.
+    entradas.iter().find(|e| e.jogador_id == uid).filter(|e| e.run_id == run_id).map(|e| e.posicao)
 }
 
 fn titulo_do_video(nome: &str, jogo: &str, posicao: usize, score: i64) -> String {
@@ -118,7 +120,7 @@ async fn calcular(fs: &Firestore, youtube: Option<&YouTube>, uid: &str, run_id: 
     let hiscore = placar::ranking_do_jogo(&partidas, game_id, Some("highscore"), None);
     let tabela = tabela_do_modo(ler_texto(&gameplay, "mode").as_deref());
     let do_modo = if tabela == "highscore" { hiscore.clone() } else { placar::ranking_do_jogo(&partidas, game_id, Some(tabela), None) };
-    let posicao = score.and_then(|s| posicao_da_run(&do_modo, uid, s));
+    let posicao = score.and_then(|_| posicao_da_run(&do_modo, uid, run_id));
 
     let topo: Vec<&placar::EntradaJogo> = hiscore.iter().take_while(|e| e.posicao <= POSICOES_EM_DESTAQUE).collect();
     let nomes = nomes_dos_jogadores(fs, topo.iter().map(|e| e.jogador_id.as_str()).chain(std::iter::once(uid))).await?;
@@ -217,24 +219,26 @@ mod tests {
             nota: 0.0,
             continues: 0,
             vidas_perdidas: None,
+            rota: None,
+            bombas_usadas: None,
             runs: 1,
             modo: None,
             versao: None,
             origem: None,
             verificada: false,
             conquistado_em: None,
-            run_id: String::new(),
+            run_id: format!("run-{jogador}"),
             youtube_url: None,
         }
     }
 
     #[test]
-    fn posicao_so_quando_a_run_e_o_melhor_placar() {
+    fn posicao_so_quando_a_run_e_o_registro_do_jogador_na_tabela() {
         let tabela = [entrada(1, "ana", 900), entrada(2, "bia", 800), entrada(3, "caio", 700)];
-        assert_eq!(posicao_da_run(&tabela, "bia", 800), Some(2));
-        // A run de 500 da Bia não é a que está no ranking (o melhor dela é 800).
-        assert_eq!(posicao_da_run(&tabela, "bia", 500), None);
-        assert_eq!(posicao_da_run(&tabela, "davi", 100), None);
+        assert_eq!(posicao_da_run(&tabela, "bia", "run-bia"), Some(2));
+        // Outra run da Bia (não é a que está no ranking): sem posição.
+        assert_eq!(posicao_da_run(&tabela, "bia", "outra-run"), None);
+        assert_eq!(posicao_da_run(&tabela, "davi", "run-davi"), None);
     }
 
     #[test]
