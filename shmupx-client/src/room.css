@@ -343,13 +343,30 @@
 .presence-dot.is-invisible { background: transparent; box-shadow: inset 0 0 0 2px #6b757c; }
 .close-room-dialog { width: min(460px, 100%); }
 /* Limite de salas abertas: lista das abertas para escolher qual trocar pela nova. */
-.room-limit-dialog { width: min(480px, 100%); }
-.room-limit-list { list-style: none; margin: 4px 22px 14px; padding: 0; display: grid; gap: 6px; }
-.room-limit-list button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-raised); color: inherit; font-size: 14px; text-align: left; }
-.room-limit-list button:hover:not(:disabled) { border-color: #fd4851; background: #fd485114; }
-.room-limit-list button small { flex-shrink: 0; color: #fd4851; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.room-limit-list button:disabled { opacity: .55; cursor: not-allowed; }
-.room-limit-list button:disabled small { color: var(--muted, #8a9aa6); }
+/* Limite de salas (RoomLimitDialog): título no centro, uma linha por sala com a capa, o número da
+   sala, os jogadores e o "Sair e trocar" (ciano sólido; vermelho ao passar o mouse: sai da sala). */
+.room-limit-dialog { width: min(680px, 100%); }
+.room-limit-dialog > header { position: relative; justify-content: center; padding: 26px 64px 18px; text-align: center; }
+.room-limit-dialog > header .dialog-close { position: absolute; top: 18px; right: 18px; }
+.room-limit-game { color: var(--cyan); font-weight: 400; }
+.room-limit-list { list-style: none; margin: 18px 22px 22px; padding: 0; display: grid; gap: 8px; overflow-y: auto; }
+.room-limit-list li { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 8px 12px 8px 8px; border: 1px solid var(--stroke); border-radius: 4px; background: var(--surface-recessed, var(--gray-1f1f1f)); transition: border-color .15s; }
+.room-limit-list li:hover:not(.is-recording) { border-color: var(--cyan-2); }
+.room-limit-art { display: block; width: 120px; height: 64px; object-fit: cover; border: 1px solid var(--stroke); border-radius: 3px; background: #000; }
+.room-limit-art.is-not-owned { filter: grayscale(1) brightness(.8); }
+.room-limit-info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.room-limit-info strong { overflow: hidden; font-size: 18px; font-weight: 400; letter-spacing: .04em; white-space: nowrap; text-overflow: ellipsis; }
+.room-limit-info small { font-size: 12px; color: #8a9aa1; }
+.room-limit-info small span { color: var(--cyan); }
+.room-limit-swap { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border: 1px solid var(--cyan); border-radius: 3px; background: var(--cyan); color: var(--on-cyan); font-size: 14px; font-weight: 400; letter-spacing: .04em; white-space: nowrap; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.room-limit-swap:hover:not(:disabled), .room-limit-swap:focus-visible { border-color: #fd4851; background: #fd4851; color: #fff; outline: none; }
+.room-limit-swap:disabled { border-color: var(--stroke); background: transparent; color: #8a9aa1; cursor: not-allowed; }
+.theme-light .room-limit-info small { color: #475569; }
+@media (max-width: 560px) {
+  .room-limit-list li { grid-template-columns: 80px minmax(0, 1fr); }
+  .room-limit-art { width: 80px; height: 44px; }
+  .room-limit-swap { grid-column: 1 / -1; justify-content: center; }
+}
 
 /* Menu de navegação no topo (no lugar do logo): Minhas coleções › jogo › Ranking. */
 /* Caminho no topo (Minhas coleções › jogo › Ranking): segmentos geométricos em chevron, da altura

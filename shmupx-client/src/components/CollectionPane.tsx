@@ -14,6 +14,7 @@ import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
 import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 import { isSupported } from "../data/validation";
+import DialogClose from "./DialogClose";
 
 export { isSupported };
 
@@ -138,7 +139,6 @@ function GameFacts({ room, tags, owned }: { room: GameRoom; tags: PlatformTag[];
 
 /** About do card: as informações do jogo numa janela no centro. Fecha no ✕, no Esc ou clicando fora. */
 function GameAboutDialog({ room, tags, owned, onClose }: { room: GameRoom; tags: PlatformTag[]; owned: boolean; onClose: () => void }) {
-  const { t } = useI18n();
   const ref = useDialogFocus(true, onClose);
   // Dentro do Client (não no body): as cores do tema vêm do shell.
   return (
@@ -146,7 +146,7 @@ function GameAboutDialog({ room, tags, owned, onClose }: { room: GameRoom; tags:
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby="game-about-title" tabIndex={-1} className="controller-dialog game-about-dialog">
         <header>
           <h2 id="game-about-title">{room.title}</h2>
-          <button type="button" className="game-about-close" aria-label={t("Fechar")} onClick={onClose}>✕</button>
+          <DialogClose onClick={onClose} />
         </header>
         <div className="game-about-body"><GameFacts room={room} tags={tags} owned={owned} /></div>
       </div>

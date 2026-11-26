@@ -29,6 +29,8 @@ import { visibleDialog } from "./navigationInput";
 import FirstRunTutorial, { useFirstRunTutorial, type TutorialTopic } from "./FirstRunTutorial";
 import HowToUseDialog from "./HowToUseDialog";
 import LibrarySyncStatus from "./LibrarySyncStatus";
+import DialogClose from "./DialogClose";
+import RoomLimitDialog from "./RoomLimitDialog";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
@@ -347,7 +349,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           <div ref={settingsDialogRef} role="dialog" aria-modal="true" aria-label={t("Configurações")} tabIndex={-1} className="controller-dialog settings-modal">
             <header>
               <div><h2>{t("Configurações")}</h2></div>
-              <button type="button" className="secondary-action" onClick={() => setSettingsOpen(false)}>{t("Fechar")}</button>
+              <DialogClose onClick={() => setSettingsOpen(false)} />
             </header>
             <div className="controller-dialog-body">
               <SettingsPage rooms={rooms} preferences={preferences} onPreferences={(next) => { setPreferences(next); setLanguage(next.language); }} storageError={storageError}
@@ -374,35 +376,9 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       </div>
       </div>
       {pendingRoom && pendingOpen && (
-        <div className="controller-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingOpen(null); }}>
-          <div ref={limitDialogRef} role="dialog" aria-modal="true" aria-labelledby="room-limit-title" tabIndex={-1} className="controller-dialog room-limit-dialog">
-            <header>
-              <div>
-                <h2 id="room-limit-title">{t("Até {count} salas abertas ao mesmo tempo", { count: MAX_OPEN_ROOMS })}</h2>
-                <p>{t("Escolha de qual sala sair para entrar em {game} no lugar dela.", { game: pendingRoom.title })}</p>
-              </div>
-            </header>
-            <ul className="room-limit-list">
-              {openRoomIds.map((id) => {
-                const room = rooms.find((candidate) => candidate.id === id);
-                if (!room) return null;
-                const recording = recordingRoomId === id;
-                return (
-                  <li key={id}>
-                    <button type="button" disabled={recording} title={recording ? t("Há uma run em andamento nesta sala.") : undefined}
-                      onClick={() => { enterRoom(pendingOpen.id, pendingOpen.ranking, id); setPendingOpen(null); }}>
-                      <span>{room.title}</span>
-                      <small>{recording ? t("Em partida") : t("Sair e trocar")}</small>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            <footer>
-              <button type="button" className="secondary-action" onClick={() => setPendingOpen(null)}>{t("Cancelar")}</button>
-            </footer>
-          </div>
-        </div>
+        <RoomLimitDialog dialogRef={limitDialogRef} max={MAX_OPEN_ROOMS} entering={pendingRoom} recordingRoomId={recordingRoomId} myUid={profile.uid}
+          rooms={openRoomIds.map((id) => rooms.find((room) => room.id === id)).filter((room): room is GameRoom => room !== undefined)}
+          onPick={(id) => { enterRoom(pendingOpen.id, pendingOpen.ranking, id); setPendingOpen(null); }} onClose={() => setPendingOpen(null)} />
       )}
       {closingRoom && (
         <div className="controller-dialog-backdrop">

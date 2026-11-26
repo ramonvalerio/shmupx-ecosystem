@@ -7,6 +7,7 @@ import { saveSteamLibrary, scanSteam } from "../data/steamLibrary";
 import { chooseEmulatorFolder, publish as saveEmulatorLibrary, useEmulatorLibrary } from "../data/emulatorLibrary";
 import { usePlatformOwnership } from "../data/platforms";
 import type { PlayOn } from "../types/room";
+import DialogClose from "./DialogClose";
 
 const SOURCES = [
   { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", short: "Importe os jogos instalados na sua Steam.", cta: "Importar agora", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
@@ -75,7 +76,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
 
   return <div className="controller-dialog-backdrop">
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="import-dialog-title" tabIndex={-1} className={`controller-dialog import-games-dialog ${source ? "" : "is-picker"}`} data-tutorial="import-dialog" data-tutorial-source={sourceId ?? undefined} data-tutorial-imported={importedHere ? "1" : undefined}>
-      <header><div><h2 id="import-dialog-title">{t(source ? "Conectar {platform}" : "Importe os seus jogos", { platform: source ? t(source.title) : "" })}</h2><p>{t(source ? source.detail : "Escolha de onde vêm os seus jogos.")}</p></div><div className="import-header-actions">{source && <button data-dialog-close data-tutorial="import-back" className="secondary-action" onClick={back}>{t("Voltar")}</button>}<button data-dialog-close={!source ? true : undefined} data-tutorial="import-close" className="secondary-action" onClick={onClose}>{t("Fechar")}</button></div></header>
+      <header><div><h2 id="import-dialog-title">{t(source ? "Conectar {platform}" : "Importe os seus jogos", { platform: source ? t(source.title) : "" })}</h2><p>{t(source ? source.detail : "Escolha de onde vêm os seus jogos.")}</p></div><div className="import-header-actions">{source && <button data-dialog-close data-tutorial="import-back" className="secondary-action" onClick={back}>{t("Voltar")}</button>}<DialogClose data-dialog-close={!source ? true : undefined} data-tutorial="import-close" onClick={onClose} /></div></header>
       <div className="controller-dialog-body">
         {!source && <>
           <div className="import-cards" data-tutorial="import-sources">{SOURCES.map((item) => {

@@ -1,6 +1,7 @@
 import { useI18n } from "../i18n";
 import CabinetControlMapper from "./CabinetControlMapper";
 import { useDialogFocus } from "./useDialogFocus";
+import DialogClose from "./DialogClose";
 
 /**
  * Controles do emulador numa janela no centro (clique no gabinete de Minhas coleções): o mesmo
@@ -18,7 +19,7 @@ export default function EmulatorControlsDialog({ onClose }: { onClose: () => voi
             <h2 id="emulator-controls-title">{t("Controles do emulador")}</h2>
             <p>{t("Clique num botão do gabinete e aperte o botão do seu controle ou uma tecla. Vale para todos os jogos no ShmupX Emulator.")}</p>
           </div>
-          <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button>
+          <DialogClose onClick={onClose} />
         </header>
         <div className="controller-dialog-body"><CabinetControlMapper /></div>
       </div>

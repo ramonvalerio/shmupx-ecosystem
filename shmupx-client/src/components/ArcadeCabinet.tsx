@@ -10,6 +10,7 @@ import { useEngineCapture } from "../data/engineCapture";
 import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
 import EmulatorControlsDialog from "./EmulatorControlsDialog";
 import MonitorSettingsDialog from "./MonitorSettingsDialog";
+import DialogClose from "./DialogClose";
 
 /**
  * Monitor TATE (vertical) quando a arte do jogo é mais alta que larga: as artes de jogos de tela
@@ -185,7 +186,7 @@ function VideoModal({ title, src, start, onClose }: { title: string; src: string
       <div ref={ref} role="dialog" aria-modal="true" aria-label={t("Vídeo de {game}", { game: title })} tabIndex={-1} className="video-modal">
         <header>
           <strong>{title}</strong>
-          <button type="button" className="video-modal-close" aria-label={t("Fechar")} onClick={close}>✕</button>
+          <DialogClose onClick={close} />
         </header>
         <video src={src} controls autoPlay loop playsInline
           ref={(video) => { videoRef.current = video; if (video && !video.dataset.ready) { video.dataset.ready = "1"; video.currentTime = start; video.volume = volume; video.muted = muted; } }}

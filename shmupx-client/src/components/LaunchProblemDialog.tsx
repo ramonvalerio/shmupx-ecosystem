@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import { chooseEmulatorFolder } from "../data/emulatorLibrary";
 import type { MisterReach } from "../data/launchFailure";
 import { useDialogFocus } from "./useDialogFocus";
+import DialogClose from "./DialogClose";
 
 /** O que impediu o jogo de abrir (ou de parar), do ponto de vista do jogador. */
 export type LaunchProblemKind =
@@ -165,6 +166,7 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
             <h2 id="launch-problem-title">{title}</h2>
             <p id="launch-problem-text">{text}</p>
           </div>
+          <DialogClose onClick={onClose} />
         </header>
         {steps.length > 0 && <ol className="launch-problem-steps">{steps.map((step) => <li key={step}>{step}</li>)}</ol>}
         {kind === "rom-missing" && <div className="launch-problem-folder">
@@ -172,7 +174,7 @@ export function LaunchProblemDialog({ kind, game, onRetry, onClose }: { kind: La
           {folderError && <p className="mode-error-inline" role="alert">{folderError}</p>}
         </div>}
         <footer>
-          {onRetry ? <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button> : <span />}
+          <span />
           <button type="button" className="primary-action" onClick={() => { onClose(); onRetry?.(); }}>{t(onRetry ? "Tentar de novo" : "Entendi")}</button>
         </footer>
       </div>

@@ -245,7 +245,7 @@ const ROOM_LAYOUT_ENGLISH: Record<string, string> = {
   "Vídeo de {game}": "{game} video",
   "Até {count} salas abertas ao mesmo tempo": "Up to {count} rooms open at the same time",
   "Escolha de qual sala sair para entrar em {game} no lugar dela.": "Choose which room to leave so {game} takes its place.",
-  "Sair e trocar": "Leave and swap", "Há uma run em andamento nesta sala.": "There's a run in progress in this room.",
+  "Sair e trocar": "Leave and swap", "Sala {number}": "Room {number}", "jogador": "player", "jogadores": "players", "Há uma run em andamento nesta sala.": "There's a run in progress in this room.",
 };
 for (const [key, value] of Object.entries(ROOM_LAYOUT_ENGLISH)) ENGLISH[key] ??= value;
 
@@ -451,7 +451,7 @@ const TUTORIAL_ENGLISH: Record<string, string> = {
   "Tente outra fonte": "Try another source",
   "Aqui não há jogos do ShmupX neste computador. Toque em Voltar e escolha outra fonte.": "There are no ShmupX games here on this computer. Tap Back and choose another source.",
   "Jogos importados!": "Games imported!",
-  "A coleção já mostra os jogos que você tem. Toque em Fechar para voltar a ela.": "The collection now shows the games you have. Tap Close to go back to it.",
+  "A coleção já mostra os jogos que você tem. Toque no X para voltar a ela.": "The collection now shows the games you have. Tap the X to go back to it.",
   "Escolha um jogo": "Pick a game",
   "Toque num jogo colorido: são os que você tem. Os detalhes e a ficha para jogar aparecem ao lado.": "Tap a game in color: those are the ones you have. The details and the coin to play show up on the side.",
   "Escolha o modo de pontuação": "Choose your score mode",
@@ -546,7 +546,7 @@ const HELP_ENGLISH: Record<string, string> = {
   "Configure o seu controle": "Set up your controller",
   "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle. Se ele já está do seu jeito, toque em Próximo.": "Tap the arcade cabinet's control panel, where the stick and buttons are, to choose your controller's buttons. If it's already set the way you like, tap Next.",
   "Escolha os botões": "Choose the buttons",
-  "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque em Fechar.": "Pick the controller in the list, click a cabinet button and press the controller button (or a key). When you're done, tap Close.",
+  "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque no X.": "Pick the controller in the list, click a cabinet button and press the controller button (or a key). When you're done, tap the X.",
   "Toque num jogo colorido: são os que você tem. Os detalhes, o gabinete e a ficha para jogar aparecem ao lado.": "Tap a game in color: those are the ones you own. The details, the cabinet and the coin to play show up on the side.",
   "Os seus jogos já estão na coleção. Para aprender a jogar, toque em HOW TO USE, no canto superior direito, e escolha Como jogar.": "Your games are in the collection now. To learn how to play, tap HOW TO USE in the top right corner and choose How to Play.",
   "Ver o ranking": "Check the ranking",

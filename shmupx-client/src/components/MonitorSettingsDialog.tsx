@@ -4,6 +4,7 @@ import { useI18n } from "../i18n";
 import { defaultEmulatorSettings, EMULATOR_RESOLUTIONS, identifyMonitor, listMonitors, SCREEN_MODES, screenMode, useEmulatorSettings, withScreenMode, type EmulatorResolution, type PcMonitor } from "../data/emulatorSettings";
 import { useDialogFocus } from "./useDialogFocus";
 import "../monitor.css";
+import DialogClose from "./DialogClose";
 
 /**
  * Monitor dos jogos (clique na tela do gabinete em Minhas coleções e na sala): à esquerda, o gabinete
@@ -42,7 +43,7 @@ export default function MonitorSettingsDialog({ onClose, art, game, cabinet }: {
             <h2 id="monitor-settings-title">{t("Monitor")}</h2>
             <p>{t("Como os jogos de arcade abrem neste computador. Vale a partir do próximo jogo aberto.")}</p>
           </div>
-          <button type="button" className="am-close" onClick={onClose} aria-label={t("Fechar")}>✕</button>
+          <DialogClose onClick={onClose} />
         </header>
 
         <div className="am-body">

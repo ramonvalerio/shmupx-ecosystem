@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../i18n";
 import { useDialogFocus } from "./useDialogFocus";
 import { CONTROLLER_ACTIONS, bindingIdentity, readMappings, removeMapping, saveMapping, validateMapping, type ControllerAction, type ControllerBinding } from "./controllerMappings";
+import DialogClose from "./DialogClose";
 
 const ACTION_LABELS: Record<ControllerAction,string> = {up:"Cima",down:"Baixo",left:"Esquerda",right:"Direita",confirm:"Confirmar",back:"Voltar / fechar"};
 interface Device {id:string;index:number;}
@@ -55,7 +56,7 @@ export default function ConfigureControllerDialog({ onClose }: { onClose: () => 
   function describe(binding:ControllerBinding|undefined) { return !binding ? t("Não configurado") : binding.kind==="button" ? t("Botão {index}",{index:binding.index+1}) : t("Eixo {index} ({direction})",{index:binding.index+1,direction:binding.direction===1?"+":"−"}); }
   return <div className="controller-dialog-backdrop">
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="controller-dialog-title" tabIndex={-1} data-capturing-controller={capturing ? "true" : undefined} className="controller-dialog">
-      <header><div><h2 id="controller-dialog-title">{t("Configurar controle")}</h2><p>{t("Mapeie os comandos de navegação do Big Picture neste dispositivo.")}</p></div><button data-dialog-close className="secondary-action" onClick={()=>{ if(capturing)setCapturing(null);else onClose(); }}>{t(capturing ? "Cancelar captura" : "Fechar")}</button></header>
+      <header><div><h2 id="controller-dialog-title">{t("Configurar controle")}</h2><p>{t("Mapeie os comandos de navegação do Big Picture neste dispositivo.")}</p></div><DialogClose data-dialog-close label={capturing ? t("Cancelar captura") : undefined} onClick={()=>{ if(capturing)setCapturing(null);else onClose(); }} /></header>
       <div className="controller-dialog-body">
         <label className="settings-field">{t("Dispositivo de entrada")}<select value={deviceId} disabled={capturing!==null} onChange={(event)=>chooseDevice(event.target.value)}><option value="">{t("Selecione um controle")}</option>{devices.map((device)=><option key={device.index} value={device.id}>{device.id}</option>)}</select></label>
         <button className="text-action" disabled={capturing!==null} onClick={scan}>{t("Atualizar controles")}</button>

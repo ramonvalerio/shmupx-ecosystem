@@ -4,6 +4,7 @@ import type { GameMode, GameRoom } from "../types/room";
 import { carouselOrder, eventRunning, openEventPage, useEvents, type ClientEvent } from "../data/events";
 import { useWallet } from "../data/useWallet";
 import { useDialogFocus } from "./useDialogFocus";
+import DialogClose from "./DialogClose";
 
 const MODE_LABEL: Record<GameMode, string> = { highscore: "Hi-Score", "1cc": "1CC", caravan: "Caravan" };
 /** Tempo de cada banner antes de passar para o próximo. */
@@ -124,6 +125,7 @@ function JoinEventDialog({ event, room, uid, onClose }: { event: ClientEvent; ro
             <h2 id="join-event-title">{event.title}</h2>
             <p>{t(MODE_LABEL[event.mode] ?? event.mode)} · {formatDay(event.starts_at, locale)} → {formatDay(event.ends_at, locale)}</p>
           </div>
+          <DialogClose onClick={onClose} />
         </header>
         <div className="controller-dialog-body join-event-body">
           {summary && <p>{summary}</p>}
@@ -141,7 +143,7 @@ function JoinEventDialog({ event, room, uid, onClose }: { event: ClientEvent; ro
           {error && <p className="mode-error" role="alert">{t(error)}</p>}
         </div>
         <footer>
-          <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button>
+          <span />
           {!(event.joined || justJoined) && <button type="button" className="primary-action" disabled={busy || short} onClick={() => void pay()}>
             {t(busy ? "Inscrevendo…" : fee > 0 ? "Pagar {count} fichas e participar" : "Participar grátis", { count: fee })}
           </button>}

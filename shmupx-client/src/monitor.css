@@ -23,8 +23,6 @@
 .am-head { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 26px 30px 18px; border-bottom: 1px solid var(--stroke); }
 .am-head h2 { margin: 0 0 6px; font-size: 34px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; }
 .am-head p { margin: 0; max-width: 520px; font-size: 13px; line-height: 1.6; color: #aaa; }
-.am-close { position: relative; z-index: 2; flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--stroke); border-radius: 3px; background: var(--am-ink); color: inherit; font-size: 16px; cursor: pointer; }
-.am-close:hover, .am-close:focus-visible { border-color: var(--cyan); color: var(--cyan); outline: none; }
 
 /* Só o miolo rola: os cantos da janela ficam parados. */
 .am-body { min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; padding: 24px 30px; }

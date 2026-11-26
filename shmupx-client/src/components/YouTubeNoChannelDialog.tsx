@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 import { useDialogFocus } from "./useDialogFocus";
+import DialogClose from "./DialogClose";
 
 const CREATE_CHANNEL = "https://www.youtube.com/create_channel";
 const LIVE_FEATURES = "https://www.youtube.com/features";
@@ -26,6 +27,7 @@ export default function YouTubeNoChannelDialog({ busy, onRetry, onClose }: { bus
             <h2 id="youtube-help-title">{t("Sua conta Google ainda não tem canal no YouTube")}</h2>
             <p>{t("Para transmitir ao vivo, o ShmupX usa um canal do YouTube da conta Google que você escolheu. Criar é grátis e leva um minuto.")}</p>
           </div>
+          <DialogClose onClick={onClose} />
         </header>
         <div className="controller-dialog-body">
           <ol className="youtube-help-steps">
@@ -47,7 +49,6 @@ export default function YouTubeNoChannelDialog({ busy, onRetry, onClose }: { bus
           <p className="muted">{t("Se o navegador abrir o YouTube em outra conta Google, troque de conta pela foto no canto superior direito antes de criar o canal.")}</p>
         </div>
         <footer className="youtube-help-actions">
-          <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button>
           <button type="button" className="primary-action" disabled={busy} onClick={onRetry}>{busy ? t("Aguardando o Google…") : t("Já criei, conectar de novo")}</button>
         </footer>
       </div>

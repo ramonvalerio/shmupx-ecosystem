@@ -202,8 +202,6 @@
 .video-modal-backdrop { z-index: 80; }
 .video-modal { width: min(1100px, 86vw); display: flex; flex-direction: column; border: 1px solid color-mix(in srgb, var(--cyan) 33.3%, transparent); border-radius: 8px; background: #0b0b0b; box-shadow: 0 24px 80px #000c; overflow: hidden; }
 .video-modal header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #ffffff1a; color: #f0fcff; font-size: 15px; letter-spacing: .04em; }
-.video-modal-close { width: 30px; height: 30px; border: 0; border-radius: 4px; background: transparent; color: #f0fcff; font-size: 16px; cursor: pointer; }
-.video-modal-close:hover, .video-modal-close:focus-visible { background: #ffffff14; color: var(--cyan); outline: none; }
 .video-modal video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 
 /* Card: a desenvolvedora logo abaixo do nome do jogo (Cave, Toaplan, Video System…). */
@@ -220,9 +218,7 @@
 /* Janela About: o nome do jogo em cima, um pouco maior que as informações. */
 .game-about-dialog { width: min(460px, 100%); }
 .game-about-dialog > header { align-items: center; }
-.game-about-dialog h2 { margin: 0; font-size: 18px; letter-spacing: .02em; }
-.game-about-close { padding: 2px 6px; border: 0; background: transparent; color: #a8c1cc; font-size: 16px; cursor: pointer; }
-.game-about-close:hover, .game-about-close:focus-visible { color: #fff; outline: none; }
+.game-about-dialog h2 { margin: 0; }
 .game-about-body { display: flex; flex-direction: column; gap: 18px; padding: 18px 22px 24px; }
 
 /* Coming soon: adesivo no canto superior direito da arte do card (fica por cima da marca de seleção). */
@@ -232,7 +228,7 @@
 /* Importar jogos › escolher a origem: cartões lado a lado (ícone, nome, estado e ação). */
 .import-games-dialog.is-picker { width: min(960px, 100%); }
 .import-games-dialog.is-picker > header { position: relative; justify-content: center; text-align: center; padding: 28px 22px 16px; border-bottom: 0; }
-.import-games-dialog.is-picker > header h2 { font-size: 30px; font-weight: 400; letter-spacing: .02em; }
+
 .import-games-dialog.is-picker > header p { margin-top: 6px; font-size: 13px; }
 .import-games-dialog.is-picker .import-header-actions { position: absolute; top: 18px; right: 18px; }
 .import-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 10px 0 14px; }

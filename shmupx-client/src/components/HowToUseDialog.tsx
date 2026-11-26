@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import { useDialogFocus } from "./useDialogFocus";
 import { TUTORIAL_TOPICS, type TutorialTopic } from "./FirstRunTutorial";
+import DialogClose from "./DialogClose";
 
 /** HOW TO USE: o jogador escolhe a dúvida e o tutorial mostra só aquele caminho. */
 export default function HowToUseDialog({ onPick, onClose }: { onPick: (topic: TutorialTopic) => void; onClose: () => void }) {
@@ -15,6 +16,7 @@ export default function HowToUseDialog({ onPick, onClose }: { onPick: (topic: Tu
             <h2 id="how-to-use-title">{t("Qual é a sua dúvida?")}</h2>
             <p>{t("Escolha um assunto e o ShmupX mostra, passo a passo, onde tocar.")}</p>
           </div>
+          <DialogClose onClick={onClose} />
         </header>
         <div className="controller-dialog-body">
           <div className="import-source-list how-to-use-list">
@@ -26,9 +28,6 @@ export default function HowToUseDialog({ onPick, onClose }: { onPick: (topic: Tu
             ))}
           </div>
         </div>
-        <footer>
-          <button type="button" className="secondary-action" onClick={onClose}>{t("Fechar")}</button>
-        </footer>
       </div>
     </div>,
     // Dentro do .client-shell, onde estão as cores do tema (--surface-raised etc.); no body o

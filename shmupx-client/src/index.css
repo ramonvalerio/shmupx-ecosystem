@@ -342,7 +342,11 @@ button:disabled { opacity: .5; cursor: default; }
 .controller-dialog-backdrop { position: fixed; inset: 0; z-index: 60; background: #000b; display: flex; justify-content: center; align-items: center; padding: 24px; }
 .controller-dialog { width: min(680px,100%); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; background: var(--surface-raised); border: 1px solid var(--stroke); border-radius: 8px; box-shadow: 0 20px 80px #0008; color: inherit; }
 .controller-dialog > header { display: flex; gap: 20px; justify-content: space-between; padding: 22px; border-bottom: 1px solid var(--stroke); flex-shrink: 0; }
-.controller-dialog h2 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+/* Título das modais: o padrão da modal do Monitor (Share Tech normal, grande, em caixa alta e espaçado). */
+.controller-dialog > header h2 { font-size: 34px; font-weight: 400; line-height: 1.15; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 6px; }
+/* X de fechar das modais (DialogClose), no canto superior direito do cabeçalho. */
+.dialog-close { position: relative; z-index: 2; flex-shrink: 0; align-self: flex-start; width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border: 1px solid var(--stroke); border-radius: 3px; background: var(--surface-recessed, var(--gray-1f1f1f)); color: inherit; cursor: pointer; }
+.dialog-close:hover, .dialog-close:focus-visible { border-color: var(--cyan); color: var(--cyan); outline: none; }
 .controller-dialog header p { font-size: 12px; line-height: 1.6; color: #aaa; margin: 0; }
 .controller-dialog header button { align-self: flex-start; flex-shrink: 0; }
 .controller-dialog-body { padding: 0 22px 20px; overflow-y: auto; min-height: 0; }
@@ -486,7 +490,7 @@ button:disabled { opacity: .5; cursor: default; }
 /* Configurações numa janela compacta (engrenagem acima do avatar). */
 .settings-modal { width: min(980px, 100%); height: min(720px, calc(100dvh - 48px)); }
 .settings-modal > header { align-items: center; padding: 14px 18px; }
-.settings-modal > header h2 { margin: 0; font-size: 18px; }
+.settings-modal > header h2 { margin: 0; }
 .settings-modal .controller-dialog-body { padding: 0; overflow: hidden; display: flex; min-height: 0; flex: 1; }
 .settings-modal .client-page.settings-page { padding: 0; width: 100%; display: flex; min-height: 0; }
 .settings-modal .settings-page > .page-heading { display: none; }

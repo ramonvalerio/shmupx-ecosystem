@@ -185,7 +185,7 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
     case "import-other": return { code: "1.3", index: 3, target: "import-back", hand: true, block: true,
       title: "Tente outra fonte", text: "Aqui não há jogos do ShmupX neste computador. Toque em Voltar e escolha outra fonte." };
     case "import-close": return { code: "1.4", index: 4, target: "import-close", hand: true, block: true,
-      title: "Jogos importados!", text: "A coleção já mostra os jogos que você tem. Toque em Fechar para voltar a ela." };
+      title: "Jogos importados!", text: "A coleção já mostra os jogos que você tem. Toque no X para voltar a ela." };
     // Na dúvida "Como configurar o controle" não há Próximo: configurar é o assunto.
     case "controller-open": return topic === "controller"
       ? { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true,
@@ -193,7 +193,7 @@ function flowStep(id: FlowStep, stage: Stage, topic: TutorialTopic): Omit<StepIn
       : { code: "2.2", index: 2, target: "cabinet-panel", hand: true, block: true, next: true,
         title: "Configure o seu controle", text: "Toque no painel do gabinete arcade, onde ficam a alavanca e os botões, para escolher os botões do seu controle. Se ele já está do seu jeito, toque em Próximo." };
     case "controller-map": return { code: "2.3", index: 3, target: "controls-dialog", hand: false, block: true,
-      title: "Escolha os botões", text: "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque em Fechar." };
+      title: "Escolha os botões", text: "Escolha o controle na lista, clique num botão do gabinete e aperte o botão do controle (ou uma tecla). Quando terminar, toque no X." };
     case "pick-game": return { code: stage === "controller" ? "2.1" : "3.1", index: 1, target: "game-owned", hand: true, block: true,
       title: "Escolha um jogo", text: "Toque num jogo colorido: são os que você tem. Os detalhes, o gabinete e a ficha para jogar aparecem ao lado." };
     case "pick-mode": return { code: "3.2", index: 2, target: "play-modes", hand: true, block: true, next: true,
