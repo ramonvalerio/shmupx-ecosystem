@@ -8,9 +8,9 @@
   validator, games, ffmpeg — mais o instalador do WebView2 e a marca `.portable`, e anexa tudo,
   compactado, ao lançador (shmupx-client\portable).
 
-  Saída, ao lado do instalador NSIS:
-    target\release\bundle\portable\ShmupX-Portable-<versão>.exe
-    target\release\bundle\portable\ShmupX-Portable-<versão>.exe.sha256
+  Saída, ao lado do instalador NSIS (na pasta de build do Cargo: target\, ou CARGO_TARGET_DIR):
+    release\bundle\portable\ShmupX-Portable-<versão>.exe
+    release\bundle\portable\ShmupX-Portable-<versão>.exe.sha256
 
   O lançador é compilado com o runtime do C embutido (+crt-static): ele próprio também tem de abrir
   num Windows sem o Visual C++ Redistributable.
@@ -20,7 +20,10 @@ $client = Split-Path $PSScriptRoot -Parent
 $tauri = Join-Path $client "src-tauri"
 $bundle = Join-Path $tauri "bundle"
 $raiz = Split-Path $client -Parent
-$release = Join-Path $raiz "target\release"
+# A pasta de build do Cargo (respeita CARGO_TARGET_DIR, como o tauri build).
+$alvo = (cargo metadata --format-version 1 --no-deps --manifest-path (Join-Path $raiz "Cargo.toml") | ConvertFrom-Json).target_directory
+if (-not $alvo) { throw "não foi possível descobrir a pasta de build do Cargo" }
+$release = Join-Path $alvo "release"
 $versao = (Get-Content -Raw (Join-Path $tauri "tauri.conf.json") | ConvertFrom-Json).version
 $exe = Join-Path $release "shmupx-client.exe"
 if (-not (Test-Path $exe)) { throw "não achei ${exe}: rode o tauri build antes" }
