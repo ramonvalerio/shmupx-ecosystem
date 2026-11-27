@@ -352,7 +352,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
             {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Em breve")}</span>{t("Por enquanto, só treino. O Ranked e a live ranked chegam quando o jogo for aprovado.")}</p>}
           </div>
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
-          <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping}
+          <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={stopping}
             setup={<PlaySetup play={play} owns={launcher.owns} disabled={gameOpen || liveOn || stopping} compact />} />
           {/* O espaço que sobra à direita: os eventos do Lab, com PARTICIPAR. */}
           <EventsCarousel room={room} uid={playerId} />

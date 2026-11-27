@@ -216,9 +216,9 @@ mod janela_do_jogo {
         // som chegava atrasado).
         let sem_analise = ["-probesize", "32", "-analyzeduration", "0"];
         cmd.args(sem_analise);
-        cmd.args(["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "nv12", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
+        cmd.args(["-f", "rawvideo", "-pix_fmt", "nv12", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
         cmd.args(sem_analise);
-        cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
+        cmd.args(["-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
         // NV12 já é o formato dos encoders: sem conversão. Cor BT.601 16–235 (a da placa de vídeo).
         cmd.args(["-map", "0:v", "-map", "1:a", "-colorspace", "smpte170m", "-color_primaries", "smpte170m", "-color_trc", "smpte170m", "-color_range", "tv"]);
         cmd.args(encoder.gravacao());

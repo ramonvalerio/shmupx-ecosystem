@@ -347,9 +347,9 @@ fn spawn_ffmpeg_janela(ingest: &str, porta_audio: u16, encoder: ffmpeg::EncoderH
     // começar, o som acumulava nesse tempo e a live saía com o áudio atrasado.
     let sem_analise = ["-probesize", "32", "-analyzeduration", "0"];
     cmd.args(sem_analise);
-    cmd.args(["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
+    cmd.args(["-f", "rawvideo", "-pix_fmt", "bgra", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
     cmd.args(sem_analise);
-    cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
+    cmd.args(["-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
     cmd.args(["-map", "0:v", "-map", "1:a", "-vf", "format=nv12"]);
     cmd.args(encoder.live()).args(ffmpeg::TAXA_LIVE);
     cmd.args(["-c:a", "aac", "-b:a", "160k", "-ar", "48000"]);

@@ -97,12 +97,16 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   }
 
   /**
-   * Um jogo valendo ranking por vez na conta: com um Ranked/Live aberto (aqui, no celular ou no
-   * MiSTer), avisa e não abre outro Ranked/Live. Training não trava nem é travado.
+   * Um jogo valendo ranking por vez na conta: com um Ranked/Live aberto no celular, no MiSTer ou na
+   * Steam, avisa e não abre outro Ranked/Live. O do ShmupX Emulator deste PC pode ser interrompido
+   * por outro no emulador (do mesmo jogo ou de outro): o jogo troca na mesma janela e a run anterior
+   * termina na troca. Training não trava nem é travado. `platform`: onde o novo vai abrir (sem ela,
+   * ainda na escolha, só trava o que não dá para interromper daqui).
    */
-  function blockedByOpenGame(kind: PlayKind): boolean {
+  function blockedByOpenGame(kind: PlayKind, platform?: PlayOn): boolean {
     const open = getAccountPlaying();
     if (!blocksLaunch(open, kind)) return false;
+    if (open.device === "pc" && open.platform === "emulator" && (platform === undefined || platform === "emulator")) return false;
     const where = playingWhere(open);
     setError(t("Já tem um jogo aberto na sua conta: {game} ({platform}, {device}). Pare esse jogo antes de abrir outro.", { game: open.title, platform: t(where.platform), device: t(where.device) }));
     return true;
@@ -139,7 +143,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     const chosen = playableMode(room, wanted);
     setError(null);
     setNotice(null);
-    if (blockedByOpenGame(kind)) return;
+    if (blockedByOpenGame(kind, platform)) return;
     if (kind !== "training" && platform === "mister" && !room.rankedMister) { setError(t(RANKED_MISTER_OFF)); return; }
     setPractice(kind === "training");
     setMode(chosen);
@@ -157,6 +161,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
     if (!choosing) return;
     const { kind, platform, mode: chosen } = choosing;
     setChoosing(null);
+    if (blockedByOpenGame(kind, platform)) return;
     setMode(chosen);
     // A run começa quando o jogo abrir (PC; com live, depois que ela entra no ar): leva o modo.
     if (kind !== "training" && platform !== "mister") setPendingRunMode(room.id, chosen);
