@@ -7,7 +7,7 @@
 .DESCRIPTION
   validator\  shmupx-validator.exe + dependências (shmupx-lab\validators\tools\build_validator.ps1)
   games\      só os scripts de src-tauri\scripts-aceitos.json, e só se aprovados no Lab
-  ffmpeg\     ffmpeg.exe (de -Ffmpeg ou do PATH) e a licença dele, se encontrada
+  ffmpeg\     ffmpeg.exe compilado da última versão oficial (scripts\build-ffmpeg.sh, pelo MSYS2) e a licença
   ytdlp\      yt-dlp.exe da última release oficial (SHA-256 conferido): baixa o vídeo da live do
               top 3 para o envio ao canal oficial (só Windows)
   engine\     ShmupX Emulator (ShmupX Engine): o pacote do último build do main que passou, da
@@ -21,14 +21,12 @@
 
   Depois: npm run bundle (o tauri build com tauri.bundle.conf.json). O Linux faz o mesmo em linux/build.sh.
 
-.PARAMETER Ffmpeg
-  ffmpeg.exe a distribuir. Padrão: o do PATH. Builds com libx264 são GPL: leve a licença junto.
 .PARAMETER ReusarMotor
   Não recompila o motor se shmupx-lab\validators\dist\shmupx-validator já existe.
 .PARAMETER Emulador
   Pasta de um pacote do ShmupX Engine já baixado (com shmupx-engine.exe), no lugar do build do Actions.
 #>
-param([string]$Ffmpeg, [switch]$ReusarMotor, [string]$Emulador)
+param([switch]$ReusarMotor, [string]$Emulador)
 $ErrorActionPreference = "Stop"
 $client = Split-Path $PSScriptRoot -Parent
 $validators = Resolve-Path (Join-Path $client "..\shmupx-lab\validators")
@@ -56,11 +54,23 @@ foreach ($s in $aceitos) {
     Remove-Item -Recurse -Force "$destino\templates\raw_digits" -ErrorAction SilentlyContinue
 }
 
-if (-not $Ffmpeg) { $Ffmpeg = (Get-Command ffmpeg -ErrorAction Stop).Source }
-Copy-Item $Ffmpeg "$saida\ffmpeg\ffmpeg.exe"
-$licenca = Get-ChildItem (Split-Path (Split-Path $Ffmpeg)) -Filter "LICENSE*" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($licenca) { Copy-Item $licenca.FullName "$saida\ffmpeg\LICENSE.txt" }
-else { Write-Warning "licença do FFmpeg não encontrada ao lado de $Ffmpeg; inclua-a antes de distribuir" }
+$msys = if ($env:MSYS2_ROOT) { $env:MSYS2_ROOT } else { "C:\msys64" }
+$bash = Join-Path $msys "usr\bin\bash.exe"
+$cygpath = Join-Path $msys "usr\bin\cygpath.exe"
+if (-not (Test-Path $bash)) { throw "MSYS2 não encontrado em $msys (defina MSYS2_ROOT): ele compila o FFmpeg" }
+$cacheFfmpeg = if ($env:FFMPEG_CACHE) { $env:FFMPEG_CACHE } else { Join-Path $env:LOCALAPPDATA "shmupx\ffmpeg" }
+$scriptFfmpeg = & $cygpath -u (Join-Path $PSScriptRoot "build-ffmpeg.sh")
+$cacheFfmpegUnix = & $cygpath -u $cacheFfmpeg
+$msystemAntes = $env:MSYSTEM
+$env:MSYSTEM = "MINGW64"
+$env:CHERE_INVOKING = "1"
+try { $pastaFfmpeg = & $bash -lc "bash '$scriptFfmpeg' '$cacheFfmpegUnix'" | Select-Object -Last 1 }
+finally { $env:MSYSTEM = $msystemAntes; Remove-Item Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
+if ($LASTEXITCODE -or -not $pastaFfmpeg) { throw "falha ao compilar o FFmpeg" }
+$pastaFfmpeg = & $cygpath -w $pastaFfmpeg
+Copy-Item (Join-Path $pastaFfmpeg "bin\ffmpeg.exe") "$saida\ffmpeg\ffmpeg.exe"
+Copy-Item (Join-Path $pastaFfmpeg "LICENSE.txt") "$saida\ffmpeg\LICENSE.txt"
+Get-Content (Join-Path $pastaFfmpeg "VERSION.txt")
 
 # yt-dlp (Windows): baixa do YouTube o vídeo da live que entra no top 3, para o envio ao canal
 # oficial (a live não grava nada no PC). O da última release oficial, com o SHA-256 conferido.

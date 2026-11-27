@@ -51,8 +51,9 @@ for s in json.load(open("/work/shmupx-client/src-tauri/scripts-aceitos.json", en
     destino = saida / "games" / s["game"] / s["version"]
     shutil.copytree(origem, destino, ignore=shutil.ignore_patterns("raw_digits"))
 PY
-cp /opt/ffmpeg/ffmpeg "$saida/ffmpeg/ffmpeg"
-cp /opt/ffmpeg/GPLv3.txt "$saida/ffmpeg/LICENSE.txt" 2>/dev/null || true
+pasta_ffmpeg=$(bash /work/shmupx-client/scripts/build-ffmpeg.sh "${FFMPEG_CACHE:-/cache/ffmpeg}")
+cp "$pasta_ffmpeg/bin/ffmpeg" "$saida/ffmpeg/ffmpeg"
+cp "$pasta_ffmpeg/LICENSE.txt" "$saida/ffmpeg/LICENSE.txt"
 "$saida/validator/shmupx-validator" --list-games --games-dir "$saida/games" | head -c 300; echo
 
 # ShmupX Emulator (ShmupX Engine, executável do Windows; o Client o abre pelo Wine): o último build
