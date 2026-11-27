@@ -45,7 +45,8 @@ jobs:
           echo "FFmpeg $ffmpeg, x264 $x264, receita $receita"
 
       - name: FFmpeg já compilado
-        uses: actions/cache@v4
+        id: cache-ffmpeg
+        uses: actions/cache/restore@v4
         with:
           path: ffmpeg-cache
           key: ffmpeg-win64-${{ steps.versao.outputs.receita }}-${{ steps.versao.outputs.ffmpeg }}-x264-${{ steps.versao.outputs.x264 }}
@@ -65,15 +66,17 @@ jobs:
           rustup toolchain install
           rustup show active-toolchain
 
-      - name: Cache (Rust)
-        uses: actions/cache@v4
+      - name: Rust já compilado
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: client-windows-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: client-windows-
+          key: client-windows-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            client-windows-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+            client-windows-
 
       - name: Motor de validação
         run: ./shmupx-lab/validators/tools/build_validator.ps1 -Python python
@@ -121,3 +124,20 @@ jobs:
           path: target/release/bundle/portable/ShmupX-Portable-*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Guardar o Rust compilado
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: client-windows-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}
+
+      - name: Guardar o FFmpeg compilado
+        if: always() && steps.cache-ffmpeg.outputs.cache-hit != 'true' && hashFiles('ffmpeg-cache/ffmpeg-win64-*/bin/ffmpeg.exe') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: ffmpeg-cache
+          key: ffmpeg-win64-${{ steps.versao.outputs.receita }}-${{ steps.versao.outputs.ffmpeg }}-x264-${{ steps.versao.outputs.x264 }}

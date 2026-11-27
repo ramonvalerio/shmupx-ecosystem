@@ -17,11 +17,13 @@ jobs:
         run: docker build -t shmupx-client-linux shmupx-client/linux
 
       - name: Cache (Rust e motor de validação)
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/cache
-          key: client-linux-${{ hashFiles('Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}
-          restore-keys: client-linux-
+          key: client-linux-${{ hashFiles('Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}-${{ github.run_id }}
+          restore-keys: |
+            client-linux-${{ hashFiles('Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}-
+            client-linux-
 
       - name: Versões mais novas do FFmpeg e do x264 (repositórios oficiais)
         id: versao
@@ -37,7 +39,8 @@ jobs:
           echo "FFmpeg $ffmpeg, x264 $x264, receita $receita"
 
       - name: FFmpeg já compilado
-        uses: actions/cache@v4
+        id: cache-ffmpeg
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ffmpeg-cache
           key: ffmpeg-linux64-${{ steps.versao.outputs.receita }}-${{ steps.versao.outputs.ffmpeg }}-x264-${{ steps.versao.outputs.x264 }}
@@ -59,6 +62,26 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$RUNNER_TEMP/out:/out" -v "$RUNNER_TEMP/cache:/cache" -v "$RUNNER_TEMP/ffmpeg-cache:/ffmpeg-cache" \
             shmupx-client-linux bash /src/shmupx-client/linux/build.sh
           sudo chown -R "$(id -u)" "$RUNNER_TEMP/cache" "$RUNNER_TEMP/out" "$RUNNER_TEMP/ffmpeg-cache"
+
+      - name: FFmpeg compilado nesta execução
+        id: ffmpeg-novo
+        if: always() && steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          if ls "$RUNNER_TEMP"/ffmpeg-cache/ffmpeg-linux64-*/bin/ffmpeg >/dev/null 2>&1; then echo "pronto=1" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Guardar o Rust compilado
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/cache
+          key: client-linux-${{ hashFiles('Cargo.lock', 'shmupx-lab/validators/requirements-build.txt') }}-${{ github.run_id }}
+
+      - name: Guardar o FFmpeg compilado
+        if: always() && steps.ffmpeg-novo.outputs.pronto == '1'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ffmpeg-cache
+          key: ffmpeg-linux64-${{ steps.versao.outputs.receita }}-${{ steps.versao.outputs.ffmpeg }}-x264-${{ steps.versao.outputs.x264 }}
 
       - uses: actions/upload-artifact@v4
         with:
