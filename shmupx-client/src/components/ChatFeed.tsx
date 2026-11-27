@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useI18n } from "../i18n";
 import { linkParts } from "../data/chatLinks";
@@ -48,17 +48,66 @@ function ChatText({ text }: { text: string }) {
     : <Fragment key={index}>{part.text}</Fragment>)}</>;
 }
 
-export default function ChatFeed({ messages, status = "ready", error, playerId, roomId, emptyText }: ChatFeedProps) {
+// Só redesenha quando as mensagens (ou o estado do chat) mudam: a sala redesenha a cada atualização
+// (presença, contagem da live) e a lista é a parte mais pesada dela.
+export default memo(ChatFeed);
+
+function ChatFeed({ messages, status = "ready", error, playerId, roomId, emptyText }: ChatFeedProps) {
   const { t, locale } = useI18n();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
+  // Rolagem: o jogador está no fim (as novas aparecem sozinhas) ou leu mais acima (fica onde está).
+  const atBottom = useRef(true);
+  const savedTop = useRef(0);
+  const placed = useRef(false);
+  const count = useRef(0);
+  count.current = messages.length;
   // Avatar de cada autor (perfil público), atualizado quando alguém troca.
   const profiles = usePublicProfiles(messages.map((m) => m.authorId ?? ""));
   const { blocked, block, unblock } = useBlockedAuthors(playerId);
   const [panel, setPanel] = useState<Panel | null>(null);
 
+  function onScroll() {
+    const feed = feedRef.current;
+    // Escondido (outra aba): o navegador zera a rolagem; a posição guardada continua valendo.
+    if (!feed || feed.clientHeight === 0) return;
+    savedTop.current = feed.scrollTop;
+    atBottom.current = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 48;
+  }
+
+  // Mensagens novas: a primeira leva vai direto ao fim (sem animação); depois, só desce sozinho se o
+  // jogador já estava no fim ou se a mensagem é dele.
+  useLayoutEffect(() => {
+    const feed = feedRef.current;
+    if (!feed || feed.clientHeight === 0 || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    const mine = Boolean(playerId && last.authorId === playerId && last.pending);
+    if (!placed.current) {
+      feed.scrollTop = feed.scrollHeight;
+      placed.current = true;
+    } else if (atBottom.current || mine) {
+      feed.scrollTo({ top: feed.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, playerId]);
+
+  // Voltando para a sala (a tela estava escondida) ou mudando o tamanho da janela: o chat fica como
+  // estava, no fim ou no ponto em que o jogador parou de ler.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+    const feed = feedRef.current;
+    if (!feed || typeof ResizeObserver === "undefined") return;
+    let hidden = feed.clientHeight === 0;
+    const observer = new ResizeObserver(() => {
+      const nowHidden = feed.clientHeight === 0;
+      if (!nowHidden) {
+        if (atBottom.current) feed.scrollTop = feed.scrollHeight;
+        else if (hidden) feed.scrollTop = savedTop.current;
+        // As mensagens chegaram com a tela escondida: já estão no lugar.
+        if (count.current > 0) placed.current = true;
+      }
+      hidden = nowHidden;
+    });
+    observer.observe(feed);
+    return () => observer.disconnect();
+  }, []);
 
   async function sendReport(message: ChatMessage, reason: ReportReason) {
     if (!playerId || !roomId) return;
@@ -85,7 +134,7 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
   }
 
   return (
-    <div className="chat-feed" aria-live="polite" aria-busy={status === "loading"}>
+    <div ref={feedRef} className="chat-feed" aria-live="polite" aria-busy={status === "loading"} onScroll={onScroll}>
       {status === "loading" && <p className="empty-state">{t("Carregando o chat da sala…")}</p>}
       {status === "error" && <p className="empty-state" role="alert">{t(error ?? "Não foi possível conectar ao chat da sala.")}</p>}
       {status === "ready" && messages.length === 0 && <p className="empty-state">{emptyText ?? t("Nenhuma mensagem ainda. Diga oi para a sala!")}</p>}
@@ -152,7 +201,6 @@ export default function ChatFeed({ messages, status = "ready", error, playerId, 
           </article>
         );
       })}
-      <div ref={bottomRef} />
     </div>
   );
 }

@@ -20,7 +20,6 @@ interface ChatInputProps {
 export default function ChatInput({ onSendMessage, disabled = false, error, placeholder }: ChatInputProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -80,16 +79,17 @@ export default function ChatInput({ onSendMessage, disabled = false, error, plac
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = emojify(draft.trim());
-    if (!trimmed || sending) return;
-    setSending(true);
+    if (!trimmed) return;
+    // O campo limpa na hora (a mensagem já aparece no chat como pendente) e não espera a confirmação
+    // do servidor para a próxima. Se falhar, o texto volta para o campo, a não ser que o jogador já
+    // tenha começado outro.
+    setDraft("");
+    setPickerOpen(false);
     try {
       await onSendMessage(trimmed);
-      setDraft("");
-      setPickerOpen(false);
     } catch {
-      // O erro já aparece abaixo do campo (useRoomChat); o rascunho fica para tentar de novo.
-    } finally {
-      setSending(false);
+      // O erro já aparece abaixo do campo (useRoomChat).
+      setDraft((current) => current || trimmed);
     }
   }
 
@@ -128,7 +128,7 @@ export default function ChatInput({ onSendMessage, disabled = false, error, plac
         </ul>
       )}
       <input ref={inputRef} value={draft} onChange={(event) => update(event.target.value)} onKeyDown={onKeyDown} placeholder={label} maxLength={MAX_MESSAGE_LENGTH} disabled={disabled} aria-label={label} />
-      <button type="submit" disabled={disabled || sending || !draft.trim()}>{t("Enviar")}</button>
+      <button type="submit" disabled={disabled || !draft.trim()}>{t("Enviar")}</button>
       {error && <p className="chat-composer-error" role="alert">{t(error)}</p>}
     </form>
   );

@@ -408,7 +408,11 @@ button:disabled { opacity: .5; cursor: default; }
 .client-workspace { flex-direction: column; }
 .room-tab-recording { width: 7px; height: 7px; border-radius: 50%; background: #ff6b76; flex-shrink: 0; }
 .room-stage { flex: 1; min-height: 0; display: flex; overflow: hidden; }
-.room-stage > .collection-pane { flex: 1; }
+.room-stage > .room-stage-view > .collection-pane { flex: 1; }
+/* Cada tela do palco (coleção, sala, ranking, eventos) fica montada ao trocar de aba: o invólucro
+   não entra no layout, e o escondido sai de cena sem perder o estado. */
+.room-stage-view { display: contents; }
+.room-stage-view[hidden] { display: none; }
 
 /* Sala dedicada */
 

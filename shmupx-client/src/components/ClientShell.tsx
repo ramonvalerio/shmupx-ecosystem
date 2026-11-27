@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
@@ -191,6 +191,19 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       if (next) onSelectRoom(next);
     }
   }
+  // Telas do palco que ficam montadas ao trocar de aba (voltar mantém chat, rolagem, filtros): a
+  // coleção, cada sala aberta e o Ranking e os Eventos de cada sala depois da primeira visita.
+  const stageRoomIds = activeRoom && !openRoomIds.includes(activeRoom.id) ? [...openRoomIds, activeRoom.id] : openRoomIds;
+  const [visitedViews, setVisitedViews] = useState<string[]>([]);
+  const shownView = activeRoom === null ? null : rankingRoomIds.includes(activeRoom.id) ? `ranking:${activeRoom.id}` : eventsRoomIds.includes(activeRoom.id) ? `events:${activeRoom.id}` : null;
+  useEffect(() => {
+    setVisitedViews((current) => {
+      const kept = current.filter((view) => stageRoomIds.includes(view.slice(view.indexOf(":") + 1)));
+      const next = shownView && !kept.includes(shownView) ? [...kept, shownView] : kept;
+      return next.length === current.length && next.every((view, index) => view === current[index]) ? current : next;
+    });
+  }, [shownView, stageRoomIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function setRanking(id: string, open: boolean) {
     setRankingRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
     if (open) setEventsRoomIds((current) => current.filter((roomId) => roomId !== id));
@@ -387,15 +400,33 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       <div className="client-workspace" hidden={!isLibrary}>
         {/* As abas de cima saíram por enquanto: os jogos abertos ficam no menu lateral. */}
         <div className="room-stage">
-          {activeRoom === null ? (
+          <div className="room-stage-view" hidden={activeRoom !== null}>
             <CollectionPane uid={profile.uid} rooms={rooms} runs={runs} selectedRoomId={selectedRoomId} recordingRoomId={recordingRoomId} onSelectRoom={onSelectRoom} onOpenRoom={openGame} compact={false} bigPicture={bigPicture.active} />
-          ) : rankingRoomIds.includes(activeRoom.id) ? (
-            <RoomRankingView key={activeRoom.id} room={activeRoom} runs={runs} uid={profile.uid} playerName={profile.displayName} />
-          ) : eventsRoomIds.includes(activeRoom.id) ? (
-            <RoomRankingView key={`eventos-${activeRoom.id}`} room={activeRoom} runs={runs} uid={profile.uid} playerName={profile.displayName} events />
-          ) : (
-            renderRoom(activeRoom, { openRanking: () => setRanking(activeRoom.id, true), showCollection: () => setActiveRoomId(null) })
-          )}
+          </div>
+          {stageRoomIds.map((id) => {
+            const room = rooms.find((candidate) => candidate.id === id);
+            if (!room) return null;
+            const active = activeRoom?.id === id;
+            const ranking = `ranking:${id}`;
+            const events = `events:${id}`;
+            return (
+              <Fragment key={id}>
+                <div className="room-stage-view" hidden={!active || shownView !== null}>
+                  {renderRoom(room, { openRanking: () => setRanking(id, true), showCollection: () => setActiveRoomId(null) })}
+                </div>
+                {(shownView === ranking || visitedViews.includes(ranking)) && (
+                  <div className="room-stage-view" hidden={shownView !== ranking}>
+                    <RoomRankingView room={room} runs={runs} uid={profile.uid} playerName={profile.displayName} />
+                  </div>
+                )}
+                {(shownView === events || visitedViews.includes(events)) && (
+                  <div className="room-stage-view" hidden={shownView !== events}>
+                    <RoomRankingView room={room} runs={runs} uid={profile.uid} playerName={profile.displayName} events />
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
         </div>
       </div>
       </div>

@@ -296,7 +296,7 @@
 .page-back-bar + .client-page { flex: 1; min-height: 0; height: auto; padding-top: 16px; }
 
 /* Sem as abas de cima: a sala começa no topo e o painel de jogadores volta ao alinhamento normal. */
-.client-workspace > .room-stage > .game-room { padding-top: 16px; }
+.client-workspace > .room-stage > .room-stage-view > .game-room { padding-top: 16px; }
 .game-room-back { margin: 0 0 4px; padding: 0; border: 0; background: transparent; color: var(--cyan); font-size: 12px; letter-spacing: .04em; cursor: pointer; }
 .game-room-back:hover { text-decoration: underline; }
 /* Menu lateral: cada jogo com o × de fechar (aparece ao passar o mouse e no jogo ativo). */
@@ -313,7 +313,7 @@
 
 /* Margens da sala pela metade (pedido: aproveitar o espaço). */
 .game-room { gap: 9px; padding: 8px 9px 8px 10px; }
-.client-workspace > .room-stage > .game-room { padding-top: 8px; }
+.client-workspace > .room-stage > .room-stage-view > .game-room { padding-top: 8px; }
 .game-room-column { gap: 6px; }
 .game-room-header { gap: 0 10px; padding: 6px 8px 6px 6px; }
 .game-room-main { gap: 7px; }
@@ -325,7 +325,7 @@
 .game-room-players ul { margin-top: 8px; margin-left: 7px; gap: 4px; }
 .room-player { padding: 5px; }
 /* Sem margens: os blocos da sala encostam uns nos outros e nas bordas. */
-.game-room, .client-workspace > .room-stage > .game-room { gap: 0; padding: 0; }
+.game-room, .client-workspace > .room-stage > .room-stage-view > .game-room { gap: 0; padding: 0; }
 .game-room-column { gap: 0; }
 .chat-composer { margin: 0; }
 /* O botão do jogo é girado 180°: o espaço "de baixo" dele aparece em cima, onde fica o ×. */

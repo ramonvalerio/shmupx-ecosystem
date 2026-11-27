@@ -1,7 +1,7 @@
 /* ── Coleção: layout do Client .NET (cards grandes, filtros em segmentos, gabinete arcade) ──
    Carregado depois de index.css/room.css: estas regras substituem as antigas da coleção. */
 
-.room-stage > .collection-layout { flex: 1; }
+.room-stage > .room-stage-view > .collection-layout { flex: 1; }
 .collection-layout { min-width: 0; min-height: 0; background: #121212; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
 .collection-layout.compact { grid-template-columns: minmax(0, 1fr); }
 
