@@ -250,7 +250,7 @@ fn tela_de_espera() -> Vec<u8> {
 
 /// FFmpeg da live: vídeo BGRA 1280×720 a 60 quadros/s pelo stdin (entrada 0) e o áudio `f32le`
 /// por uma conexão TCP local (entrada 1, o FFmpeg escuta), direto para o YouTube (nada no PC).
-fn spawn_ffmpeg_janela(ingest: &str, porta_audio: u16, log: &PathBuf) -> std::io::Result<Child> {
+fn spawn_ffmpeg_janela(ingest: &str, porta_audio: u16, encoder: ffmpeg::EncoderH264, log: &PathBuf) -> std::io::Result<Child> {
     let mut cmd = Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-loglevel", "error", "-y"]);
     let tamanho = format!("{}x{}", janela::LARGURA, janela::ALTURA);
@@ -262,9 +262,8 @@ fn spawn_ffmpeg_janela(ingest: &str, porta_audio: u16, log: &PathBuf) -> std::io
     cmd.args(["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "bgra", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
     cmd.args(sem_analise);
     cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
-    cmd.args(["-map", "0:v", "-map", "1:a", "-vf", "format=yuv420p"]);
-    cmd.args(["-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency"]);
-    cmd.args(["-b:v", "4500k", "-maxrate", "4500k", "-bufsize", "9000k", "-g", "120", "-keyint_min", "120", "-sc_threshold", "0"]);
+    cmd.args(["-map", "0:v", "-map", "1:a", "-vf", "format=nv12"]);
+    cmd.args(encoder.live()).args(ffmpeg::TAXA_LIVE);
     cmd.args(["-c:a", "aac", "-b:a", "160k", "-ar", "48000"]);
     cmd.args(["-f", "flv", "-flvflags", "no_duration_filesize", ingest]);
     cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::from(std::fs::File::create(log)?));
@@ -296,7 +295,8 @@ fn ligar_parada(da_live: Arc<AtomicBool>, do_escritor: Arc<AtomicBool>) {
 /// áudio (da `fonte`, que começa em silêncio).
 async fn abrir_envio(ingest: &str, log: &PathBuf, parar_audio: Arc<AtomicBool>, tela: janela::Tela, fonte: audio::Fonte) -> Result<Child, String> {
     let porta = porta_livre()?;
-    let mut child = spawn_ffmpeg_janela(ingest, porta, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
+    let encoder = ffmpeg::encoder_h264_async().await;
+    let mut child = spawn_ffmpeg_janela(ingest, porta, encoder, log).map_err(|e| format!("FFmpeg indisponível: {e}"))?;
     let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de vídeo")?;
     #[cfg(windows)]
     let stdin = std::fs::File::from(stdin.into_owned_handle().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
@@ -434,6 +434,7 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     }
     // 1. A live no YouTube, com o jogo ainda fechado.
     live.definir(app, Estado { status: "preparing", ..base.clone() });
+    ffmpeg::preparar_encoder_h264();
     let criada = crate::net::backend::chamar_json(
         token,
         reqwest::Method::POST,

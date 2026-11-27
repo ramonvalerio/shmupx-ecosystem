@@ -90,6 +90,7 @@ pub use janela_do_jogo::{esperar_janela, iniciar};
 /// e grava só ela, com o som.
 #[cfg(windows)]
 pub async fn iniciar_do_jogo(video: &Path, jogo_pid: Option<u32>, steam_app_id: Option<u32>) -> Result<Gravacao, String> {
+    ffmpeg::preparar_encoder_h264();
     // Na Steam, quem abriu pode ter sido um launcher: vale também qualquer processo da pasta do jogo.
     let pasta = match steam_app_id {
         Some(app_id) => tauri::async_runtime::spawn_blocking(move || crate::steam::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten(),
@@ -157,7 +158,7 @@ mod janela_do_jogo {
     /// Começa a gravar a janela do jogo, com o som do processo dono dela, em `video`.
     pub async fn iniciar(video: &Path, janela_do_jogo: janela::Window) -> Result<Gravacao, String> {
         let log = caminho_do_log(video);
-        let encoder = tauri::async_runtime::spawn_blocking(ffmpeg::encoder_h264).await.map_err(|e| e.to_string())?;
+        let encoder = ffmpeg::encoder_h264_async().await;
         let tela = janela_nv12::tela_inicial();
         let captura = janela_nv12::iniciar(janela_do_jogo, tela.clone())?;
         let pid_do_jogo = captura.pid;
@@ -206,7 +207,7 @@ mod janela_do_jogo {
     /// `f32le` estéreo por TCP local (entrada 1, o FFmpeg escuta), em H.264 (`encoder`, de
     /// preferência na placa de vídeo) e AAC num MP4 fragmentado (legível mesmo se o processo for
     /// interrompido).
-    fn spawn(video: &Path, porta_audio: u16, encoder: &[&str], log: &Path) -> io::Result<Child> {
+    fn spawn(video: &Path, porta_audio: u16, encoder: ffmpeg::EncoderH264, log: &Path) -> io::Result<Child> {
         let mut cmd = Command::new(ffmpeg::programa());
         cmd.args(["-hide_banner", "-nostats", "-loglevel", "warning", "-y"]);
         let tamanho = format!("{}x{}", janela::LARGURA, janela::ALTURA);
@@ -220,7 +221,7 @@ mod janela_do_jogo {
         cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
         // NV12 já é o formato dos encoders: sem conversão. Cor BT.601 16–235 (a da placa de vídeo).
         cmd.args(["-map", "0:v", "-map", "1:a", "-colorspace", "smpte170m", "-color_primaries", "smpte170m", "-color_trc", "smpte170m", "-color_range", "tv"]);
-        cmd.args(encoder);
+        cmd.args(encoder.gravacao());
         cmd.args(["-c:a", "aac", "-b:a", "160k"]);
         cmd.args(["-movflags", "+frag_keyframe+empty_moov"]);
         cmd.arg(video);
@@ -237,11 +238,11 @@ mod janela_do_jogo {
 pub async fn iniciar_tela_inteira(video: &Path) -> Result<Gravacao, String> {
     let log = caminho_do_log(video);
     let tela = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-    let encoder = tauri::async_runtime::spawn_blocking(ffmpeg::encoder_h264).await.map_err(|e| e.to_string())?;
+    let encoder = ffmpeg::encoder_h264_async().await;
     let mut cmd = Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-y", "-f", "x11grab", "-framerate", "60", "-i", &tela]);
     cmd.args(["-vf", "scale=-2:720:flags=area,format=nv12", "-fps_mode", "cfr", "-r", "60"]);
-    cmd.args(encoder).args(["-movflags", "+frag_keyframe+empty_moov"]);
+    cmd.args(encoder.gravacao()).args(["-movflags", "+frag_keyframe+empty_moov"]);
     cmd.arg(video);
     let arquivo_log = std::fs::File::create(&log).map_err(|e| format!("falha ao criar o log da gravação: {e}"))?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::from(arquivo_log));

@@ -45,35 +45,79 @@ pub fn is_ffmpeg_available() -> bool {
     cmd.status().map(|status| status.success()).unwrap_or(false)
 }
 
-static ENCODERS_H264: [&[&str]; 4] = [
-    &["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0"],
-    &["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "22", "-qp_p", "22", "-qp_b", "22"],
-    &["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"],
-    &["-c:v", "libx264", "-preset", "ultrafast"],
-];
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EncoderH264 {
+    Nvenc,
+    Amf,
+    Qsv,
+    X264,
+}
 
-static ENCODER_H264: OnceLock<&'static [&'static str]> = OnceLock::new();
+impl EncoderH264 {
+    const NA_ORDEM: [Self; 4] = [Self::Nvenc, Self::Amf, Self::Qsv, Self::X264];
 
-pub fn encoder_h264() -> &'static [&'static str] {
-    ENCODER_H264.get_or_init(|| {
-        let (ultimo, gpu) = ENCODERS_H264.split_last().expect("lista de encoders vazia");
-        let escolhido = gpu.iter().copied().find(|args| codifica(args)).unwrap_or(*ultimo);
-        log::info!("FFmpeg: encoder H.264 {}", escolhido[1]);
+    pub fn gravacao(self) -> &'static [&'static str] {
+        match self {
+            Self::Nvenc => &["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0"],
+            Self::Amf => &["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "22", "-qp_p", "22", "-qp_b", "22"],
+            Self::Qsv => &["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"],
+            Self::X264 => &["-c:v", "libx264", "-preset", "ultrafast"],
+        }
+    }
+
+    pub fn live(self) -> &'static [&'static str] {
+        match self {
+            Self::Nvenc => &["-c:v", "h264_nvenc", "-preset", "p4", "-tune", "ll", "-rc", "cbr"],
+            Self::Amf => &["-c:v", "h264_amf", "-usage", "lowlatency", "-quality", "speed", "-rc", "cbr"],
+            Self::Qsv => &["-c:v", "h264_qsv", "-preset", "veryfast"],
+            Self::X264 => &["-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency"],
+        }
+    }
+}
+
+pub const TAXA_LIVE: [&str; 12] = ["-b:v", "4500k", "-maxrate", "4500k", "-bufsize", "9000k", "-g", "120", "-keyint_min", "120", "-sc_threshold", "0"];
+
+static ENCODER_H264: OnceLock<EncoderH264> = OnceLock::new();
+
+pub fn encoder_h264() -> EncoderH264 {
+    *ENCODER_H264.get_or_init(|| {
+        let escolhido = EncoderH264::NA_ORDEM.into_iter().find(|e| *e == EncoderH264::X264 || codifica(*e)).unwrap_or(EncoderH264::X264);
+        log::info!("FFmpeg: encoder H.264 {}", escolhido.gravacao()[1]);
         escolhido
     })
 }
 
-fn codifica(encoder: &[&str]) -> bool {
+pub fn preparar_encoder_h264() {
+    tauri::async_runtime::spawn_blocking(encoder_h264);
+}
+
+pub async fn encoder_h264_async() -> EncoderH264 {
+    tauri::async_runtime::spawn_blocking(encoder_h264).await.unwrap_or(EncoderH264::X264)
+}
+
+fn codifica(encoder: EncoderH264) -> bool {
     let mut cmd = std::process::Command::new(programa());
-    cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=60", "-frames:v", "30", "-pix_fmt", "nv12"]);
-    cmd.args(encoder).args(["-f", "null", "-"]);
+    cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=60:d=0.5"]);
+    cmd.args(["-map", "0:v", "-pix_fmt", "nv12"]).args(encoder.gravacao()).args(["-f", "null", "-"]);
+    cmd.args(["-map", "0:v", "-pix_fmt", "nv12"]).args(encoder.live()).args(TAXA_LIVE).args(["-f", "null", "-"]);
     cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    cmd.status().map(|status| status.success()).unwrap_or(false)
+    let Ok(mut child) = cmd.spawn() else { return false };
+    let prazo = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < prazo {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(_) => break,
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    false
 }
 
 /// Última linha útil do log do FFmpeg (as anteriores costumam ser banner e configuração).
