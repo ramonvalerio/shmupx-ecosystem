@@ -84,7 +84,7 @@ else
 fi
 (
     cd "$temp/ffmpeg"
-    PKG_CONFIG_PATH="$prefixo/lib/pkgconfig" ./configure "${opcoes[@]}"
+    PKG_CONFIG_PATH="$prefixo/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" ./configure "${opcoes[@]}"
     make -j"$jobs"
     make install
 ) >&2
