@@ -80,6 +80,7 @@
 .am-group h3 { margin: 0 0 8px; font-size: 11px; font-weight: 400; letter-spacing: .24em; text-transform: uppercase; color: var(--am-dim); }
 .am-tiles { display: grid; gap: 8px; }
 .am-tiles.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.am-tiles.is-three.is-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .am-tile {
   position: relative;
   display: grid;

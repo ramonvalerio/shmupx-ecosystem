@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useI18n } from "../i18n";
-import { EMULATOR_RESOLUTIONS, identifyMonitor, listMonitors, SCREEN_MODES, screenMode, withScreenMode, type EmulatorResolution, type EmulatorSettings, type PcMonitor } from "../data/emulatorSettings";
+import { EMULATOR_RESOLUTIONS, identifyMonitor, listMonitors, SCREEN_MODE_CHOICES, screenMode, withScreenMode, type EmulatorResolution, type EmulatorSettings, type PcMonitor } from "../data/emulatorSettings";
 import "../monitor.css";
 
 /**
@@ -24,7 +24,7 @@ export default function GameVideoPanel({ settings, update, art, game, cabinet }:
 
   const crt = settings.resolution === "crt15";
   const fullscreen = !settings.windowed;
-  const mode = SCREEN_MODES.find((m) => m.id === screenMode(settings)) ?? SCREEN_MODES[0];
+  const mode = SCREEN_MODE_CHOICES.find((m) => m.id === screenMode(settings)) ?? SCREEN_MODE_CHOICES[0];
   const chosen = monitors.find((m) => m.id === settings.monitor);
   const savedMonitorGone = settings.monitor !== "" && monitors.length > 0 && !chosen;
   const shown = chosen ?? monitors.find((m) => m.principal);
@@ -62,8 +62,8 @@ export default function GameVideoPanel({ settings, update, art, game, cabinet }:
         <div className="am-panel">
           <section className="am-group" aria-label={t("Modo de tela")}>
             <h3>{t("Modo de tela")}</h3>
-            <div className="am-tiles is-three" role="radiogroup" aria-label={t("Modo de tela")}>
-              {SCREEN_MODES.map((m) => (
+            <div className="am-tiles is-three is-pair" role="radiogroup" aria-label={t("Modo de tela")}>
+              {SCREEN_MODE_CHOICES.map((m) => (
                 <button key={m.id} type="button" role="radio" aria-checked={mode.id === m.id} className="am-tile" onClick={() => update(withScreenMode(settings, m.id))}>
                   <span className={`am-tile-icon is-${m.id}`} aria-hidden="true" />
                   <span className="am-tile-name">{t(m.label)}</span>

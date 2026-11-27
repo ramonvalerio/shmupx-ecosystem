@@ -50,8 +50,16 @@ export const SCREEN_MODES: { id: ScreenMode; label: string; detail: string }[] =
   { id: "borderless", label: "Tela cheia sem borda", detail: "Alt+Tab sem piscar a tela" },
 ];
 
+/**
+ * Os modos que o jogador escolhe. A tela cheia exclusiva (`fullscreen`), que prende a tela, está
+ * fora por enquanto: no monitor do PC a tela cheia é sempre sem borda (também ao passar da janela
+ * para a tela cheia no jogo, com duplo clique ou Alt+Enter).
+ */
+export const SCREEN_MODE_CHOICES = SCREEN_MODES.filter((mode) => mode.id !== "fullscreen");
+
+/** Modo de tela das preferências; a tela cheia exclusiva salva antes vale como sem borda. */
 export function screenMode(settings: EmulatorSettings): ScreenMode {
-  return settings.windowed ? "window" : settings.borderless ? "borderless" : "fullscreen";
+  return settings.windowed ? "window" : "borderless";
 }
 
 /** As preferências com o modo de tela escolhido (em janela, mantém a escolha de sem borda). */

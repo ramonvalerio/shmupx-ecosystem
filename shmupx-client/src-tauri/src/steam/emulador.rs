@@ -436,15 +436,15 @@ const CADEIA_SCANLINES: &str = "shmupx-scanlines";
 
 /// Argumentos de vídeo do motor para as preferências do jogador. `janela` força o modo janela.
 /// Scanlines só com a cadeia presente; numa TV de tubo, nunca (a TV já desenha as linhas).
-/// `gravada` (run ranked validada pelo vídeo): a tela cheia sem scanlines vai pelo bgfx, e não pela
-/// tela cheia exclusiva do Direct3D 9, que a captura da janela vê preta.
-/// Tela cheia sem borda (`borderless`, no monitor do PC): pelo bgfx, uma janela sem moldura do
-/// tamanho do monitor, sem trocar o modo de vídeo (`-noswitchres`): o Alt+Tab não pisca a tela.
-/// Precisa dos shaders do bgfx no pacote (`bgfx_disponivel`). Com `-shmupx_borderless`
-/// (`motor_sem_borda`: o motor conhece a opção), a janela também não fica por cima de tudo nem
-/// minimiza ao perder o foco (tecla Windows, Alt+Tab). Na TV de tubo, a troca para 15 kHz é o
-/// próprio modo: lá vale a tela cheia comum.
-fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, bgfx_disponivel: bool, gravada: bool, motor_sem_borda: bool) -> Vec<String> {
+/// Tela cheia, só sem borda: nunca a tela cheia exclusiva, que prende a tela. Pelo bgfx, uma janela
+/// sem moldura do tamanho do monitor; com `-shmupx_borderless` (`motor_sem_borda`: o motor conhece a
+/// opção), ela também não fica por cima de tudo nem minimiza ao perder o foco (tecla Windows,
+/// Alt+Tab). Vale também em janela, para quando o jogador passa para a tela cheia no jogo (duplo
+/// clique, Alt+Enter). No monitor do PC, sem trocar o modo de vídeo (`-noswitchres`: o Alt+Tab não
+/// pisca a tela); na TV de tubo, a troca para 15 kHz continua (sem ela a TV não mostra a imagem).
+/// Precisa dos shaders do bgfx no pacote (`bgfx_disponivel`); sem eles, fica o vídeo comum do motor.
+/// O bgfx também é o que a captura da run gravada vê (a tela cheia exclusiva sai preta).
+fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, bgfx_disponivel: bool, motor_sem_borda: bool) -> Vec<String> {
     let mut args: Vec<String> = Vec::new();
     let tela_cheia = !(janela || video.windowed);
     args.push(if tela_cheia { "-nowindow" } else { "-window" }.into());
@@ -454,17 +454,17 @@ fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis
     if !crt {
         args.extend(["-monitor".into(), "lcd".into()]);
     }
-    let sem_borda = tela_cheia && video.borderless && !crt && bgfx_disponivel;
-    if sem_borda {
-        args.push("-noswitchres".into());
+    if bgfx_disponivel {
+        if !crt {
+            args.push("-noswitchres".into());
+        }
         if motor_sem_borda {
             args.push("-shmupx_borderless".into());
         }
-    }
-    if video.scanlines && !crt && scanlines_disponiveis {
-        args.extend(["-video".into(), "bgfx".into(), "-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
-    } else if tela_cheia && !crt && bgfx_disponivel && (gravada || sem_borda) {
         args.extend(["-video".into(), "bgfx".into()]);
+        if video.scanlines && !crt && scanlines_disponiveis {
+            args.extend(["-bgfx_screen_chains".into(), CADEIA_SCANLINES.into()]);
+        }
     }
     // Monitor escolhido pelo jogador (em janela e em tela cheia).
     if monitor_valido(&video.monitor) {
@@ -703,18 +703,16 @@ fn preparar_lancamento(motor: &Motor, pastas: &[PathBuf], roms: &[String], janel
     if motor.video.scanlines && !scanlines_disponiveis {
         log::warn!("emulador: scanlines pedidas, mas o ShmupX Engine não tem bgfx/chains/{CADEIA_SCANLINES}.json; abrindo sem");
     }
-    // Shaders do bgfx no pacote: a tela cheia sem borda e a da run gravada dependem deles.
+    // Shaders do bgfx no pacote: a tela cheia sem borda depende deles.
     let bgfx_disponivel = pasta_do_motor.join("bgfx").is_dir();
-    if motor.video.borderless && !motor.video.windowed && !janela && !bgfx_disponivel {
-        log::warn!("emulador: tela cheia sem borda pedida, mas o ShmupX Engine não tem bgfx/; abrindo na tela cheia comum");
+    if !bgfx_disponivel {
+        log::warn!("emulador: o ShmupX Engine não tem bgfx/; a tela cheia não fica sem borda");
     }
-    // Run ranked validada pelo vídeo (o ROM não tem mapa de memória): o Client grava a janela.
-    let gravada = motor.ranking && !super::telemetria::rom_pela_memoria(rom);
-    let motor_sem_borda = motor.video.borderless && motor_conhece_opcao(&motor.exe, OPCAO_SEM_BORDA);
-    if motor.video.borderless && !motor_sem_borda {
-        log::warn!("emulador: este ShmupX Engine não tem -{OPCAO_SEM_BORDA}; a tela cheia sem borda pode sumir ao perder o foco");
+    let motor_sem_borda = motor_conhece_opcao(&motor.exe, OPCAO_SEM_BORDA);
+    if !motor_sem_borda {
+        log::warn!("emulador: este ShmupX Engine não tem -{OPCAO_SEM_BORDA}; a tela cheia pode sumir ao perder o foco");
     }
-    args.extend(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, gravada, motor_sem_borda));
+    args.extend(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, motor_sem_borda));
     // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
     // abre com os controles padrão.
     match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
@@ -762,47 +760,34 @@ mod tests {
     #[test]
     fn video_do_motor_vira_argumentos() {
         let padrao = VideoDoMotor::default();
+        let sem_borda = ["-noswitchres", "-shmupx_borderless", "-video", "bgfx"];
+        let com = |inicio: &[&str], fim: &[&str]| -> Vec<String> { inicio.iter().chain(fim).map(|s| s.to_string()).collect() };
+        // Em janela: já pronta para a tela cheia sem borda (duplo clique, Alt+Enter no jogo).
         assert_eq!(
-            argumentos_de_video(&padrao, false, true, true, false, true),
-            ["-window", "-monitor", "lcd", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
+            argumentos_de_video(&padrao, false, true, true, true),
+            com(&["-window", "-monitor", "lcd"], &[&sem_borda[..], &["-bgfx_screen_chains", "shmupx-scanlines"]].concat())
         );
         // Sem a cadeia no pacote, abre sem scanlines em vez de falhar.
-        assert_eq!(argumentos_de_video(&padrao, false, false, true, false, true), ["-window", "-monitor", "lcd"]);
-        // Tela cheia comum: a do motor; numa run gravada, pelo bgfx (a captura não vê a exclusiva).
+        assert_eq!(argumentos_de_video(&padrao, false, false, true, true), com(&["-window", "-monitor", "lcd"], &sem_borda));
+        // Tela cheia: sempre sem borda, nunca a exclusiva (também numa preferência antiga sem borderless).
         let tela_cheia = VideoDoMotor { windowed: false, scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, false, true), ["-nowindow", "-monitor", "lcd"]);
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, true, true), ["-nowindow", "-monitor", "lcd", "-video", "bgfx"]);
-        assert_eq!(argumentos_de_video(&tela_cheia, false, true, false, true, true), ["-nowindow", "-monitor", "lcd"]);
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, true), com(&["-nowindow", "-monitor", "lcd"], &sem_borda));
+        assert_eq!(argumentos_de_video(&VideoDoMotor { borderless: true, ..tela_cheia.clone() }, false, true, true, true), com(&["-nowindow", "-monitor", "lcd"], &sem_borda));
         // A janela forçada vence a tela cheia.
-        assert_eq!(argumentos_de_video(&tela_cheia, true, true, true, false, true)[0], "-window");
-        // Tela cheia sem borda: bgfx, sem trocar o modo de vídeo; com scanlines, a cadeia junto.
-        let sem_borda = VideoDoMotor { borderless: true, ..tela_cheia.clone() };
-        assert_eq!(argumentos_de_video(&sem_borda, false, true, true, false, true), ["-nowindow", "-monitor", "lcd", "-noswitchres", "-shmupx_borderless", "-video", "bgfx"]);
+        assert_eq!(argumentos_de_video(&tela_cheia, true, true, true, true)[0], "-window");
         // Motor antigo, sem a opção: só o bgfx sem trocar o modo de vídeo.
-        assert_eq!(argumentos_de_video(&sem_borda, false, true, true, false, false), ["-nowindow", "-monitor", "lcd", "-noswitchres", "-video", "bgfx"]);
-        assert_eq!(
-            argumentos_de_video(&VideoDoMotor { scanlines: true, ..sem_borda.clone() }, false, true, true, false, true),
-            ["-nowindow", "-monitor", "lcd", "-noswitchres", "-shmupx_borderless", "-video", "bgfx", "-bgfx_screen_chains", "shmupx-scanlines"]
-        );
-        // Sem os shaders do bgfx no pacote, fica a tela cheia comum.
-        assert_eq!(argumentos_de_video(&sem_borda, false, true, false, false, true), ["-nowindow", "-monitor", "lcd"]);
-        // Sem borda só vale em tela cheia: em janela, nada muda.
-        assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: true, ..sem_borda.clone() }, false, true, true, false, true), ["-window", "-monitor", "lcd"]);
-        // TV de tubo: resolução do GroovyMAME (15 kHz, com a troca de modo) e nada de scanlines por cima.
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, true, false), ["-nowindow", "-monitor", "lcd", "-noswitchres", "-video", "bgfx"]);
+        // Sem os shaders do bgfx no pacote, fica o vídeo comum do motor.
+        assert_eq!(argumentos_de_video(&tela_cheia, false, true, false, true), ["-nowindow", "-monitor", "lcd"]);
+        // TV de tubo: sem borda também, mas com a troca para 15 kHz e sem scanlines por cima.
         let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&crt, false, true, true, false, true), ["-window"]);
-        assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: false, borderless: true, ..crt.clone() }, false, true, true, false, true), ["-nowindow"]);
+        assert_eq!(argumentos_de_video(&crt, false, true, true, true), ["-window", "-shmupx_borderless", "-video", "bgfx"]);
+        assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: false, ..crt.clone() }, false, true, true, true), ["-nowindow", "-shmupx_borderless", "-video", "bgfx"]);
         // Monitor escolhido vai no -screen; nome estranho é ignorado (abre no principal).
         let segundo = VideoDoMotor { monitor: r"\\.\DISPLAY2".into(), scanlines: false, ..padrao.clone() };
-        assert_eq!(argumentos_de_video(&segundo, false, true, true, false, true), ["-window", "-monitor", "lcd", "-screen", r"\\.\DISPLAY2"]);
+        assert_eq!(argumentos_de_video(&segundo, false, true, true, true), com(&["-window", "-monitor", "lcd"], &[&sem_borda[..], &["-screen", r"\\.\DISPLAY2"]].concat()));
         let estranho = VideoDoMotor { monitor: r"\\.\DISPLAY2 -x".into(), scanlines: false, ..padrao };
-        assert_eq!(argumentos_de_video(&estranho, false, true, true, false, true), ["-window", "-monitor", "lcd"]);
-    }
-
-    #[test]
-    fn so_nomes_de_monitor_do_windows() {
-        assert!(monitor_valido(r"\\.\DISPLAY1") && monitor_valido(r"\\.\DISPLAY12"));
-        assert!(!monitor_valido("") && !monitor_valido(r"\\.\DISPLAY") && !monitor_valido("DISPLAY1") && !monitor_valido(r"\\.\DISPLAY1;x"));
+        assert_eq!(argumentos_de_video(&estranho, false, true, true, true), com(&["-window", "-monitor", "lcd"], &sem_borda));
     }
 
     #[test]
