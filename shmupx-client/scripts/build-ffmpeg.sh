@@ -4,7 +4,7 @@ set -euo pipefail
 cache=${1:?uso: build-ffmpeg.sh <pasta de cache>}
 mkdir -p "$cache"
 cache=$(cd "$cache" && pwd)
-receita=r2
+receita=r3
 jobs=${JOBS:-$(nproc)}
 
 case "$(uname -s)" in
@@ -78,13 +78,16 @@ opcoes=(
     --disable-debug --disable-doc --disable-ffplay --disable-ffprobe
 )
 if [ "$sistema" = win64 ]; then
-    opcoes+=(--extra-ldflags=-static --enable-ffnvcodec --enable-nvenc --enable-amf --enable-libvpl)
+    opcoes+=(--extra-ldflags=-static --extra-libs=-lstdc++ --enable-ffnvcodec --enable-nvenc --enable-amf --enable-libvpl)
 else
     opcoes+=(--disable-autodetect --enable-libxcb --enable-libxcb-shm --enable-libxcb-xfixes --enable-libxcb-shape)
 fi
 (
     cd "$temp/ffmpeg"
-    PKG_CONFIG_PATH="$prefixo/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" ./configure "${opcoes[@]}"
+    if ! PKG_CONFIG_PATH="$prefixo/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" ./configure "${opcoes[@]}"; then
+        tail -n 40 ffbuild/config.log
+        exit 1
+    fi
     make -j"$jobs"
     make install
 ) >&2
