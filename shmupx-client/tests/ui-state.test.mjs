@@ -288,3 +288,33 @@ test("highlight progress attaches to the submitted run", () => {
   assert.deepEqual(result[0].highlight, { position: 2, status: "uploading", progress: 0.5, videoUrl: undefined });
   assert.equal(result[1].highlight, undefined);
 });
+
+const estadoLocal = await sourceModule("../src/data/estadoLocal.ts");
+
+test("saved screen belongs to its account and odd fields fall back to defaults", () => {
+  const raw = JSON.stringify({ uid: "u1", section: "ranking", activeRoomId: "ket", rankingRoomIds: ["ket", 3], settingsOpen: "yes", collection: { query: "ket", platform: 7 } });
+  assert.equal(estadoLocal.parseScreen(raw, "u2"), null);
+  const screen = estadoLocal.parseScreen(raw, "u1");
+  assert.equal(screen.section, "ranking");
+  assert.equal(screen.activeRoomId, "ket");
+  assert.deepEqual(screen.rankingRoomIds, ["ket"]);
+  assert.equal(screen.settingsOpen, false);
+  assert.deepEqual(screen.collection, { query: "ket", platform: "all", library: "all" });
+  assert.equal(estadoLocal.parseScreen("{broken", "u1"), null);
+});
+test("saved runs survive; unfinished ones come back interrupted only after the program closed", () => {
+  const runs = [
+    { id: "a", gameId: "ket", startedAt: 1, status: "analyzing", runId: "r1" },
+    { id: "b", gameId: "ket", startedAt: 2, status: "submitted", score: 10 },
+    { id: "c", gameId: 4, startedAt: 3, status: "submitted" },
+  ];
+  const reload = estadoLocal.parseRuns(JSON.stringify(runs), false);
+  assert.deepEqual(reload.map((run) => [run.id, run.status]), [["a", "analyzing"], ["b", "submitted"]]);
+  const restart = estadoLocal.parseRuns(JSON.stringify(runs), true);
+  assert.equal(restart[0].status, "failed");
+  assert.equal(restart[0].interrupted, true);
+  assert.equal(restart[1].score, 10);
+  // A mesma run guardada no disco como "Não enviada" (dá para analisar de novo) vale no lugar da interrompida.
+  const merged = mergePendingRuns(restart, [{ run_id: "r1", jogo_id: "ket", iniciada_em: 1, encerrada_em: 5, erro: "Não enviada" }]);
+  assert.deepEqual(merged.map((run) => run.id), ["b", "pending-r1"]);
+});

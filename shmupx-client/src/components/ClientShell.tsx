@@ -3,7 +3,8 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
-import { EventsPage, HelpPage, HomePage, RankingPage, type Section } from "./ClientPages";
+import { EventsPage, HelpPage, HomePage, isSection, RankingPage, type Section } from "./ClientPages";
+import { saveScreen, screenToRestore } from "../data/estadoLocal";
 import { SubmissionsPage, SubscriptionPage } from "./AccountPages";
 import { useBigPicture } from "./useBigPicture";
 import type { SessionRun } from "../types/submission";
@@ -72,12 +73,14 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     document.documentElement.dataset.theme = preferences.appearance;
     return () => { delete document.documentElement.dataset.theme; };
   }, [preferences.appearance]);
-  // O app sempre abre na Coleção (a tela principal).
-  const [section, setSection] = useState<Section>("collection");
+  // O app abre na Coleção (a tela principal); logo depois de uma atualização, na tela em que estava
+  // (estadoLocal). Uma seção que não existe mais volta para Minhas coleções.
+  const restored = screenToRestore(profile.uid);
+  const [section, setSection] = useState<Section>(() => (restored && isSection(restored.section) ? restored.section : "collection"));
   const [storageError, setStorageError] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   // Configurações numa janela (engrenagem acima do avatar); o avatar só tem status e sair.
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => restored?.settingsOpen ?? false);
   /** HOW TO USE aberto: o jogador escolhe a dúvida antes do tutorial. */
   const [howToOpen, setHowToOpen] = useState(false);
   const settingsDialogRef = useDialogFocus(settingsOpen, () => setSettingsOpen(false));
@@ -96,7 +99,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, [profileMenuOpen]);
-  const bigPicture = useBigPicture(preferences.startupBigPicture);
+  const bigPicture = useBigPicture(preferences.startupBigPicture || (restored?.bigPicture ?? false));
   const recordingRoom = rooms.find((room) => room.id === recordingRoomId);
   const notifications = useNotifications();
   const live = useLive();
@@ -108,7 +111,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // Interface nova sem instalador: um recarregar rápido (a atualização do programa, se houver, vem antes).
   const interfaceUpdate = useInterfaceUpdate(updateBusy || autoUpdate.state.status !== "idle");
   const autoUpdateActive = autoUpdate.state.status !== "idle" && autoUpdate.state.status !== "error";
-  const [notificationId, setNotificationId] = useState<string | null>(null);
+  const [notificationId, setNotificationId] = useState<string | null>(() => restored?.notificationId ?? null);
   function openNotification(id: string | null) { setNotificationId(id); setSection("notification"); }
 
   useEffect(() => {
@@ -118,10 +121,10 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
 
   // Salas abertas em abas; `activeRoomId` null mostra a grade da coleção.
   const [openRoomIds, setOpenRoomIds] = useState<string[]>(() => readOpenRooms(profile.uid));
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [rankingRoomIds, setRankingRoomIds] = useState<string[]>([]);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(() => restored?.activeRoomId ?? null);
+  const [rankingRoomIds, setRankingRoomIds] = useState<string[]>(() => restored?.rankingRoomIds ?? []);
   // Eventos do jogo: a aba depois do Ranking (uma das duas por sala; abrir uma fecha a outra).
-  const [eventsRoomIds, setEventsRoomIds] = useState<string[]>([]);
+  const [eventsRoomIds, setEventsRoomIds] = useState<string[]>(() => restored?.eventsRoomIds ?? []);
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? null;
   // Menu lateral = os jogos abertos, na mesma ordem das abas; arrastar ali reordena as abas também.
   const railDrag = useDragReorder({ ids: openRoomIds, onReorder: setOpenRoomIds, axis: "y" });
@@ -129,6 +132,14 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   useEffect(() => {
     try { localStorage.setItem(openRoomsKey(profile.uid), JSON.stringify(openRoomIds)); } catch { /* fica só nesta sessão */ }
   }, [profile.uid, openRoomIds]);
+  // Depois de uma atualização: o jogo que estava selecionado volta selecionado.
+  useEffect(() => {
+    if (restored?.selectedRoomId) onSelectRoom(restored.selectedRoomId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A tela de agora, salva a cada mudança: é a que volta depois de uma atualização.
+  useEffect(() => {
+    saveScreen({ uid: profile.uid, section, activeRoomId, selectedRoomId, rankingRoomIds, eventsRoomIds, notificationId, settingsOpen, bigPicture: bigPicture.active });
+  }, [profile.uid, section, activeRoomId, selectedRoomId, rankingRoomIds, eventsRoomIds, notificationId, settingsOpen, bigPicture.active]);
   // Presença em todas as salas abertas: online na que está na tela, away nas outras.
   const liveVideoId = live.state.status === "live" ? videoIdFromUrl(live.state.watch_url) : null;
   // Jogo aberto na conta (aqui, no MiSTer ou pelo celular): aparece na lista de jogadores das salas.

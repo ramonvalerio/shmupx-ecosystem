@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { isTauri, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import ClientShell from "./components/ClientShell";
+import { loadRuns, saveRuns } from "./data/estadoLocal";
 import RoomView, { type RoomViewProps } from "./components/RoomView";
 import { useAuth } from "./auth/useAuth";
 import LoginScreen from "./components/LoginScreen";
@@ -118,6 +119,18 @@ export default function App() {
     librarySyncedFor.current = signedUid;
     void runLibrarySync(rooms);
   }, [signedUid, rooms]);
+
+  // Partidas desta conta neste PC: voltam ao abrir (e depois de atualizar) e são guardadas a cada
+  // mudança. `runsOwner`: de quem é a lista carregada (antes de carregar, nada é salvo por cima).
+  const [runsOwner, setRunsOwner] = useState<string | null>(null);
+  useEffect(() => {
+    if (!signedUid) return;
+    setRuns(loadRuns(signedUid));
+    setRunsOwner(signedUid);
+  }, [signedUid]);
+  useEffect(() => {
+    if (signedUid && runsOwner === signedUid) saveRuns(signedUid, runs);
+  }, [signedUid, runsOwner, runs]);
 
   usePlayingClaim(signedUid, ownGame
     ? { ...ownGame, title: rooms.find((room) => room.id === ownGame.gameId)?.title ?? ownGame.gameId, device: "pc" }

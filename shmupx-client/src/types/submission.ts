@@ -19,6 +19,8 @@ export interface SessionRun {
   highlight?: RunHighlight;
   /** Enviada: ficou no ranking online (é o recorde do jogador); `false`, só no ranking local. */
   online?: boolean;
+  /** O Client fechou com ela gravando ou em análise (guardada neste PC; estadoLocal). */
+  interrupted?: boolean;
 }
 
 /** Um dos 3 primeiros do ranking do jogo da sala. */
@@ -78,9 +80,13 @@ export function pendingToSessionRun(pending: PendingRun): SessionRun {
 
 /** Junta as runs guardadas às desta sessão, sem repetir a mesma run do servidor. */
 export function mergePendingRuns(runs: SessionRun[], pending: PendingRun[]): SessionRun[] {
-  const known = new Set(runs.map((run) => run.runId).filter(Boolean));
+  // Interrompida (o Client fechou na análise) e guardada no disco como "Não enviada": vale a guardada,
+  // que dá para analisar de novo.
+  const pendingIds = new Set(pending.map((item) => item.run_id));
+  const kept = runs.filter((run) => !(run.interrupted && run.runId && pendingIds.has(run.runId)));
+  const known = new Set(kept.map((run) => run.runId).filter(Boolean));
   const extra = pending.filter((item) => !known.has(item.run_id)).map(pendingToSessionRun);
-  return extra.length ? [...runs, ...extra] : runs;
+  return extra.length || kept.length !== runs.length ? [...kept, ...extra] : runs;
 }
 
 export function applyRunAnalysis(runs: SessionRun[], event: RunAnalysisEvent, now: number): SessionRun[] {

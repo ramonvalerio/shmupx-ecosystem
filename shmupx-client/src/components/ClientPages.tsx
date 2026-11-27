@@ -5,7 +5,9 @@ import { GlobalRankingPreview } from "./RankingPages";
 import type { GameRoom } from "../types/room";
 import DashboardWorkspace from "./DashboardWorkspace";
 
-export type Section = "home" | "collection" | "rooms" | "events" | "ranking" | "settings" | "help" | "submissions" | "profile" | "subscription" | "notification";
+export const SECTIONS = ["home", "collection", "rooms", "events", "ranking", "settings", "help", "submissions", "profile", "subscription", "notification"] as const;
+export type Section = typeof SECTIONS[number];
+export const isSection = (value: string): value is Section => (SECTIONS as readonly string[]).includes(value);
 
 
 export function PageHeading({ title, detail }: { title: string; detail: string }) {

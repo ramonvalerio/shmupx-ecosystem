@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { markScreenForRestore } from "./estadoLocal";
 
 /** Nova checagem enquanto o Client fica aberto (a liberação pode chegar com o app rodando). */
 const CHECAR_A_CADA_MS = 30 * 60_000;
@@ -90,6 +91,8 @@ export function useAutoUpdate(busy: boolean) {
     const update = pending.current;
     if (!update || busy) return;
     setState({ status: "installing", version: update.version });
+    // A versão nova abre na mesma tela (no Windows o instalador fecha o app antes do relaunch).
+    markScreenForRestore();
     try {
       if (await isPortable()) {
         // Abre o ShmupX Portable novo (ele descompacta e abre a versão nova) e fecha este.

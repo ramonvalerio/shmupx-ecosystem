@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { markScreenForRestore } from "./estadoLocal";
 
 /** Aviso antes de recarregar sozinho, com "Recarregar agora" e "Depois". */
 const RECARREGAR_EM_S = 10;
@@ -32,6 +33,8 @@ export function useInterfaceUpdate(busy: boolean) {
     setApplying(true);
     try {
       await invoke("interface_aplicar");
+      // Volta à mesma tela com a interface nova.
+      markScreenForRestore();
       window.location.reload();
     } catch (e) {
       // ex.: a interface baixada deixou de valer; fica a atual, sem incomodar

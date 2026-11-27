@@ -16,6 +16,7 @@ import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 import { isSupported } from "../data/validation";
 import DialogClose from "./DialogClose";
 import { isGameCard, moveBetweenCards, visibleDialog, type Direction } from "./navigationInput";
+import { saveScreen, screenToRestore } from "../data/estadoLocal";
 
 export { isSupported };
 
@@ -158,13 +159,18 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
 }) {
   const { t } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
-  const [query, setQuery] = useState("");
-  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
+  // Busca e filtros: depois de uma atualização do Client, voltam como estavam.
+  const restoredFilters = uid ? screenToRestore(uid)?.collection : undefined;
+  const [query, setQuery] = useState(() => restoredFilters?.query ?? "");
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>(() => PLATFORM_FILTERS.find((f) => f.id === restoredFilters?.platform)?.id ?? "all");
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
   const playable = usePlatformOwnership();
-  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>(() => LIBRARY_FILTERS.find((f) => f.id === restoredFilters?.library)?.id ?? "all");
+  useEffect(() => {
+    if (uid) saveScreen({ uid, collection: { query, platform: platformFilter, library: libraryFilter } });
+  }, [uid, query, platformFilter, libraryFilter]);
   const [refreshing, setRefreshing] = useState(false);
   /** O jogador tem o jogo em alguma plataforma (Steam, emulador ou MiSTer)? */
   const inLibrary = (room: GameRoom) => playable.tags(room).some((tag) => tag.owned);
