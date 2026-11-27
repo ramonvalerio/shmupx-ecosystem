@@ -53,10 +53,9 @@ const COLLECTION = "netplaySessions";
 
 /**
  * Jogos liberados para a dupla (ROMs): passam no SyncTest e no teste entre dois motores
- * (shmupx-engine/docs/NETPLAY.md). Só eles mostram o "Convidar para jogar". Grind Stormer saiu em
- * 2026-11-27: desync no começo da partida (a placa Toaplan com V25, a mesma do Batsugun).
+ * (shmupx-engine/docs/NETPLAY.md). Só eles mostram o "Convidar para jogar".
  */
-export const NETPLAY_ROMS = new Set<string>(["sonicwi2", "bgaregga", "cawing", "ddonpach"]);
+export const NETPLAY_ROMS = new Set<string>(["sonicwi2", "bgaregga", "cawing", "ddonpach", "batsugun", "grindstm"]);
 
 export function netplayCertified(room: GameRoom): boolean {
   return romsFor(room).some((rom) => NETPLAY_ROMS.has(rom));
