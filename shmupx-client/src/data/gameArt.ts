@@ -34,6 +34,7 @@ const ARTS: Record<string, string> = {
   "blazing-star": `${TITLES}/blazstar.png`,
   "carrier-air-wing": `${TITLES}/cawing.png`,
   "dodonpachi-daioujou": `${TITLES}/ddp3.png`,
+  "dodonpachi-dai-ou-jou": `${TITLES}/ddp3.png`,
   "espgaluda-ii": `${TITLES}/espgal2.png`,
   "esprade": `${TITLES}/esprade.png`,
   "gradius-iii": `${TITLES}/gradius3.png`,
