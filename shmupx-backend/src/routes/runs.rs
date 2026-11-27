@@ -7,15 +7,16 @@ use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::firestore::valor::ler_texto;
+use crate::firestore::valor::{ler_mapa, ler_texto};
 use crate::firestore::Firestore;
 use crate::middleware::firebase::FirebaseUser;
 use crate::middleware::jogador::{exigir_jogador, Origem};
 use crate::routes::notificacoes::versao_do_client;
+use crate::routes::ranking_publico;
 use crate::services::destaques::{self, DepoisDoEnvio};
 use crate::services::gameplays::{self, Detalhes, Resultado, RunEncerrada, RunIniciada, RunSubmetida};
 use crate::services::youtube::YouTube;
-use crate::services::{estatisticas, jogo_aberto, placar, recordes, usuarios, versoes};
+use crate::services::{estatisticas, jogo_aberto, placar, recordes, titulos, usuarios, versoes};
 
 /// O jogador vem sempre da credencial (`Extension<FirebaseUser>`), nunca do payload: ID token do
 /// Firebase (Client de PC) ou token do MiSTer (`middleware::jogador`, ADR 008).
@@ -56,6 +57,7 @@ struct IniciarRunPayload {
 /// recusa Clients abaixo de uma versão obrigatória já liberada (sem debitar a ficha).
 async fn iniciar_run(
     Extension(firestore): Extension<Arc<Firestore>>,
+    Extension(youtube): Extension<Option<Arc<YouTube>>>,
     Extension(usuario): Extension<FirebaseUser>,
     Extension(Origem(origem)): Extension<Origem>,
     headers: HeaderMap,
@@ -79,6 +81,12 @@ async fn iniciar_run(
     }
     let run = gameplays::iniciar(&firestore, &usuario.uid, &payload.jogo_id, &detalhes).await?;
     estatisticas::run_comecou(&firestore, &usuario.uid, &payload.jogo_id, run.server_started_at).await;
+    // Live da run: o título com o jogo, o modo e o jogador (vale também para o Client que criou a
+    // live com outro título; se já estiver certo, nada muda no YouTube).
+    if let (Some(youtube), Some(broadcast)) = (youtube, detalhes.live_broadcast_id.clone()) {
+        let live = TituloDaLive { uid: usuario.uid.clone(), jogo_id: payload.jogo_id.clone(), broadcast, modo: detalhes.modo.clone(), resultado: None };
+        tokio::spawn(renomear_live(firestore.clone(), youtube, live));
+    }
     Ok((StatusCode::CREATED, Json(run)))
 }
 
@@ -175,13 +183,20 @@ async fn submeter_run(
         estagio: resultado.estagio.map(i64::from),
     };
     let run = gameplays::submeter(&firestore, &usuario.uid, &payload.run_id, &payload.jogo_id, resultado).await?;
-    // O modo da run, lido antes da poda: uma run abaixo do recorde sai do banco.
-    let modo = firestore
-        .ler_documento(&format!("gameplays/{}", payload.run_id))
-        .await
-        .ok()
-        .flatten()
-        .and_then(|gameplay| ler_texto(&gameplay, "mode"));
+    // O modo e a live da run, lidos antes da poda: uma run abaixo do recorde sai do banco.
+    let gameplay = firestore.ler_documento(&format!("gameplays/{}", payload.run_id)).await.ok().flatten();
+    let modo = gameplay.as_ref().and_then(|gameplay| ler_texto(gameplay, "mode"));
+    let broadcast = gameplay.as_ref().and_then(|g| ler_mapa(g, "live")).and_then(|live| ler_texto(&live, "broadcastId"));
+    if let (Some(youtube), Some(broadcast)) = (youtube.clone(), broadcast) {
+        let vod = TituloDaLive {
+            uid: usuario.uid.clone(),
+            jogo_id: payload.jogo_id.clone(),
+            broadcast,
+            modo: modo.clone(),
+            resultado: Some((marca.score, marca.um_credito)),
+        };
+        tokio::spawn(renomear_live(firestore.clone(), youtube, vod));
+    }
     // Ranking online só com o recorde: a run atual contra o que está no banco.
     let online = recordes::manter_so_os_recordes(&firestore, &usuario.uid, &payload.jogo_id, &payload.run_id)
         .await
@@ -195,6 +210,39 @@ async fn submeter_run(
         depois.posicao = destaques::posicao_fora_do_recorde(&firestore, &usuario.uid, &payload.jogo_id, modo.as_deref(), marca).await;
     }
     Ok(Json(RespostaEnvio { run, online, depois }))
+}
+
+/// A live de uma run, no canal do jogador, e o que vai no título dela.
+struct TituloDaLive {
+    uid: String,
+    jogo_id: String,
+    broadcast: String,
+    modo: Option<String>,
+    /// Placar e se zerou com 1 crédito, depois do resultado registrado (o VOD). `None`: a run
+    /// começou e a tentativa está em andamento.
+    resultado: Option<(i64, bool)>,
+}
+
+/// Título da live (`titulos::da_live`) ou do VOD com o resultado (`titulos::do_vod`). Falha vira
+/// só log: a run segue valendo.
+async fn renomear_live(fs: Arc<Firestore>, youtube: Arc<YouTube>, live: TituloDaLive) {
+    let feito = async {
+        let jogos = ranking_publico::jogos_publicados(&fs).await?;
+        let Some(jogo) = jogos.get(&live.jogo_id) else { return Ok(()) };
+        let nomes = ranking_publico::nomes_dos_jogadores(&fs, std::iter::once(live.uid.as_str())).await?;
+        let jogador = ranking_publico::nome_ou_padrao(&nomes, &live.uid);
+        let titulo = match live.resultado {
+            Some((score, um_credito)) => titulos::do_vod(jogo, live.modo.as_deref(), &jogador, score, um_credito),
+            None => titulos::da_live(jogo, live.modo.as_deref(), &jogador),
+        };
+        if youtube.renomear_video(&fs, &live.uid, &live.broadcast, &titulo).await? {
+            println!("youtube: live {} de {}: {titulo}", live.broadcast, live.uid);
+        }
+        Ok::<(), AppError>(())
+    };
+    if let Err(e) = feito.await {
+        eprintln!("youtube: título da live {} de {}: {e:?}", live.broadcast, live.uid);
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::firestore::Firestore;
 use crate::middleware::firebase::{exigir_usuario_firebase, FirebaseUser};
+use crate::routes::ranking_publico;
+use crate::services::titulos;
 use crate::services::youtube::{self, Conexao, LiveCriada, Transicao, YouTube};
 
 pub fn router<S>(firestore: Arc<Firestore>, youtube: Option<Arc<YouTube>>) -> Router<S>
@@ -88,9 +90,32 @@ async fn desconectar(
 
 #[derive(Deserialize)]
 struct IniciarPayload {
+    /// Título pronto (Client antigo); com `game_id`, o servidor monta o título (`titulos::da_live`).
+    #[serde(default)]
     title: String,
     #[serde(default)]
     public: bool,
+    #[serde(default)]
+    game_id: Option<String>,
+    /// Modo da partida (`highscore`, `caravan-*`); ausente = Hi-Score.
+    #[serde(default)]
+    mode: Option<String>,
+}
+
+/// `{jogo} · {MODO} — {jogador} | ShmupX`, com o jogo e o nome lidos no banco. Jogo desconhecido ou
+/// falha de leitura: o título que o Client mandou.
+async fn titulo_da_live(fs: &Firestore, uid: &str, p: &IniciarPayload) -> String {
+    let Some(game_id) = p.game_id.as_deref().filter(|id| !id.is_empty()) else { return p.title.clone() };
+    let jogo = match ranking_publico::jogos_publicados(fs).await {
+        Ok(jogos) => jogos.get(game_id).cloned(),
+        Err(e) => {
+            eprintln!("youtube: título da live de {uid}: {e:?}");
+            None
+        }
+    };
+    let Some(jogo) = jogo else { return p.title.clone() };
+    let nomes = ranking_publico::nomes_dos_jogadores(fs, std::iter::once(uid)).await.unwrap_or_default();
+    titulos::da_live(&jogo, p.mode.as_deref(), &ranking_publico::nome_ou_padrao(&nomes, uid))
 }
 
 async fn iniciar(
@@ -99,7 +124,9 @@ async fn iniciar(
     Extension(usuario): Extension<FirebaseUser>,
     Json(p): Json<IniciarPayload>,
 ) -> Result<Json<LiveCriada>, AppError> {
-    let live = configurado(youtube)?.criar_live(&fs, &usuario.uid, &p.title, p.public).await?;
+    let youtube = configurado(youtube)?;
+    let titulo = titulo_da_live(&fs, &usuario.uid, &p).await;
+    let live = youtube.criar_live(&fs, &usuario.uid, &titulo, p.public).await?;
     println!("youtube: {} criou a live {} (public={})", usuario.uid, live.broadcast_id, p.public);
     Ok(Json(live))
 }

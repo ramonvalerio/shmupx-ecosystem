@@ -44,8 +44,9 @@ export function useLive() {
     return () => { alive = false; stop?.(); };
   }, []);
 
-  const start = useCallback((gameId: string, title: string, isPublic: boolean, launch: LiveLaunch) =>
-    invoke("live_iniciar", { jogoId: gameId, titulo: title, publica: isPublic, abrir: launch }), []);
+  /** `mode`: modo da partida como o backend recebe; com ele o servidor monta o título da live. */
+  const start = useCallback((gameId: string, title: string, isPublic: boolean, launch: LiveLaunch, mode?: string) =>
+    invoke("live_iniciar", { jogoId: gameId, titulo: title, modo: mode ?? null, publica: isPublic, abrir: launch }), []);
   const stop = useCallback(() => invoke("live_encerrar"), []);
   const open = useCallback((url: string) => invoke("live_abrir", { url }), []);
   return { state, start, stop, open };

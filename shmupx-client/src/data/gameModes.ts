@@ -60,6 +60,7 @@ export function setPendingRunMode(roomId: string, mode: GameMode) { pending.set(
  * pedido por um Lite antigo vira Hi-Score (o 1CC sai da run de Hi-Score).
  */
 const RUN_MODE: Record<GameMode, string> = { highscore: "highscore", "1cc": "highscore", caravan: "caravan-classic" };
+export const runModeOf = (mode: GameMode): string => RUN_MODE[mode];
 export function takePendingRunMode(roomId: string): string | null {
   const mode = pending.get(roomId);
   pending.delete(roomId);

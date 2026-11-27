@@ -20,6 +20,7 @@ pub mod ranking;
 pub mod recordes;
 pub mod robotx;
 pub mod tempo_conectado;
+pub mod titulos;
 pub mod usuarios;
 pub mod versoes;
 pub mod youtube;

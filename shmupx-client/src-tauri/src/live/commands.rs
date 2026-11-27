@@ -78,6 +78,8 @@ pub async fn live_iniciar(
     run: State<'_, RunState>,
     jogo_id: String,
     titulo: String,
+    // Modo da partida (`highscore`, `caravan-*`), para o título da live.
+    modo: Option<String>,
     publica: bool,
     abrir: Abertura,
 ) -> Result<(), String> {
@@ -99,7 +101,7 @@ pub async fn live_iniciar(
     // A cópia da live (para o destaque do top 3) fica na pasta das gravações.
     let pasta = crate::capture::destino::pasta_das_gravacoes(&app)?;
     let estado = live.inner().clone();
-    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, publica, abrir, log, pasta));
+    tauri::async_runtime::spawn(conduzir(app, estado, token, jogo_id, titulo, modo, publica, abrir, log, pasta));
     Ok(())
 }
 

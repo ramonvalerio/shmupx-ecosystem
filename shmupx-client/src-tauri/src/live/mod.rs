@@ -359,10 +359,10 @@ fn limpar_copias_antigas(pasta: &Path) {
 /// Leva a live do início ao ar e abre o jogo. Erros viram `failed` com a mensagem; cancelar
 /// volta a `idle`.
 #[allow(clippy::too_many_arguments)]
-pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: String, titulo: String, publica: bool, abertura: Abertura, log: PathBuf, pasta: PathBuf) {
+pub async fn conduzir(app: AppHandle, live: LiveState, token: String, jogo_id: String, titulo: String, modo: Option<String>, publica: bool, abertura: Abertura, log: PathBuf, pasta: PathBuf) {
     limpar_copias_antigas(&pasta);
     let resultado = tokio::select! {
-        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, publica, &abertura, &log) => r,
+        r = colocar_no_ar(&app, &live, &token, &jogo_id, &titulo, modo.as_deref(), publica, &abertura, &log) => r,
         _ = live.cancelar.notified() => Err(String::new()),
     };
     match resultado {
@@ -426,20 +426,21 @@ async fn esperar_janela(steam_app_id: Option<u32>) -> Result<janela::Window, Str
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, publica: bool, abertura: &Abertura, log: &PathBuf) -> Result<(), String> {
+async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, modo: Option<&str>, publica: bool, abertura: &Abertura, log: &PathBuf) -> Result<(), String> {
     let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, ..Default::default() };
     // Fora do Windows ainda não há captura da janela do jogo.
     if cfg!(not(windows)) {
         return Err("a live ainda não está disponível no Linux".to_string());
     }
-    // 1. A live no YouTube, com o jogo ainda fechado.
+    // 1. A live no YouTube, com o jogo ainda fechado. Com o jogo e o modo, o servidor monta o
+    // título (`Ketsui · HI-SCORE — jogador | ShmupX`); `title` vale para um servidor antigo.
     live.definir(app, Estado { status: "preparing", ..base.clone() });
     ffmpeg::preparar_encoder_h264();
     let criada = crate::net::backend::chamar_json(
         token,
         reqwest::Method::POST,
         "/api/live/start",
-        Some(serde_json::json!({ "title": titulo, "public": publica })),
+        Some(serde_json::json!({ "title": titulo, "public": publica, "game_id": jogo_id, "mode": modo })),
     )
     .await?;
     let texto = |c: &str| criada[c].as_str().map(str::to_string).ok_or_else(|| "resposta inesperada do servidor".to_string());

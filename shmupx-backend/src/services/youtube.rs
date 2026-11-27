@@ -292,6 +292,35 @@ impl YouTube {
             .ok_or_else(|| AppError::internal("YouTube não devolveu o endereço do envio"))
     }
 
+    /// Troca o título de um vídeo do canal de `uid` (o VOD da live, com o resultado da run). O
+    /// `videos.update` regrava o snippet inteiro: lê o atual e muda só o título, para a descrição,
+    /// as tags e a categoria ficarem como estão. `false`: o título já era esse (nada foi gravado).
+    pub async fn renomear_video(&self, fs: &Firestore, uid: &str, video_id: &str, titulo: &str) -> Result<bool, AppError> {
+        let titulo: String = titulo.trim().chars().take(TITULO_MAXIMO).collect();
+        if titulo.is_empty() || !id_valido(video_id) {
+            return Err(AppError::bad_request("título ou vídeo inválido"));
+        }
+        let acesso = self.acesso(fs, uid).await?;
+        let atual = self.api(&acesso, reqwest::Method::GET, &format!("videos?part=snippet&id={video_id}"), None).await?;
+        let Some(snippet) = atual["items"][0]["snippet"].as_object() else {
+            return Err(AppError::not_found("vídeo não encontrado no canal"));
+        };
+        if snippet.get("title").and_then(Value::as_str) == Some(titulo.as_str()) {
+            return Ok(false);
+        }
+        let mut novo = serde_json::Map::new();
+        novo.insert("title".into(), json!(titulo));
+        // 20: Jogos, se o vídeo ainda não tiver categoria (o update exige uma).
+        novo.insert("categoryId".into(), snippet.get("categoryId").cloned().unwrap_or_else(|| json!("20")));
+        for campo in ["description", "tags", "defaultLanguage"] {
+            if let Some(valor) = snippet.get(campo) {
+                novo.insert(campo.into(), valor.clone());
+            }
+        }
+        self.api(&acesso, reqwest::Method::PUT, "videos?part=snippet", Some(json!({ "id": video_id, "snippet": novo }))).await?;
+        Ok(true)
+    }
+
     async fn apagar_live(&self, acesso: &str, broadcast_id: &str) {
         let _ = self.api(acesso, reqwest::Method::DELETE, &format!("liveBroadcasts?id={broadcast_id}"), None).await;
     }
