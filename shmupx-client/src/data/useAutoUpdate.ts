@@ -6,6 +6,8 @@ import { relaunch } from "@tauri-apps/plugin-process";
 
 /** Nova checagem enquanto o Client fica aberto (a liberação pode chegar com o app rodando). */
 const CHECAR_A_CADA_MS = 30 * 60_000;
+/** Aviso antes de instalar sozinho, com "Atualizar agora" e "Depois". */
+const INSTALAR_EM_S = 10;
 
 export type AutoUpdateState =
   | { status: "idle" }
@@ -16,8 +18,11 @@ export type AutoUpdateState =
 
 /**
  * Atualização automática: o backend só oferece versões liberadas no Lab com "Atualizar os
- * Clients automaticamente". O pacote é baixado em segundo plano; a instalação (que fecha o app no
- * Windows) espera o jogador escolher, e nunca acontece no meio de uma gravação.
+ * Clients automaticamente". O pacote é baixado em segundo plano e, terminado o download, o Client
+ * se atualiza sozinho depois de um aviso de alguns segundos (o jogador pode adiar). Nunca com um
+ * jogo, gravação ou live em andamento (`busy`): espera acabar. No Windows o instalador roda em modo
+ * silencioso (tauri.conf.json › updater.windows.installMode "quiet"), sem a tela do Setup, e reabre
+ * o Client no fim.
  *
  * No ShmupX Portable o aviso é o mesmo, mas o pacote é o próximo ShmupX-Portable-<versão>.exe
  * (`portatil_baixar`, SHA-256 conferido no Rust): ao atualizar, ele abre e o Client fecha.
@@ -28,6 +33,10 @@ export function useAutoUpdate(busy: boolean) {
   const running = useRef(false);
   const portable = useRef<Promise<boolean> | null>(null);
   const isPortable = () => (portable.current ??= invoke<boolean>("portatil_ativo").catch(() => false));
+  /** Segundos até instalar sozinho (null: sem contagem). */
+  const [countdown, setCountdown] = useState<number | null>(null);
+  /** O jogador escolheu "Depois": fica só o botão "Reiniciar e atualizar". */
+  const [postponed, setPostponed] = useState(false);
 
   const checkNow = useCallback(async () => {
     if (running.current || pending.current) return;
@@ -76,7 +85,7 @@ export function useAutoUpdate(busy: boolean) {
     return () => window.clearInterval(timer);
   }, [checkNow]);
 
-  /** Fecha o app, instala em modo passivo e o instalador abre a versão nova. */
+  /** Fecha o app, instala em modo silencioso e o instalador abre a versão nova. */
   const installNow = useCallback(async () => {
     const update = pending.current;
     if (!update || busy) return;
@@ -92,9 +101,37 @@ export function useAutoUpdate(busy: boolean) {
       // e é preciso reiniciar para entrar na versão nova.
       await relaunch();
     } catch (e) {
-      setState({ status: "error", message: e instanceof Error ? e.message : String(e) });
+      // Ex.: o jogador recusou a permissão do Windows. O pacote continua baixado: o botão fica.
+      console.warn("instalar atualização:", e);
+      setPostponed(true);
+      setState({ status: "ready", version: update.version, notes: update.body });
     }
   }, [busy]);
 
-  return { state, installNow };
+  const install = useRef(installNow);
+  install.current = installNow;
+  const waiting = state.status === "ready" && !busy && !postponed;
+  useEffect(() => {
+    if (!waiting) {
+      setCountdown(null);
+      return;
+    }
+    let left = INSTALAR_EM_S;
+    setCountdown(left);
+    const timer = window.setInterval(() => {
+      left -= 1;
+      if (left > 0) {
+        setCountdown(left);
+        return;
+      }
+      window.clearInterval(timer);
+      setCountdown(null);
+      void install.current();
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
+
+  const postpone = useCallback(() => setPostponed(true), []);
+
+  return { state, installNow, countdown, postpone };
 }

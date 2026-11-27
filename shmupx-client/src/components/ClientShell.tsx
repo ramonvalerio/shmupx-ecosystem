@@ -101,8 +101,9 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   const live = useLive();
   const liveCountdown = useCountdown(live.state.status === "live" ? live.state.ends_at_ms : null);
   const liveRoom = rooms.find((room) => room.id === live.state.game_id);
-  // Instalar fecha o app: nunca durante uma gravação.
-  const autoUpdate = useAutoUpdate(Boolean(recordingRoom));
+  // Instalar fecha o app (e troca o motor): nunca com uma gravação, um jogo aberto ou uma live.
+  const updateBusy = Boolean(recordingRoom) || Object.keys(practiceGames).length > 0 || (live.state.status !== "idle" && live.state.status !== "failed");
+  const autoUpdate = useAutoUpdate(updateBusy);
   const autoUpdateActive = autoUpdate.state.status !== "idle" && autoUpdate.state.status !== "error";
   const [notificationId, setNotificationId] = useState<string | null>(null);
   function openNotification(id: string | null) { setNotificationId(id); setSection("notification"); }
@@ -335,13 +336,21 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
         )}
         {autoUpdate.state.status === "ready" && (
           <p className="update-available" role="status">
-            {t("Versão {version} pronta.", { version: autoUpdate.state.version })}{" "}
-            <button type="button" className="text-action" onClick={() => void autoUpdate.installNow()} disabled={Boolean(recordingRoom)} title={recordingRoom ? t("Termine a partida antes de atualizar.") : undefined}>
-              {t("Reiniciar e atualizar")}
+            {autoUpdate.countdown !== null
+              ? t("Atualizando para a versão {version} em {seconds} s.", { version: autoUpdate.state.version, seconds: autoUpdate.countdown })
+              : t("Versão {version} pronta.", { version: autoUpdate.state.version })}{" "}
+            <button type="button" className="text-action" onClick={() => void autoUpdate.installNow()} disabled={updateBusy} title={updateBusy ? t("Feche o jogo antes de atualizar.") : undefined}>
+              {autoUpdate.countdown !== null ? t("Atualizar agora") : t("Reiniciar e atualizar")}
             </button>
+            {autoUpdate.countdown !== null && (
+              <>
+                {" "}
+                <button type="button" className="text-action" onClick={autoUpdate.postpone}>{t("Depois")}</button>
+              </>
+            )}
           </p>
         )}
-        {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Instalando a versão {version}…", { version: autoUpdate.state.version })}</p>}
+        {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Atualizando para a versão {version}. O ShmupX volta em instantes.", { version: autoUpdate.state.version })}</p>}
         {/* Dúvidas: escolhe o assunto (importar, jogar, ranking, lives, tema, pasta dos vídeos) e o
             tutorial mostra só aquele caminho. */}
         <button type="button" className="how-to-use" disabled={tutorial.active} title={t("Tire uma dúvida: o ShmupX mostra onde tocar")}
