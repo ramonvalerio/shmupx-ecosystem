@@ -26,6 +26,9 @@ import { isSupported } from "../data/validation";
 import RankedPanel, { useRankedLive } from "./RankedPanel";
 import EventsCarousel from "./EventsCarousel";
 import { avatarOf, usePublicProfiles } from "../data/publicProfile";
+import { netplayCertified } from "../data/netplay";
+import { inviteToPlay } from "./NetplayCenter";
+import PlayerContextMenu from "./PlayerContextMenu";
 
 
 
@@ -286,6 +289,17 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const avatars = usePublicProfiles([playerId ?? "", ...others.map((o) => o.uid)]);
   const players = sorted;
 
+  // Clique direito num jogador › Convidar para jogar (treino em dupla online no ShmupX Emulator).
+  const [playerMenu, setPlayerMenu] = useState<{ x: number; y: number; player: (typeof sorted)[number] } | null>(null);
+  const closePlayerMenu = useCallback(() => setPlayerMenu(null), []);
+  const inviteBlocked = (player: (typeof sorted)[number]): string | null =>
+    !netplayCertified(room) ? t("{game} ainda não tem treino em dupla", { game: room.title })
+    : !launcher.owns("emulator") ? t("Você precisa ter {game} no ShmupX Emulator", { game: room.title })
+    : player.status === "offline" ? t("{name} está offline", { name: player.name })
+    : player.game || player.playing ? t("{name} já está jogando", { name: player.name })
+    : gameOpen ? t("Feche o seu jogo antes de convidar")
+    : null;
+
   return (
     <section className="game-room" aria-label={t("Sala de {game}", { game: room.title })}>
       <div className="game-room-column">
@@ -381,8 +395,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
         </label>
         <ul>
           {sorted.map((player) => (
-            <li key={player.id} className={`room-player ${player.you ? "is-you" : ""} ${player.live ? "is-live" : ""}`}
+            <li key={player.id} className={`room-player ${player.you ? "is-you" : ""} ${player.live ? "is-live" : ""} ${playerMenu?.player.id === player.id ? "is-menu-open" : ""}`}
               title={player.live ? t("Clique duas vezes para assistir à live de {name}", { name: player.name }) : undefined}
+              onContextMenu={player.you ? undefined : (event) => { event.preventDefault(); setPlayerMenu({ x: event.clientX, y: event.clientY, player }); }}
               onDoubleClick={player.live ? () => void openWatchWindow(room.id, player.id, player.name, t("{name} · ao vivo · {game}", { name: player.name, game: room.title })) : undefined}>
               <span className="room-player-avatar" aria-hidden="true"><img className="avatar-img" src={avatarOf(avatars, player.you ? playerId : player.id)} alt="" /></span>
               <span className="room-player-info">
@@ -419,6 +434,11 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
           </li>
         </ul>
       </aside>
+      {playerMenu && <PlayerContextMenu x={playerMenu.x} y={playerMenu.y} title={playerMenu.player.name} onClose={closePlayerMenu} items={[{
+        label: t("Convidar para jogar"),
+        disabledReason: inviteBlocked(playerMenu.player),
+        onSelect: () => inviteToPlay({ uid: playerMenu.player.id, name: playerMenu.player.name }, room),
+      }]} />}
     </section>
   );
 }

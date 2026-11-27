@@ -51,6 +51,7 @@ pub fn run() {
             capture::destino::gravacoes_abrir_pasta,
             steam::commands::inicializar_jogo_steam,
             steam::commands::inicializar_jogo_emulador,
+            steam::dupla::dupla_preparar,
             steam::controles::motor_captura_iniciar,
             steam::controles::motor_captura_parar,
             steam::commands::steam_biblioteca,
@@ -105,6 +106,8 @@ pub fn run() {
             chat::chat_abrir_link,
         ])
         .setup(|app| {
+            // Treino em dupla: os eventos do motor (`SHMUPX_NETPLAY`) vão para a interface.
+            steam::dupla::registrar_app(app.handle());
             // Log do sistema (arquivo na pasta de logs do app): os detalhes técnicos das falhas ficam
             // aqui, e a interface mostra ao jogador só o que ele pode fazer. Na versão instalada, só
             // avisos e erros.

@@ -297,6 +297,8 @@ pub struct Motor {
     pub posicao_arquivo: Option<PathBuf>,
     /// Idioma dos rótulos do cartão de resultado: `pt` ou `en` (`SHMUPX_IDIOMA`).
     pub idioma: Option<String>,
+    /// Treino em dupla online (`-shmupx_netplay`): papel, porta e endereços do parceiro.
+    pub dupla: Option<super::dupla::Dupla>,
 }
 
 /// Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Valores ausentes ficam
@@ -516,7 +518,7 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     }
     let exe = pastas.into_iter().map(|p| p.join(MOTOR_EXE)).find(|e| e.is_file())?;
     let dados = app.path().app_data_dir().ok()?.join("engine");
-    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None, idioma: None })
+    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None, idioma: None, dupla: None })
 }
 
 /// Nome curto de ROM (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
@@ -604,6 +606,14 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
         .args(["-plugin", "shmupx", "-skip_gameinfo"]);
     if motor.ranking {
         comando.arg("-shmupx_ranked");
+    }
+    // Treino em dupla online: o motor conecta ao parceiro antes do primeiro quadro.
+    if let Some(dupla) = motor.dupla.as_ref().filter(|_| !motor.ranking) {
+        dupla.validar()?;
+        if !motor_conhece_opcao(&motor.exe, "shmupx_netplay") {
+            return Err("este ShmupX Emulator ainda não tem o treino em dupla; atualize o ShmupX Client".to_string());
+        }
+        comando.args(dupla.argumentos());
     }
     // Caravan: o plugin do ShmupX desenha o contador e o resultado no fim do tempo.
     if let Some(segundos) = motor.caravan_segundos.filter(|_| motor.ranking) {

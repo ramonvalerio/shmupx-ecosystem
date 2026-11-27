@@ -12,6 +12,7 @@ import { auth as firebaseAuth } from "./auth/firebase";
 import { useRoomChat } from "./data/useRoomChat";
 import { usePresenceMode } from "./data/presenceMode";
 import { useRoomPresence } from "./data/useRoomPresence";
+import NetplayCenter from "./components/NetplayCenter";
 import { roomJoinedAt } from "./data/roomSession";
 import { useCatalog } from "./data/useCatalog";
 import { applyRunAnalysis, applyRunHighlight, mergePendingRuns, type PendingRun, type RunAnalysisEvent, type RunHighlightEvent, type SessionRun } from "./types/submission";
@@ -240,6 +241,9 @@ export default function App() {
         />
       )}
     />
+
+      {/* Treino em dupla online: convites (clique direito num jogador › Convidar para jogar) e a conexão. */}
+      <NetplayCenter me={{ uid: profileUid, name: profileName }} rooms={rooms} />
 
       {expiredRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">

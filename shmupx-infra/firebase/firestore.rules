@@ -24,6 +24,10 @@ service cloud.firestore {
     //   write; the player reads their own. Banned/disabled can't read/post chat or show presence;
     //   muted can't post; chatHidden is out of the chat (can't read or post).
     // chatModeration/hidden: uids whose messages the Client hides (no chat visibility or banned).
+    // netplaySessions/{id}: treino em dupla online (convite pelo clique direito na lista de jogadores).
+    //   O anfitrião (hostUid) cria o convite; só os dois leem. O convidado (guestUid) aceita ou recusa
+    //   e publica os endereços dele (guest); o anfitrião publica os dele (host) e marca ready; qualquer
+    //   um encerra (active false). Ninguém muda quem joga, o jogo, a chave da sessão nem a hora.
     // analysisJobs and all other paths: server-only. Admin SDK bypasses Rules;
     // backend validation and IAM remain mandatory for every server write.
 
@@ -88,6 +92,40 @@ service cloud.firestore {
     function publishedSeason(id) {
       return get(/databases/$(database)/documents/seasons/$(id)).data.published == true;
     }
+    // Endereços de uma ponta da dupla: a porta UDP do motor e até 6 endereços ip:porta.
+    function validNetplaySide(side) {
+      return side is map && side.keys().hasOnly(['port', 'candidates'])
+        && side.port is int && side.port > 0 && side.port < 65536
+        && side.candidates is list && side.candidates.size() >= 1 && side.candidates.size() <= 6;
+    }
+    function validNetplay(data) {
+      return data.keys().hasAll(['hostUid', 'hostName', 'guestUid', 'guestName', 'gameId', 'title', 'key', 'status', 'active', 'createdAt'])
+        && data.keys().hasOnly(['hostUid', 'hostName', 'guestUid', 'guestName', 'gameId', 'title', 'key', 'status', 'active', 'createdAt', 'updatedAt', 'host', 'guest', 'reason'])
+        && data.hostUid is string && data.guestUid is string && data.hostUid != data.guestUid
+        && data.hostName is string && data.hostName.size() <= 64
+        && data.guestName is string && data.guestName.size() <= 64
+        && data.gameId is string && data.gameId.size() <= 128
+        && data.title is string && data.title.size() <= 128
+        && data.key is string && data.key.size() >= 32 && data.key.size() <= 64
+        && data.status in ['invited', 'accepted', 'declined', 'canceled', 'ready', 'ended', 'failed']
+        && data.active is bool
+        && (!data.keys().hasAny(['host']) || validNetplaySide(data.host))
+        && (!data.keys().hasAny(['guest']) || validNetplaySide(data.guest))
+        && (!data.keys().hasAny(['reason']) || (data.reason is string && data.reason.size() <= 64));
+    }
+    // O que cada ponta pode mudar: o convidado responde (accepted/declined) e encerra; o anfitrião
+    // marca ready, cancela e encerra. Os dois podem registrar a falha.
+    function netplayChange(before, after) {
+      let changed = after.diff(before).affectedKeys();
+      let guest = request.auth.uid == before.guestUid
+        && changed.hasOnly(['status', 'guest', 'active', 'reason', 'updatedAt'])
+        && after.status in ['accepted', 'declined', 'ended', 'failed'];
+      let host = request.auth.uid == before.hostUid
+        && changed.hasOnly(['status', 'host', 'active', 'reason', 'updatedAt'])
+        && after.status in ['ready', 'canceled', 'ended', 'failed'];
+      return validNetplay(after) && (guest || host);
+    }
+
     // Jogar no PC pelo celular: o ShmupX Lite grava o pedido (command), o Client do PC avisa que
     // está aberto (desktop) e responde (result). Só o dono; mapas pequenos, sem outros campos.
     function validRemote(data) {
@@ -178,6 +216,18 @@ service cloud.firestore {
     match /chatModeration/{docId} {
       allow read: if signedIn();
       allow write: if false;
+    }
+    match /netplaySessions/{sessionId} {
+      allow get: if signedIn() && request.auth.uid in [resource.data.hostUid, resource.data.guestUid];
+      // listar: só as próprias sessões (a consulta filtra por guestUid ou hostUid do jogador)
+      allow list: if signedIn() && (resource.data.guestUid == request.auth.uid || resource.data.hostUid == request.auth.uid);
+      allow create: if signedIn() && notBlocked() && request.resource.data.hostUid == request.auth.uid
+        && validNetplay(request.resource.data) && request.resource.data.status == 'invited'
+        && request.resource.data.active == true && request.resource.data.createdAt == request.time
+        && !request.resource.data.keys().hasAny(['host', 'guest'])
+        && publishedGame(request.resource.data.gameId);
+      allow update: if signedIn() && netplayChange(resource.data, request.resource.data);
+      allow delete: if signedIn() && request.auth.uid == resource.data.hostUid;
     }
     match /remoteLaunch/{uid} {
       allow read, delete: if owns(uid);

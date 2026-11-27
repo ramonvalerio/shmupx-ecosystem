@@ -227,6 +227,16 @@ pub fn acompanhar(pid: u32, saida: impl Read + Send + 'static) {
     }
     std::thread::spawn(move || {
         for linha in BufReader::new(saida).lines().map_while(Result::ok) {
+            // Treino em dupla online: estado da conexão para a interface.
+            if linha.starts_with("SHMUPX_NETPLAY ") {
+                if linha.contains("\"ended\"") || linha.contains("\"desync\"") || linha.contains("\"summary\"") {
+                    log::warn!("motor {pid}: {linha}");
+                } else {
+                    log::info!("motor {pid}: {linha}");
+                }
+                super::dupla::repassar_evento(pid, &linha);
+                continue;
+            }
             if !linha.starts_with("SHMUPX ") {
                 continue;
             }

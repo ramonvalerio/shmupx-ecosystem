@@ -300,3 +300,40 @@ test("chat safety: reports point to a real message, one per player, read only by
   await assertFails(getDocs(collection(alice, "chatReports")));
   await assertFails(setDoc(doc(db("bob"), "chatReports/m1__bob"), report({ reporterId: "bob" })));
 });
+
+test("netplay: invite to play, only the two players read and each side changes its own part", async () => {
+  const key = "0123456789abcdef0123456789abcdef";
+  const invite = (extra = {}) => ({ hostUid: "alice", hostName: "Alice", guestUid: "bob", guestName: "Bob", gameId: "earthion",
+    title: "Earthion", key, status: "invited", active: true, createdAt: serverTimestamp(), ...extra });
+  const alice = db("alice");
+  const bob = db("bob");
+  const side = { port: 50000, candidates: ["192.168.0.2:50000", "203.0.113.5:50000"] };
+  // Convite: só o anfitrião, num jogo publicado, sem endereços ainda.
+  await assertFails(setDoc(doc(bob, "netplaySessions/s1"), invite()));
+  await assertFails(setDoc(doc(alice, "netplaySessions/s1"), invite({ guestUid: "alice" })));
+  await assertFails(setDoc(doc(alice, "netplaySessions/s1"), invite({ gameId: "draft" })));
+  await assertFails(setDoc(doc(alice, "netplaySessions/s1"), invite({ status: "ready" })));
+  await assertFails(setDoc(doc(alice, "netplaySessions/s1"), invite({ host: side })));
+  await assertFails(setDoc(doc(alice, "netplaySessions/s1"), invite({ key: "curta" })));
+  await assertSucceeds(setDoc(doc(alice, "netplaySessions/s1"), invite()));
+  // Leitura: os dois, e o convidado acha os convites dele.
+  await assertSucceeds(getDoc(doc(bob, "netplaySessions/s1")));
+  await assertFails(getDoc(doc(db("carol"), "netplaySessions/s1")));
+  await assertSucceeds(getDocs(query(collection(bob, "netplaySessions"), where("guestUid", "==", "bob"), where("active", "==", true))));
+  await assertFails(getDocs(query(collection(db("carol"), "netplaySessions"), where("active", "==", true))));
+  // O convidado aceita e publica os endereços dele; não pode trocar o jogo nem marcar ready.
+  await assertFails(updateDoc(doc(bob, "netplaySessions/s1"), { status: "ready" }));
+  await assertFails(updateDoc(doc(bob, "netplaySessions/s1"), { status: "accepted", gameId: "outro" }));
+  await assertFails(updateDoc(doc(bob, "netplaySessions/s1"), { status: "accepted", host: side }));
+  await assertFails(updateDoc(doc(bob, "netplaySessions/s1"), { status: "accepted", guest: { port: 0, candidates: [] } }));
+  await assertSucceeds(updateDoc(doc(bob, "netplaySessions/s1"), { status: "accepted", guest: side, updatedAt: serverTimestamp() }));
+  // O anfitrião publica os dele e marca ready; não mexe na parte do convidado.
+  await assertFails(updateDoc(doc(alice, "netplaySessions/s1"), { status: "ready", guest: { port: 1, candidates: ["198.51.100.1:1"] } }));
+  await assertFails(updateDoc(doc(alice, "netplaySessions/s1"), { status: "accepted" }));
+  await assertSucceeds(updateDoc(doc(alice, "netplaySessions/s1"), { status: "ready", host: side }));
+  // Qualquer um encerra; um estranho não.
+  await assertFails(updateDoc(doc(db("carol"), "netplaySessions/s1"), { status: "ended", active: false }));
+  await assertSucceeds(updateDoc(doc(bob, "netplaySessions/s1"), { status: "ended", active: false, reason: "partner_left" }));
+  await assertFails(deleteDoc(doc(bob, "netplaySessions/s1")));
+  await assertSucceeds(deleteDoc(doc(alice, "netplaySessions/s1")));
+});

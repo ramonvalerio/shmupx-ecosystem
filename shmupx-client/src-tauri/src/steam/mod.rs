@@ -5,6 +5,7 @@ pub mod biblioteca;
 pub mod commands;
 pub mod controles;
 pub mod detector;
+pub mod dupla;
 pub mod emulador;
 pub mod mister;
 pub mod mister_ssh;

@@ -139,6 +139,8 @@ pub async fn inicializar_jogo_emulador(
     cartao_jogador: Option<bool>,
     // Idioma do Client (`pt` ou `en`) para os rótulos do cartão de resultado do motor.
     idioma: Option<String>,
+    // Treino em dupla online: papel (host/guest), porta e endereços do parceiro (só no treino).
+    dupla: Option<super::dupla::Dupla>,
 ) -> Result<(), String> {
     let caravan_segundos = caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino.unwrap_or(false));
     let cartao_jogador = if !treino.unwrap_or(false) && cartao_jogador.unwrap_or(false) {
@@ -165,6 +167,7 @@ pub async fn inicializar_jogo_emulador(
             cartao_jogador,
             posicao_arquivo,
             idioma: idioma.filter(|i| i == "pt" || i == "en"),
+            dupla: dupla.filter(|_| treino),
             ..m
         });
     // Ranked de jogo validado só pela memória (sem script de vídeo): só com o ROM mapeado (outra
