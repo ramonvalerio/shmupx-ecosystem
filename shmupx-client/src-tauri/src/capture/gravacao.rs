@@ -7,8 +7,9 @@
 //! cheia, e não grava o que estiver por cima dela. O recorte, a redução e a conversão de cor são
 //! feitos na placa de vídeo (`janela_nv12`).
 //!
-//! O FFmpeg recebe o vídeo NV12 pelo stdin e o áudio por TCP local, e roda abaixo do normal: se
-//! faltar CPU, quem perde é o vídeo, nunca o jogo. No Linux (ainda sem captura de janela), a tela
+//! O FFmpeg recebe o vídeo NV12 pelo stdin e o áudio por TCP local, codifica na placa de vídeo
+//! quando dá (`ffmpeg::encoder_h264`) e roda abaixo do normal: se faltar CPU, quem perde é o
+//! vídeo, nunca o jogo. No Linux (ainda sem captura de janela), a tela
 //! inteira pelo `x11grab`, sem som.
 
 use std::io;
@@ -156,6 +157,7 @@ mod janela_do_jogo {
     /// Começa a gravar a janela do jogo, com o som do processo dono dela, em `video`.
     pub async fn iniciar(video: &Path, janela_do_jogo: janela::Window) -> Result<Gravacao, String> {
         let log = caminho_do_log(video);
+        let encoder = tauri::async_runtime::spawn_blocking(ffmpeg::encoder_h264).await.map_err(|e| e.to_string())?;
         let tela = janela_nv12::tela_inicial();
         let captura = janela_nv12::iniciar(janela_do_jogo, tela.clone())?;
         let pid_do_jogo = captura.pid;
@@ -172,7 +174,7 @@ mod janela_do_jogo {
         };
 
         let porta = crate::live::porta_livre()?;
-        let mut child = spawn(video, porta, &log).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
+        let mut child = spawn(video, porta, encoder, &log).map_err(|e| format!("falha ao iniciar o FFmpeg: {e}"))?;
         let stdin = child.stdin.take().ok_or("FFmpeg sem entrada de vídeo")?;
         let stdin = std::fs::File::from(stdin.into_owned_handle().map_err(|e| format!("FFmpeg sem entrada de vídeo: {e}"))?);
         let parar = Arc::new(AtomicBool::new(false));
@@ -201,9 +203,10 @@ mod janela_do_jogo {
     }
 
     /// FFmpeg da gravação: vídeo NV12 1280×720 a 60 quadros/s pelo stdin (entrada 0) e áudio
-    /// `f32le` estéreo por TCP local (entrada 1, o FFmpeg escuta), em H.264/AAC num MP4
-    /// fragmentado (legível mesmo se o processo for interrompido).
-    fn spawn(video: &Path, porta_audio: u16, log: &Path) -> io::Result<Child> {
+    /// `f32le` estéreo por TCP local (entrada 1, o FFmpeg escuta), em H.264 (`encoder`, de
+    /// preferência na placa de vídeo) e AAC num MP4 fragmentado (legível mesmo se o processo for
+    /// interrompido).
+    fn spawn(video: &Path, porta_audio: u16, encoder: &[&str], log: &Path) -> io::Result<Child> {
         let mut cmd = Command::new(ffmpeg::programa());
         cmd.args(["-hide_banner", "-nostats", "-loglevel", "warning", "-y"]);
         let tamanho = format!("{}x{}", janela::LARGURA, janela::ALTURA);
@@ -215,10 +218,9 @@ mod janela_do_jogo {
         cmd.args(["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "nv12", "-s", &tamanho, "-framerate", &fps, "-i", "pipe:0"]);
         cmd.args(sem_analise);
         cmd.args(["-thread_queue_size", "1024", "-f", "f32le", "-ar", &audio::TAXA_PADRAO.to_string(), "-ac", "2", "-i", &format!("tcp://127.0.0.1:{porta_audio}?listen=1")]);
-        // NV12 já é o formato do x264: sem conversão. Cor BT.601 16–235 (a da placa de vídeo).
+        // NV12 já é o formato dos encoders: sem conversão. Cor BT.601 16–235 (a da placa de vídeo).
         cmd.args(["-map", "0:v", "-map", "1:a", "-colorspace", "smpte170m", "-color_primaries", "smpte170m", "-color_trc", "smpte170m", "-color_range", "tv"]);
-        // `ultrafast`: CPU baixa acima de tamanho do arquivo, já que a codificação roda ao lado do jogo.
-        cmd.args(["-c:v", "libx264", "-preset", "ultrafast"]);
+        cmd.args(encoder);
         cmd.args(["-c:a", "aac", "-b:a", "160k"]);
         cmd.args(["-movflags", "+frag_keyframe+empty_moov"]);
         cmd.arg(video);
@@ -235,10 +237,11 @@ mod janela_do_jogo {
 pub async fn iniciar_tela_inteira(video: &Path) -> Result<Gravacao, String> {
     let log = caminho_do_log(video);
     let tela = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+    let encoder = tauri::async_runtime::spawn_blocking(ffmpeg::encoder_h264).await.map_err(|e| e.to_string())?;
     let mut cmd = Command::new(ffmpeg::programa());
     cmd.args(["-hide_banner", "-y", "-f", "x11grab", "-framerate", "60", "-i", &tela]);
-    cmd.args(["-vf", "scale=-2:720:flags=area,format=yuv420p", "-fps_mode", "cfr", "-r", "60"]);
-    cmd.args(["-c:v", "libx264", "-preset", "ultrafast", "-movflags", "+frag_keyframe+empty_moov"]);
+    cmd.args(["-vf", "scale=-2:720:flags=area,format=nv12", "-fps_mode", "cfr", "-r", "60"]);
+    cmd.args(encoder).args(["-movflags", "+frag_keyframe+empty_moov"]);
     cmd.arg(video);
     let arquivo_log = std::fs::File::create(&log).map_err(|e| format!("falha ao criar o log da gravação: {e}"))?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::from(arquivo_log));

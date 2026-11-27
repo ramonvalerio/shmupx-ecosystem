@@ -45,6 +45,37 @@ pub fn is_ffmpeg_available() -> bool {
     cmd.status().map(|status| status.success()).unwrap_or(false)
 }
 
+static ENCODERS_H264: [&[&str]; 4] = [
+    &["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "23", "-b:v", "0"],
+    &["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "22", "-qp_p", "22", "-qp_b", "22"],
+    &["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "23"],
+    &["-c:v", "libx264", "-preset", "ultrafast"],
+];
+
+static ENCODER_H264: OnceLock<&'static [&'static str]> = OnceLock::new();
+
+pub fn encoder_h264() -> &'static [&'static str] {
+    ENCODER_H264.get_or_init(|| {
+        let (ultimo, gpu) = ENCODERS_H264.split_last().expect("lista de encoders vazia");
+        let escolhido = gpu.iter().copied().find(|args| codifica(args)).unwrap_or(*ultimo);
+        log::info!("FFmpeg: encoder H.264 {}", escolhido[1]);
+        escolhido
+    })
+}
+
+fn codifica(encoder: &[&str]) -> bool {
+    let mut cmd = std::process::Command::new(programa());
+    cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=60", "-frames:v", "30", "-pix_fmt", "nv12"]);
+    cmd.args(encoder).args(["-f", "null", "-"]);
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd.status().map(|status| status.success()).unwrap_or(false)
+}
+
 /// Última linha útil do log do FFmpeg (as anteriores costumam ser banner e configuração).
 pub fn ultima_linha(log: &str) -> String {
     log.lines()
