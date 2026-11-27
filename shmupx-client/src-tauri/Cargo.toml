@@ -34,6 +34,8 @@ rodio = { version = "0.19", default-features = false, features = ["mp3"] }
 ort = "2.0.0-rc.13"
 image = { version = "0.25", default-features = false, features = ["png"] }
 sha2 = "0.10"
+# assinatura da interface publicada sem instalador (a mesma verificação do updater)
+minisign-verify = "0.3"
 base64 = "0.22"
 getrandom = "0.2"
 url = "2.5"

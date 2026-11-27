@@ -1,7 +1,7 @@
 import { useI18n } from "../i18n";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { EventsPage, HelpPage, HomePage, RankingPage, type Section } from "./ClientPages";
 import { SubmissionsPage, SubscriptionPage } from "./AccountPages";
@@ -16,6 +16,7 @@ import NotificationBell from "./NotificationBell";
 import NotificationPage from "./NotificationPage";
 import { useNotifications } from "../data/useNotifications";
 import { useAutoUpdate } from "../data/useAutoUpdate";
+import { useInterfaceUpdate } from "../data/useInterfaceUpdate";
 import { useCountdown, useLive } from "../data/useLive";
 import { AMBIENTE, type PlayerProfile } from "../auth/firebase";
 import { leaveRoomPresence, usePresenceHeartbeat, videoIdFromUrl } from "../data/useRoomPresence";
@@ -104,6 +105,8 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // Instalar fecha o app (e troca o motor): nunca com uma gravação, um jogo aberto ou uma live.
   const updateBusy = Boolean(recordingRoom) || Object.keys(practiceGames).length > 0 || (live.state.status !== "idle" && live.state.status !== "failed");
   const autoUpdate = useAutoUpdate(updateBusy);
+  // Interface nova sem instalador: um recarregar rápido (a atualização do programa, se houver, vem antes).
+  const interfaceUpdate = useInterfaceUpdate(updateBusy || autoUpdate.state.status !== "idle");
   const autoUpdateActive = autoUpdate.state.status !== "idle" && autoUpdate.state.status !== "error";
   const [notificationId, setNotificationId] = useState<string | null>(null);
   function openNotification(id: string | null) { setNotificationId(id); setSection("notification"); }
@@ -216,6 +219,14 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
   // Versão instalada (tauri.conf.json), no rodapé: acompanha cada atualização sozinha.
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => { if (isTauri()) getVersion().then(setVersion).catch(() => {}); }, []);
+  // Interface em uso (embutida ou a publicada sem instalador): passando o mouse na versão do rodapé.
+  const [uiBuilt, setUiBuilt] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    invoke<{ embutida: string; ativa: string | null }>("interface_versao")
+      .then((v) => setUiBuilt(v.ativa ?? v.embutida ?? null))
+      .catch(() => {});
+  }, []);
 
   // Menu de navegação no topo: "Minhas coleções" fixo; na sala, o jogo e o Ranking dele (sempre à
   // mostra, para abrir o ranking dali). A tela atual fica marcada; em outras telas (notificações,
@@ -364,6 +375,22 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
           </p>
         )}
         {autoUpdate.state.status === "installing" && <p className="update-available" role="status">{t("Atualizando para a versão {version}. O ShmupX volta em instantes.", { version: autoUpdate.state.version })}</p>}
+        {autoUpdate.state.status === "idle" && interfaceUpdate.ready && (
+          <p className="update-available" role="status">
+            {interfaceUpdate.countdown !== null
+              ? t("Interface do ShmupX atualizada: recarregando em {seconds} s.", { seconds: interfaceUpdate.countdown })
+              : t("Interface do ShmupX atualizada.")}{" "}
+            <button type="button" className="text-action" onClick={() => void interfaceUpdate.applyNow()} disabled={updateBusy || interfaceUpdate.applying} title={updateBusy ? t("Feche o jogo antes de atualizar.") : undefined}>
+              {t("Recarregar agora")}
+            </button>
+            {interfaceUpdate.countdown !== null && (
+              <>
+                {" "}
+                <button type="button" className="text-action" onClick={interfaceUpdate.postpone}>{t("Depois")}</button>
+              </>
+            )}
+          </p>
+        )}
         {/* Dúvidas: escolhe o assunto (importar, jogar, ranking, lives, tema, pasta dos vídeos) e o
             tutorial mostra só aquele caminho. */}
         <button type="button" className="how-to-use" disabled={tutorial.active} title={t("Tire uma dúvida: o ShmupX mostra onde tocar")}
@@ -454,7 +481,7 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
       )}
       {howToOpen && <HowToUseDialog onClose={() => setHowToOpen(false)} onPick={(topic: TutorialTopic) => { setHowToOpen(false); setSettingsOpen(false); showCollection(); tutorial.start(topic); }} />}
       {tutorial.active && <FirstRunTutorial key={tutorial.topic} topic={tutorial.topic} rooms={rooms} currentRoomId={isLibrary ? activeRoom?.id ?? selectedRoomId : null} paused={bigPicture.active} onExit={tutorial.finish} />}
-      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Em partida · {game}", {game:recordingRoom.title}) : t("Nenhuma partida em andamento")}</span><LibrarySyncStatus /><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version">SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
+      <footer className="client-footer"><span><i className={`status-dot ${recordingRoom ? "is-recording" : ""}`} />{recordingRoom ? t("Em partida · {game}", {game:recordingRoom.title}) : t("Nenhuma partida em andamento")}</span><LibrarySyncStatus /><span>{bigPicture.active && <>{bigPicture.controller} · </>}<span className="footer-version" title={uiBuilt ? t("Interface de {date}", { date: new Date(uiBuilt).toLocaleString() }) : undefined}>SHMUPX CLIENT{version && ` v${version}`}</span></span></footer>
     </main>
   );
 }

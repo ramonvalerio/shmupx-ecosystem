@@ -10,6 +10,7 @@ pub mod auth;
 pub mod capture;
 pub mod chat;
 pub mod input;
+pub mod interface;
 pub mod live;
 pub mod net;
 pub mod portatil;
@@ -24,6 +25,9 @@ fn app_version() -> &'static str {
 }
 
 pub fn run() {
+    // A interface baixada (sem instalador) entra no lugar da embutida, na mesma origem.
+    let mut context = tauri::generate_context!();
+    interface::instalar(&mut context);
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
@@ -36,6 +40,9 @@ pub fn run() {
         .manage(steam::controles::CapturaState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
+            interface::interface_aplicar,
+            interface::interface_confirmar,
+            interface::interface_versao,
             portatil::portatil_ativo,
             portatil::portatil_baixar,
             portatil::portatil_instalar,
@@ -108,6 +115,8 @@ pub fn run() {
         .setup(|app| {
             // Treino em dupla: os eventos do motor (`SHMUPX_NETPLAY`) vão para a interface.
             steam::dupla::registrar_app(app.handle());
+            // Interface nova publicada para esta versão: entra agora (se já baixada) e é procurada.
+            interface::iniciar(app.handle());
             // Log do sistema (arquivo na pasta de logs do app): os detalhes técnicos das falhas ficam
             // aqui, e a interface mostra ao jogador só o que ele pode fazer. Na versão instalada, só
             // avisos e erros.
@@ -124,7 +133,7 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // O motor escondido da tela de controles não pode sobrar depois do app fechar.
