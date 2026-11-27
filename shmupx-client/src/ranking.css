@@ -6,7 +6,7 @@
 .rk {
   --rk-cyan: var(--cyan); --rk-cyan-2: var(--cyan-2); --rk-cyan-deep: var(--cyan-deep); --rk-red: #c8605a; --rk-red-soft: #e3958f; --rk-green: #3fd98b;
   --rk-panel: #1f1f1f; --rk-well: #141414; --rk-ink: #101010; --rk-rule: #ffffff1f; --rk-rule-soft: #ffffff12;
-  --rk-text: #f0fcff; --rk-text-2: #d7e4e8; --rk-muted: #a8c1cc; --rk-label: #8fa9b3; --rk-dim: #6f8a94; --rk-vacant: #4d5c61;
+  --rk-text: #f0fcff; --rk-text-2: #d7e4e8; --rk-plate: var(--rk-text-2); --rk-muted: #a8c1cc; --rk-label: #8fa9b3; --rk-dim: #6f8a94; --rk-vacant: #4d5c61;
   grid-template-columns: minmax(0, 1fr) 440px;
 }
 .rk sup { font-size: .46em; vertical-align: top; position: relative; top: .28em; margin-left: 1px; letter-spacing: .04em; line-height: 1; }
@@ -35,7 +35,7 @@
 .rk-leader > :not(.rk-hit) { position: relative; z-index: 1; pointer-events: none; }
 .rk-leader .rk-yt:not(.is-off) { pointer-events: auto; }
 .rk-leader:hover { background-color: #232323; }
-.rk-plate { display: flex; flex-direction: column; justify-content: center; padding-left: 26px; background: var(--rk-cyan); color: var(--on-cyan); clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%); }
+.rk-plate { display: flex; flex-direction: column; justify-content: center; padding-left: 26px; background: var(--rk-plate); color: var(--rk-ink); clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 50%, calc(100% - 26px) 100%, 0 100%); }
 .rk-plate-rank { font-size: 72px; line-height: .9; }
 .rk-plate-rank sup { font-size: 30px; top: 8px; }
 .rk-plate small { margin-top: 10px; font-size: 12px; letter-spacing: .2em; }
@@ -203,7 +203,8 @@
 
 /* Tema claro: mesmas formas, superfícies claras. */
 .theme-light .rk { --rk-panel: #ecedea; --rk-well: #dadbd6; --rk-ink: #dadbd6; --rk-rule: #10233f25; --rk-rule-soft: #10233f18; --rk-text: #10233f; --rk-text-2: #10233f; --rk-muted: #475569; --rk-label: #475569; --rk-dim: #64748b; --rk-vacant: #94a3b8; --rk-cyan: #1f6feb; --rk-cyan-2: #0b7285; --rk-cyan-deep: #d6e4fb; }
-.theme-light .rk-plate { color: #fff; }
+/* placa do recorde: cinza claro da paleta no tema escuro; no claro continua no azul (o cinza lá é escuro) */
+.theme-light .rk-plate { background: var(--rk-cyan); color: #fff; }
 /* Medalha de ouro na placa do recorde, à direita do 1ST (a mesma da lista de jogadores da sala). */
 .rk-plate { position: relative; }
 .rk-plate-medal { position: absolute; top: 50%; right: 28px; width: 40px; height: 40px; transform: translateY(-50%); object-fit: contain; filter: drop-shadow(0 2px 4px #0008); }
