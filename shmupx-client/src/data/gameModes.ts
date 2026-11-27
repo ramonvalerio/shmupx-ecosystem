@@ -3,8 +3,8 @@ import type { GameMode, GameRoom } from "../types/room";
 /** Modos na ordem em que aparecem para escolher. */
 export const GAME_MODES: { id: GameMode; label: string; detail: string }[] = [
   { id: "highscore", label: "Hi-Score", detail: "Pontuação máxima, com quantos créditos quiser." },
-  { id: "1cc", label: "1CC", detail: "Zerar com 1 crédito, sem continue." },
   { id: "caravan", label: "Caravan", detail: "Pontuação em tempo limitado." },
+  { id: "1cc", label: "1CC", detail: "Zerar com 1 crédito, sem continue." },
 ];
 
 /**

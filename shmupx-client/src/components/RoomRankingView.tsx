@@ -15,8 +15,8 @@ type Scope = "local" | "online";
 
 const MODES: { id: GameMode; label: string }[] = [
   { id: "highscore", label: "Hi-Score" },
-  { id: "1cc", label: "1CC" },
   { id: "caravan", label: "Caravan" },
+  { id: "1cc", label: "1CC" },
 ];
 const MODE_LABEL: Record<GameMode, string> = { highscore: "Hi-Score", "1cc": "1CC", caravan: "Caravan" };
 const PLATFORM_LABEL: Record<PlayOn, string> = { steam: "Steam", emulator: "Emulador", mister: "MiSTer" };
