@@ -38,15 +38,17 @@ function PlatformTags({ tags }: { tags: PlatformTag[] }) {
     </span>
   );
 }
-type PlatformFilter = "emulator" | "mister" | "steam" | "soon";
+type PlatformFilter = "all" | "emulator" | "mister" | "steam" | "soon";
 const PLATFORM_FILTERS: { id: PlatformFilter; label: string }[] = [
+  { id: "all", label: "Todas" },
   { id: "emulator", label: "Emulador" },
   { id: "mister", label: "MiSTer" },
   { id: "steam", label: "Steam" },
   { id: "soon", label: "Em breve" },
 ];
-type LibraryFilter = "owned" | "missing";
+type LibraryFilter = "all" | "owned" | "missing";
 const LIBRARY_FILTERS: { id: LibraryFilter; label: string }[] = [
+  { id: "all", label: "Todos" },
   { id: "owned", label: "Na biblioteca" },
   { id: "missing", label: "Não tenho ainda" },
 ];
@@ -57,25 +59,7 @@ const SORTS: { id: CollectionPreferences["sort"]; label: string }[] = [
   { id: "favorites", label: "Favoritos" },
 ];
 
-/**
- * Filtro de seleção múltipla. "Todas/Todos" fica marcado com todas as opções marcadas; clicar nele
- * marca todas (ou desmarca todas, se já estavam). Desmarcar uma opção desmarca o "Todas".
- */
-function MultiSegmented<T extends string>({ label, allLabel, value, options, onChange }: { label: string; allLabel: string; value: T[]; options: { id: T; label: string }[]; onChange: (ids: T[]) => void }) {
-  const { t } = useI18n();
-  const all = options.every((option) => value.includes(option.id));
-  const toggle = (id: T) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id]);
-  return (
-    <div className="collection-segment">
-      <span>{t(label)}</span>
-      <div role="group" aria-label={t(label)}>
-        <button type="button" aria-pressed={all} onClick={() => onChange(all ? [] : options.map((option) => option.id))}>{t(allLabel)}</button>
-        {options.map((option) => <button type="button" key={option.id} aria-pressed={value.includes(option.id)} onClick={() => toggle(option.id)}>{t(option.label)}</button>)}
-      </div>
-    </div>
-  );
-}
-
+/** Filtro de uma opção só (Plataforma, Biblioteca e Ordenar por). */
 function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; label: string }[]; onChange: (id: T) => void }) {
   const { t } = useI18n();
   return (
@@ -174,12 +158,12 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
   const { t } = useI18n();
   const [preferences, setPreferences] = useState(readPreferences);
   const [query, setQuery] = useState("");
-  const [platformFilter, setPlatformFilter] = useState<PlatformFilter[]>(() => PLATFORM_FILTERS.map((option) => option.id));
+  const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
   const [storageError, setStorageError] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const steam = useSteamLibrary();
   const playable = usePlatformOwnership();
-  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter[]>(() => LIBRARY_FILTERS.map((option) => option.id));
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   /** O jogador tem o jogo em alguma plataforma (Steam, emulador ou MiSTer)? */
   const inLibrary = (room: GameRoom) => playable.tags(room).some((tag) => tag.owned);
@@ -192,14 +176,15 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
   }
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(preferences)); setStorageError(false); } catch { setStorageError(true); } }, [preferences]);
 
-  // Plataformas marcadas: os jogos que rodam em alguma delas. Coming soon soma os jogos ainda sem
-  // script de validação (sozinho, mostra só eles). Biblioteca: os que tenho e/ou os que não tenho.
-  const platformIds = platformFilter.filter((id): id is Exclude<PlatformFilter, "soon"> => id !== "soon");
-  const soon = platformFilter.includes("soon");
-  const showPlatform = (room: GameRoom) => platformIds.length === 0
-    ? soon && !isSupported(room)
-    : (soon || isSupported(room)) && playable.tags(room).some((tag) => (platformIds as string[]).includes(tag.id));
-  const showLibrary = (room: GameRoom) => !playable.anyLibrary || libraryFilter.includes(inLibrary(room) ? "owned" : "missing");
+  // Plataforma: Todas = os jogos de qualquer plataforma; uma plataforma = os jogos já validados que
+  // rodam nela; Em breve = só os ainda sem script de validação. Biblioteca: todos, os que tenho ou
+  // os que não tenho.
+  const showPlatform = (room: GameRoom) => platformFilter === "soon"
+    ? !isSupported(room)
+    : platformFilter === "all"
+      ? playable.tags(room).some((tag) => tag.id === "emulator" || tag.id === "mister" || tag.id === "steam")
+      : isSupported(room) && playable.tags(room).some((tag) => tag.id === platformFilter);
+  const showLibrary = (room: GameRoom) => !playable.anyLibrary || libraryFilter === "all" || libraryFilter === (inLibrary(room) ? "owned" : "missing");
   const visible = selectCollection(rooms, runs, preferences, query, "all").filter((room) => showPlatform(room) && showLibrary(room));
   const selected = rooms.find((room) => room.id === selectedRoomId) ?? null;
   const selectionHidden = selected && !visible.some((room) => room.id === selected.id);
@@ -207,8 +192,8 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
   const toggleFavorite = (id: string) => setPreferences((current) => ({ ...current, favorites: current.favorites.includes(id) ? current.favorites.filter((f) => f !== id) : [...current.favorites, id] }));
   function resetFilters() {
     setQuery("");
-    setPlatformFilter(PLATFORM_FILTERS.map((option) => option.id));
-    setLibraryFilter(LIBRARY_FILTERS.map((option) => option.id));
+    setPlatformFilter("all");
+    setLibraryFilter("all");
   }
 
 
@@ -227,8 +212,8 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           </svg>
           <span>{t("Importar jogos")}</span>
         </button>
-        <MultiSegmented label="Plataforma" allLabel="Todas" value={platformFilter} options={PLATFORM_FILTERS} onChange={setPlatformFilter} />
-        {playable.anyLibrary && <MultiSegmented label="Biblioteca" allLabel="Todos" value={libraryFilter} options={LIBRARY_FILTERS} onChange={setLibraryFilter} />}
+        <Segmented label="Plataforma" value={platformFilter} options={PLATFORM_FILTERS} onChange={setPlatformFilter} />
+        {playable.anyLibrary && <Segmented label="Biblioteca" value={libraryFilter} options={LIBRARY_FILTERS} onChange={setLibraryFilter} />}
         <Segmented label="Ordenar por" value={preferences.sort} options={SORTS} onChange={(sort) => setPreferences((current) => ({ ...current, sort }))} />
         {!bigPicture && <div className="collection-segment"><span>{t("Visualização")}</span><div className="collection-view-tools" role="group" aria-label={t("Visualização da coleção")}>
           <button type="button" aria-label={t(preferences.descending ? "Ordenar nomes de A a Z" : "Ordenar nomes de Z a A")} onClick={() => setPreferences((current) => ({ ...current, descending: !current.descending }))}>{preferences.descending ? "Z A ↓" : "A Z ↑"}</button>
