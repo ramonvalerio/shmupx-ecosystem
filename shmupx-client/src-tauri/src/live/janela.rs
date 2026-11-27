@@ -39,6 +39,8 @@ pub fn janela_dos_processos(pids: &[u32]) -> Option<Window> {
     if pids.is_empty() {
         return None;
     }
+    // Partidas do ShmupX Emulator: a janela é a do processo do motor.
+    let pids: Vec<u32> = pids.iter().map(|p| crate::steam::sessao_motor::pid_real(*p).unwrap_or(*p)).collect();
     Window::enumerate()
         .ok()?
         .into_iter()

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
-import { liveActive, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
+import { liveActive, liveTakesGame, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
 import { caravanSecondsOf, runModeOf } from "../data/gameModes";
@@ -208,7 +208,10 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
   const liveUnavailable = target === "mister"
     ? t("No MiSTer não dá para transmitir: a live mostra a janela do jogo neste computador.")
     : !youtube.connection?.connected ? t("Para transmitir, conecte seu canal do YouTube em Configurações › Integrações.") : null;
-  const withLive = prefs.on && !liveUnavailable;
+  // Live no ar com um jogo do ShmupX Emulator: o Play Ranked deste jogo (no emulador) troca o jogo
+  // na mesma janela e a run entra na mesma live.
+  const liveSwitch = liveOn && liveTakesGame(live.state, target);
+  const withLive = (prefs.on && !liveUnavailable) || liveSwitch;
   const liveLabel = live.state.status === "preparing" ? t("Criando a live…")
     : live.state.status === "connecting" ? t("Conectando ao YouTube…")
     : live.state.status === "live" && !live.state.game_open ? t("Abrindo o jogo…")
@@ -270,8 +273,8 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
 
   const coin = (
     <CreditsBadge uid={uid} className="room-credits" spin={coinSpin} onPlay={insertCoin} live={withLive}
-      playDisabled={launcher.isLaunching || busy || liveOn}
-      playTitle={liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t(eventChoices.length > 0 ? "Clique na ficha para jogar: Training Mode, Ranked Mode ou o evento." : "Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
+      playDisabled={launcher.isLaunching || busy || (liveOn && !liveSwitch)}
+      playTitle={liveSwitch ? t("A live continua: o jogo abre na mesma janela e a partida entra na live.") : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t(eventChoices.length > 0 ? "Clique na ficha para jogar: Training Mode, Ranked Mode ou o evento." : "Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
   );
   const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} events={eventChoices} onTraining={playTraining} onRanked={playRanked} onEvent={playEvent} onClose={() => setChoosing(false)} />;
   const recordGameplay = useRecordGameplay();

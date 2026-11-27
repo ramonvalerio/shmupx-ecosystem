@@ -102,6 +102,11 @@ struct Evento {
     cleared: Option<bool>,
     #[serde(default)]
     survival_ms: Option<i64>,
+    /// Resposta ao `trocar` (evento `switch`).
+    #[serde(default)]
+    ok: Option<bool>,
+    #[serde(default)]
+    reason: Option<String>,
 }
 
 impl Telemetria {
@@ -241,13 +246,31 @@ pub fn acompanhar(pid: u32, saida: impl Read + Send + 'static) {
                 continue;
             }
             log::info!("motor {pid}: {linha}");
+            // Troca de jogo no mesmo processo: a resposta ao `trocar` e, no fim do jogo anterior, a
+            // partida nova passa a receber a telemetria (a anterior fica encerrada, como um processo).
+            let evento = serde_json::from_str::<Evento>(&linha["SHMUPX ".len()..]).ok();
+            if let Some(evento) = evento.as_ref().filter(|e| e.ev == "switch") {
+                super::sessao_motor::resposta(pid, if evento.ok.unwrap_or(false) { Ok(()) } else { Err(evento.reason.clone().unwrap_or_default()) });
+                continue;
+            }
+            let partida = super::sessao_motor::partida_do_motor(pid);
             if let Ok(mut mapa) = registro().lock() {
-                mapa.entry(pid).or_default().aplicar(&linha);
+                mapa.entry(partida).or_default().aplicar(&linha);
+            }
+            if evento.as_ref().is_some_and(|e| e.ev == "stop") {
+                if let Some((anterior, nova)) = super::sessao_motor::fim_do_jogo(pid) {
+                    if let Ok(mut mapa) = registro().lock() {
+                        mapa.entry(anterior).or_default().encerrado = true;
+                        mapa.insert(nova, Telemetria::default());
+                    }
+                }
             }
         }
+        let partida = super::sessao_motor::partida_do_motor(pid);
         if let Ok(mut mapa) = registro().lock() {
-            mapa.entry(pid).or_default().encerrado = true;
+            mapa.entry(partida).or_default().encerrado = true;
         }
+        super::sessao_motor::encerrado(pid);
     });
 }
 

@@ -85,6 +85,11 @@ pub async fn live_iniciar(
 ) -> Result<(), String> {
     let token = token(&sessao)?;
     if live.ativa() {
+        // Live no ar com um jogo do ShmupX Emulator: o jogo novo abre na mesma janela e entra nesta
+        // live, sem cortar para quem assiste.
+        if live.aceita_outro_jogo() && matches!(abrir, Abertura::Emulator { .. }) {
+            return crate::live::trocar_jogo(&app, &jogo_id, &abrir).await;
+        }
         return Err("Já existe uma live em andamento.".into());
     }
     if run.0.lock().await.is_some() {
@@ -108,7 +113,7 @@ pub async fn live_iniciar(
 /// END LIVE (também cancela um início em andamento).
 #[tauri::command]
 pub fn live_encerrar(live: State<'_, LiveState>) {
-    live.cancelar.notify_waiters();
+    live.encerrar();
 }
 
 /// Abre no navegador o link da live ou as páginas do YouTube para criar o canal e liberar as lives

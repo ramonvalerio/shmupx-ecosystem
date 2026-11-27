@@ -32,8 +32,18 @@ pub fn is_steam_running() -> bool {
     })
 }
 
-/// O processo `pid` ainda existe?
+/// O jogo `pid` ainda está aberto? No ShmupX Emulator, `pid` é a partida (`sessao_motor`): a
+/// partida de um jogo trocado no mesmo processo fecha quando o jogo seguinte abre.
 pub fn processo_vivo(pid: u32) -> bool {
+    match super::sessao_motor::partida_atual(pid) {
+        Some(false) => false,
+        Some(true) => super::sessao_motor::pid_real(pid).is_some_and(processo_vivo_real),
+        None => processo_vivo_real(pid),
+    }
+}
+
+/// O processo `pid` ainda existe?
+pub fn processo_vivo_real(pid: u32) -> bool {
     let mut system = System::new();
     let alvo = sysinfo::Pid::from_u32(pid);
     system.refresh_processes(ProcessesToUpdate::Some(&[alvo]), true);
@@ -44,10 +54,15 @@ pub fn processo_vivo(pid: u32) -> bool {
 /// ShmupX Engine sai normalmente e a telemetria registra o fim da partida) e, se ele não fechar em
 /// `prazo`, encerra o processo. Bloqueia até o jogo sair (use fora da thread assíncrona).
 pub fn fechar_jogo(pid: u32, prazo: std::time::Duration) {
+    // Partida do ShmupX Emulator: só se ainda for o jogo na tela (fecha o motor dela).
+    if super::sessao_motor::partida_atual(pid) == Some(false) {
+        return;
+    }
+    let pid = super::sessao_motor::pid_real(pid).unwrap_or(pid);
     pedir_para_fechar(pid);
     let limite = std::time::Instant::now() + prazo;
     while std::time::Instant::now() < limite {
-        if !processo_vivo(pid) {
+        if !processo_vivo_real(pid) {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(200));

@@ -6,8 +6,13 @@
 //! crédito, sem continue; ou pela Steam), e a interface começa a run (ficha e gravação) como num
 //! Play Ranked comum → a janela do jogo (`janela`: quadro fixo 1280×720, o jogo encaixado sem
 //! distorcer) entra no lugar da tela de espera, e o som do jogo no lugar do silêncio → termina no
-//! END LIVE, no fim da run, se o jogo fechar, se o FFmpeg cair ou em 45 min. Se a run ranked não
-//! começar, a live é encerrada: não existe live fora do Ranked.
+//! END LIVE, se o jogo fechar, se o FFmpeg cair ou em 45 min. Se a run ranked não começar, a live é
+//! encerrada: não existe live fora do Ranked.
+//!
+//! Várias runs numa live: no ShmupX Emulator, outro jogo abre na mesma janela (`sessao_motor`) e a
+//! live segue no ar, sem cortar para quem assiste; a run ranked do jogo novo entra na mesma live (o
+//! servidor troca o título para o jogo e o modo dela). Depois do fim de uma run, a live espera o
+//! próximo jogo ranked por até `INTERVALO`; sem ele, termina. Um treino com a live no ar a encerra.
 //!
 //! A live não grava nada neste PC: o vídeo fica no canal do jogador. Se a run entrar no top 3 do
 //! ranking, o `destaque` baixa o vídeo da live do YouTube depois que ela termina, corta a tela de
@@ -44,6 +49,9 @@ pub const LIMITE: Duration = Duration::from_secs(45 * 60);
 const ATIVACAO: Duration = Duration::from_secs(90);
 /// Depois que a janela do jogo aparece, o tempo para a run ranked começar (ficha e gravação).
 const INICIO_DA_RUN: Duration = Duration::from_secs(60);
+/// Depois do fim de uma run, quanto a live espera o próximo jogo ranked (na mesma janela do
+/// ShmupX Emulator) antes de terminar.
+pub const INTERVALO: Duration = Duration::from_secs(120);
 pub const EVENTO: &str = "live://estado";
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
@@ -63,6 +71,9 @@ pub struct Estado {
     /// No ar com o jogo na tela. Antes disso (`live` sem jogo), a live mostra a tela de espera
     /// enquanto o jogo abre.
     pub game_open: bool,
+    /// O jogo da live é do ShmupX Emulator: outro jogo ranked dele abre na mesma janela e entra na
+    /// live (Play Ranked em outra sala com a live no ar).
+    pub emulator: bool,
 }
 
 /// Como abrir o jogo depois que a live entra no ar (o mesmo que o Play Ranked faria).
@@ -108,7 +119,7 @@ struct Corrente {
     captura: Option<janela::CapturaJanela>,
 }
 
-/// A run ranked transmitida por esta live.
+/// A run ranked transmitida agora por esta live (e as que já passaram por ela).
 struct Vinculo {
     jogo_id: String,
     broadcast_id: String,
@@ -117,7 +128,40 @@ struct Vinculo {
     /// Segundo do vídeo da live em que o jogo apareceu (o destaque corta a tela de espera).
     jogo_aos_s: Option<f64>,
     run_id: Option<String>,
-    run_terminou: bool,
+    /// O jogo é do ShmupX Emulator: outro jogo pode abrir na mesma janela e entrar nesta live.
+    emulador: bool,
+    /// A run terminou e a live espera o próximo jogo ranked (desde quando).
+    entre_runs: Option<Instant>,
+    /// Segundo do vídeo em que o próximo jogo apareceu (trocado na janela), antes da run dele.
+    proximo_aos_s: Option<f64>,
+    /// Runs que já passaram por esta live: (run, começo, fim) em segundos do vídeo.
+    anteriores: Vec<(String, f64, f64)>,
+}
+
+impl Vinculo {
+    fn novo(jogo_id: &str, broadcast_id: &str, emulador: bool) -> Self {
+        Vinculo {
+            jogo_id: jogo_id.to_string(),
+            broadcast_id: broadcast_id.to_string(),
+            no_ar_desde: Instant::now(),
+            jogo_aos_s: None,
+            run_id: None,
+            emulador,
+            entre_runs: None,
+            proximo_aos_s: None,
+            anteriores: Vec::new(),
+        }
+    }
+
+    fn agora_s(&self) -> f64 {
+        self.no_ar_desde.elapsed().as_secs_f64()
+    }
+
+    /// A live aceita a run de `jogo_id`: a do jogo dela, ou outro jogo aberto na mesma janela do
+    /// ShmupX Emulator depois que a run anterior terminou.
+    fn aceita(&self, jogo_id: &str) -> bool {
+        self.run_id.is_none() && (self.jogo_id == jogo_id || (self.emulador && self.entre_runs.is_some()))
+    }
 }
 
 /// A live de uma run, guardada quando a live termina, até o resultado da run decidir se ela vai
@@ -126,8 +170,10 @@ struct Vinculo {
 pub struct LiveDaRun {
     /// Id do vídeo da live no YouTube (o do broadcast).
     pub video_id: String,
-    /// Segundos do começo a pular (a tela de espera antes do jogo abrir).
+    /// Segundos do começo a pular (a tela de espera antes do jogo abrir, ou as runs anteriores).
     pub corte_s: f64,
+    /// Onde a run acaba no vídeo, quando outra run veio depois dela na mesma live.
+    pub fim_s: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -184,27 +230,65 @@ impl LiveState {
         }
         let no_ar = self.snapshot().status == "live";
         match travar(&self.vinculo).as_ref() {
-            Some(v) if no_ar && v.jogo_id == jogo_id && v.run_id.is_none() => Ok(Some(v.broadcast_id.clone())),
+            Some(v) if no_ar && v.aceita(jogo_id) => Ok(Some(v.broadcast_id.clone())),
             _ => Err("Há uma live em andamento: encerre-a antes de iniciar outra run.".into()),
         }
     }
 
-    /// A run ranked desta live começou (ficha debitada, gravação confirmada).
-    pub fn vincular_run(&self, jogo_id: &str, run_id: &str) {
-        if let Some(v) = travar(&self.vinculo).as_mut().filter(|v| v.jogo_id == jogo_id && v.run_id.is_none()) {
+    /// A run ranked desta live começou (ficha debitada, gravação confirmada). Um jogo novo na mesma
+    /// janela passa a ser o da live.
+    pub fn vincular_run(&self, app: &AppHandle, jogo_id: &str, run_id: &str) {
+        let mut trocou = false;
+        if let Some(v) = travar(&self.vinculo).as_mut().filter(|v| v.aceita(jogo_id)) {
+            trocou = v.jogo_id != jogo_id;
+            if v.entre_runs.take().is_some() {
+                v.jogo_aos_s = Some(v.proximo_aos_s.take().unwrap_or_else(|| v.agora_s()));
+            }
+            v.jogo_id = jogo_id.to_string();
             v.run_id = Some(run_id.to_string());
         }
-    }
-
-    /// A run terminou (STOP, jogo fechado ou fim da ficha): a live termina junto.
-    pub fn run_terminou(&self, run_id: &str) {
-        if let Some(v) = travar(&self.vinculo).as_mut().filter(|v| v.run_id.as_deref() == Some(run_id)) {
-            v.run_terminou = true;
+        if trocou {
+            self.alterar(app, |e| e.game_id = Some(jogo_id.to_string()));
         }
     }
 
+    /// A run terminou (STOP, jogo fechado ou fim da ficha): a live espera o próximo jogo ranked na
+    /// mesma janela (`INTERVALO`); sem ele, termina.
+    pub fn run_terminou(&self, run_id: &str) {
+        if let Some(v) = travar(&self.vinculo).as_mut().filter(|v| v.run_id.as_deref() == Some(run_id)) {
+            let fim = v.agora_s();
+            v.anteriores.push((run_id.to_string(), v.jogo_aos_s.unwrap_or(0.0), fim));
+            v.run_id = None;
+            v.jogo_aos_s = None;
+            v.entre_runs = Some(Instant::now());
+        }
+    }
+
+    /// Outro jogo abriu na janela do ShmupX Emulator da live (antes da run dele começar): a espera
+    /// pela run dele recomeça.
+    pub fn jogo_trocado(&self) {
+        if let Some(v) = travar(&self.vinculo).as_mut() {
+            v.proximo_aos_s = Some(v.agora_s());
+            if v.entre_runs.is_some() {
+                v.entre_runs = Some(Instant::now());
+            }
+        }
+    }
+
+    /// END LIVE (também cancela um início em andamento).
+    pub fn encerrar(&self) {
+        self.cancelar.notify_waiters();
+    }
+
+    /// Um jogo ranked do ShmupX Emulator pode entrar nesta live agora (no ar, com o jogo na tela).
+    pub fn aceita_outro_jogo(&self) -> bool {
+        let e = self.snapshot();
+        e.status == "live" && e.game_open && travar(&self.vinculo).as_ref().is_some_and(|v| v.emulador)
+    }
+
+    /// (run atual da live, a live esperou o próximo jogo além do `INTERVALO`).
     fn run_da_live(&self) -> (Option<String>, bool) {
-        travar(&self.vinculo).as_ref().map_or((None, false), |v| (v.run_id.clone(), v.run_terminou))
+        travar(&self.vinculo).as_ref().map_or((None, false), |v| (v.run_id.clone(), v.entre_runs.is_some_and(|d| d.elapsed() >= INTERVALO)))
     }
 
     /// A live da run `run_id` (só depois que a live terminou).
@@ -212,11 +296,15 @@ impl LiveState {
         travar(&self.lives).remove(run_id)
     }
 
-    /// Fim da live: guarda o vídeo dela para a run decidir (sem run, não há o que guardar).
+    /// Fim da live: guarda o vídeo dela para cada run decidir (sem run, não há o que guardar).
     fn guardar_live(&self) {
         let Some(v) = travar(&self.vinculo).take() else { return };
+        let mut lives = travar(&self.lives);
+        for (run_id, corte_s, fim_s) in v.anteriores {
+            lives.insert(run_id, LiveDaRun { video_id: v.broadcast_id.clone(), corte_s, fim_s: Some(fim_s) });
+        }
         if let Some(run_id) = v.run_id {
-            travar(&self.lives).insert(run_id, LiveDaRun { video_id: v.broadcast_id, corte_s: v.jogo_aos_s.unwrap_or(0.0) });
+            lives.insert(run_id, LiveDaRun { video_id: v.broadcast_id, corte_s: v.jogo_aos_s.unwrap_or(0.0), fim_s: None });
         }
     }
 }
@@ -386,6 +474,12 @@ fn pids_do_jogo(steam_app_id: Option<u32>) -> Vec<u32> {
     }
 }
 
+/// Play Ranked com a live no ar: o jogo novo abre na mesma janela do ShmupX Emulator e a run dele
+/// entra nesta live (a interface começa a run pelo aviso de jogo aberto, como no Play Ranked).
+pub async fn trocar_jogo(app: &AppHandle, jogo_id: &str, abertura: &Abertura) -> Result<(), String> {
+    abrir_jogo(app, jogo_id, abertura).await
+}
+
 /// Abre o jogo no modo ranked, como o Play Ranked: a interface recebe o aviso de jogo aberto
 /// (`steam://game-launched` ou `emulator://game-launched`) e começa a run (ficha e gravação).
 async fn abrir_jogo(app: &AppHandle, jogo_id: &str, abertura: &Abertura) -> Result<(), String> {
@@ -427,7 +521,7 @@ async fn esperar_janela(steam_app_id: Option<u32>) -> Result<janela::Window, Str
 
 #[allow(clippy::too_many_arguments)]
 async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: &str, titulo: &str, modo: Option<&str>, publica: bool, abertura: &Abertura, log: &PathBuf) -> Result<(), String> {
-    let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, ..Default::default() };
+    let base = Estado { game_id: Some(jogo_id.to_string()), public: publica, emulator: abertura.steam_app_id().is_none(), ..Default::default() };
     // Fora do Windows ainda não há captura da janela do jogo.
     if cfg!(not(windows)) {
         return Err("a live ainda não está disponível no Linux".to_string());
@@ -447,14 +541,7 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     let (broadcast_id, stream_id, ingest, watch) = (texto("broadcast_id")?, texto("stream_id")?, texto("ingest_url")?, texto("watch_url")?);
     let parar_audio = Arc::new(AtomicBool::new(false));
     *live.corrente.lock().await = Some(Corrente { broadcast_id: Some(broadcast_id.clone()), child: None, parar_audio: parar_audio.clone(), captura: None });
-    *travar(&live.vinculo) = Some(Vinculo {
-        jogo_id: jogo_id.to_string(),
-        broadcast_id: broadcast_id.clone(),
-        no_ar_desde: Instant::now(),
-        jogo_aos_s: None,
-        run_id: None,
-        run_terminou: false,
-    });
+    *travar(&live.vinculo) = Some(Vinculo::novo(jogo_id, &broadcast_id, abertura.steam_app_id().is_none()));
 
     // 2. A tela de espera indo para o YouTube (e para a cópia), até a live entrar no ar.
     live.definir(app, Estado { status: "connecting", watch_url: Some(watch.clone()), ..base.clone() });
@@ -538,8 +625,8 @@ async fn colocar_no_ar(app: &AppHandle, live: &LiveState, token: &str, jogo_id: 
     Ok(())
 }
 
-/// No ar: termina no END LIVE, no fim da run, se o jogo fechar, se o FFmpeg cair ou no limite de
-/// 45 min.
+/// No ar: termina no END LIVE, se o jogo fechar, se o FFmpeg cair, no limite de 45 min ou sem um
+/// jogo ranked novo depois da run (`INTERVALO`).
 async fn vigiar(app: AppHandle, live: LiveState, token: String, log: PathBuf) {
     // `true`: o jogo fechou ou a run acabou (fim normal); `false`: o FFmpeg caiu.
     let caiu = async {
@@ -620,25 +707,55 @@ mod tests {
         let live = LiveState::default();
         assert_eq!(live.broadcast_para_run("aero"), Ok(None), "sem live, run comum");
         *travar(&live.estado) = Estado { status: "live", game_id: Some("aero".into()), ..Default::default() };
-        *travar(&live.vinculo) = Some(Vinculo {
-            jogo_id: "aero".into(),
-            broadcast_id: "b1".into(),
-            no_ar_desde: Instant::now(),
-            jogo_aos_s: Some(12.5),
-            run_id: None,
-            run_terminou: false,
-        });
+        let mut vinculo = Vinculo::novo("aero", "b1", false);
+        vinculo.jogo_aos_s = Some(12.5);
+        *travar(&live.vinculo) = Some(vinculo);
         assert!(live.broadcast_para_run("outro").is_err(), "live de outro jogo barra a run");
         assert_eq!(live.broadcast_para_run("aero"), Ok(Some("b1".into())));
-        live.vincular_run("aero", "r1");
-        assert!(live.broadcast_para_run("aero").is_err(), "uma run por live");
+        travar(&live.vinculo).as_mut().unwrap().run_id = Some("r1".into());
+        assert!(live.broadcast_para_run("aero").is_err(), "uma run de cada vez");
         assert_eq!(live.run_da_live(), (Some("r1".into()), false));
         live.run_terminou("r1");
-        assert_eq!(live.run_da_live(), (Some("r1".into()), true));
-        // No fim da live, o vídeo dela fica guardado para a run (uma vez).
+        assert_eq!(live.run_da_live(), (None, false), "a live espera o próximo jogo");
+        assert!(live.broadcast_para_run("outro").is_err(), "jogo da Steam: outro jogo não entra");
+        // No fim da live, o vídeo dela fica guardado para a run (uma vez), até o fim dela.
         live.guardar_live();
-        assert_eq!(live.tomar_live("r1"), Some(LiveDaRun { video_id: "b1".into(), corte_s: 12.5 }));
+        let guardada = live.tomar_live("r1").unwrap();
+        assert_eq!((guardada.video_id.as_str(), guardada.corte_s), ("b1", 12.5));
+        assert!(guardada.fim_s.is_some());
         assert!(live.tomar_live("r1").is_none());
+    }
+
+    #[test]
+    fn outro_jogo_do_emulador_entra_na_mesma_live() {
+        let live = LiveState::default();
+        *travar(&live.estado) = Estado { status: "live", game_id: Some("aero".into()), game_open: true, ..Default::default() };
+        let mut vinculo = Vinculo::novo("aero", "b1", true);
+        vinculo.jogo_aos_s = Some(10.0);
+        vinculo.run_id = Some("r1".into());
+        *travar(&live.vinculo) = Some(vinculo);
+        assert!(live.aceita_outro_jogo());
+        assert!(live.broadcast_para_run("ketsui").is_err(), "com a run em andamento, não");
+        live.run_terminou("r1");
+        assert_eq!(live.broadcast_para_run("ketsui"), Ok(Some("b1".into())), "depois do fim da run, o jogo novo entra");
+        live.jogo_trocado();
+        assert!(travar(&live.vinculo).as_ref().unwrap().aceita("ketsui"));
+        // Sem AppHandle no teste: o vínculo da run nova como o vincular_run faz.
+        {
+            let mut v = travar(&live.vinculo);
+            let v = v.as_mut().unwrap();
+            v.entre_runs = None;
+            v.jogo_aos_s = v.proximo_aos_s.take();
+            v.jogo_id = "ketsui".into();
+            v.run_id = Some("r2".into());
+        }
+        live.guardar_live();
+        let r1 = live.tomar_live("r1").unwrap();
+        let r2 = live.tomar_live("r2").unwrap();
+        assert_eq!(r1.corte_s, 10.0);
+        assert!(r1.fim_s.is_some(), "a primeira run acaba onde a segunda começa");
+        assert!(r2.fim_s.is_none());
+        assert_eq!(r1.video_id, r2.video_id);
     }
 }
 

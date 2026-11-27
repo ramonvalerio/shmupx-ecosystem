@@ -18,6 +18,8 @@ export interface LiveState {
   silent: boolean;
   /** No ar com o jogo na tela (antes, a live mostra a tela de espera enquanto o jogo abre). */
   game_open: boolean;
+  /** Jogo do ShmupX Emulator: outro jogo ranked dele abre na mesma janela e entra na live. */
+  emulator?: boolean;
 }
 
 /** Como abrir o jogo depois que a live entra no ar (Rust `live::Abertura`). */
@@ -28,6 +30,13 @@ export type LiveLaunch =
 const IDLE: LiveState = { status: "idle", public: false, ended_by_time_limit: false, silent: false, game_open: false };
 
 export const liveActive = (s: LiveState) => s.status !== "idle" && s.status !== "failed";
+
+/**
+ * Com a live no ar, um jogo ranked do ShmupX Emulator (`platform`) pode entrar nela: abre na mesma
+ * janela do jogo da live, sem cortar para quem assiste.
+ */
+export const liveTakesGame = (s: LiveState, platform: string | null) =>
+  s.status === "live" && s.game_open && Boolean(s.emulator) && platform === "emulator";
 
 export function useLive() {
   const [state, setState] = useState<LiveState>(IDLE);

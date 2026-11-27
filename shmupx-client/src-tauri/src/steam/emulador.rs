@@ -559,22 +559,88 @@ pub(crate) fn erro_ao_abrir(e: std::io::Error) -> String {
 /// O ShmupX Emulator não veio nesta instalação (para o jogador).
 pub const SEM_EMULADOR: &str = "o ShmupX Emulator não foi encontrado nesta instalação: reinstale o ShmupX Client";
 
+/// Jogo aberto no ShmupX Emulator.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JogoAberto {
+    /// Id da partida: o PID do motor ou, num jogo trocado no mesmo processo, um id dele
+    /// (`sessao_motor`); vale em tudo que recebe o PID do jogo (vigia, gravação, telemetria).
+    pub id: u32,
+    pub rom: String,
+    /// A partida anterior, quando o jogo foi trocado no motor que já estava aberto (mesma janela).
+    pub trocou_de: Option<u32>,
+}
+
 /// Abre o jogo no ShmupX Emulator com o primeiro ROM da lista que o jogador tem. Em tela cheia;
-/// com `janela`, em janela. Devolve o PID e o ROM aberto.
-pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&Path>, roms: &[String], janela: bool, motor: Option<&Motor>) -> Result<(u32, String), String> {
+/// com `janela`, em janela. Com o motor já aberto, troca o jogo nele (mesma janela); se o motor
+/// não aceitar a troca, fecha o anterior e abre outro.
+pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&Path>, roms: &[String], janela: bool, motor: Option<&Motor>) -> Result<JogoAberto, String> {
     let roms: Vec<String> = roms.iter().map(|r| r.trim().to_lowercase()).filter(|r| rom_valido(r)).collect();
     if roms.is_empty() {
         return Err("o Client ainda não sabe abrir este jogo no emulador".into());
     }
     let motor = motor.ok_or(SEM_EMULADOR)?;
     let Resolvida { inst, .. } = resolver(escolhida, informada);
-    abrir_no_motor(motor, &pastas_para_ler(&inst, padrao), &roms, janela)
+    let lancamento = preparar_lancamento(motor, &pastas_para_ler(&inst, padrao), &roms, janela)?;
+    if !lancamento.dupla {
+        match super::sessao_motor::trocar(&lancamento) {
+            Ok(Some((id, anterior))) => {
+                log::info!("emulador: {} na mesma janela do ShmupX Emulator (partida {anterior} -> {id})", lancamento.rom);
+                return Ok(JogoAberto { id, rom: lancamento.rom, trocou_de: Some(anterior) });
+            }
+            Ok(None) => {}
+            Err(e) => log::warn!("emulador: troca de jogo no motor aberto: {e}"),
+        }
+    }
+    // Um motor só: o que estava aberto (sem aceitar a troca, ou na dupla online) fecha antes.
+    super::sessao_motor::fechar_aberto();
+    let (id, rom) = abrir_processo(motor, lancamento)?;
+    Ok(JogoAberto { id, rom, trocou_de: None })
 }
 
-/// Abre no ShmupX Engine: `shmupx-engine <rom> -rompath <pastas>` com o plugin de telemetria. Os
-/// eventos dele (`SHMUPX {...}`) saem na saída padrão; por enquanto só aparecem no terminal do
-/// modo de desenvolvimento.
-fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bool) -> Result<(u32, String), String> {
+/// Opções do motor que mudam de um jogo para outro (`preparar_lancamento` e
+/// `argumentos_de_video`). Na troca de jogo no mesmo processo, voltam ao padrão antes de receber
+/// as do jogo novo: a que o jogo novo não usa não fica com o valor do anterior.
+const OPCOES_DA_PARTIDA: &[&str] = &[
+    "rompath", "cfg_directory", "nvram_directory", "snapshot_directory", "skip_gameinfo", "shmupx_ranked",
+    "window", "monitor", "switchres", OPCAO_SEM_BORDA, "video", "bgfx_screen_chains", "screen", "ctrlrpath", "ctrlr",
+];
+
+/// Variáveis do plugin do ShmupX que mudam de um jogo para outro (Caravan, tela final do ranked).
+const AMBIENTE_DA_PARTIDA: &[&str] = &["SHMUPX_CARAVAN_SEGUNDOS", "SHMUPX_JOGADOR_CARTAO", "SHMUPX_POSICAO_ARQUIVO", "SHMUPX_IDIOMA"];
+
+/// Tudo para abrir um jogo no motor: o ROM, os argumentos (depois do ROM) e as variáveis do plugin.
+#[derive(Debug, Clone)]
+pub struct Lancamento {
+    pub rom: String,
+    pub args: Vec<String>,
+    pub ambiente: Vec<(String, String)>,
+    pub pasta_do_motor: PathBuf,
+    pub ranking: bool,
+    /// Treino em dupla online: sempre num processo novo (a conexão é do processo).
+    pub dupla: bool,
+}
+
+impl Lancamento {
+    /// Linha do comando `trocar` para o plugin do ShmupX (campos separados por TAB). `None`: algum
+    /// valor tem TAB ou quebra de linha e não cabe no comando.
+    pub fn comando_trocar(&self) -> Option<String> {
+        let mut campos = vec!["trocar".to_string(), format!("rom={}", self.rom)];
+        campos.extend(OPCOES_DA_PARTIDA.iter().map(|o| format!("padrao={o}")));
+        campos.extend(self.args.iter().map(|a| format!("arg={a}")));
+        for nome in AMBIENTE_DA_PARTIDA {
+            let valor = self.ambiente.iter().find(|(n, _)| n == nome).map_or("", |(_, v)| v.as_str());
+            campos.push(format!("env={nome}={valor}"));
+        }
+        if campos.iter().any(|c| c.contains(['\t', '\r', '\n'])) {
+            return None;
+        }
+        Some(campos.join("\t") + "\n")
+    }
+}
+
+/// Monta a abertura no ShmupX Engine: `shmupx-engine <rom> -rompath <pastas>` com o plugin de
+/// telemetria, as travas do ranked, o vídeo e os controles do jogador.
+fn preparar_lancamento(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bool) -> Result<Lancamento, String> {
     let pastas: Vec<&PathBuf> = pastas.iter().filter(|p| p.is_dir()).collect();
     let pasta_do_motor = motor.exe.parent().map(Path::to_path_buf).unwrap_or_default();
     // Ranked: só os ROMs com o estado inicial do ShmupX no pacote do motor (o jogo na tela de start
@@ -595,40 +661,42 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     for sub in ["cfg", "nvram", "snap", "ini"] {
         std::fs::create_dir_all(motor.dados.join(sub)).map_err(|e| format!("não foi possível preparar a pasta do ShmupX Engine: {e}"))?;
     }
-    let mut comando = comando_exe(&motor.exe);
-    comando
-        .arg(rom)
-        .arg("-rompath").arg(&rompath)
-        .arg("-cfg_directory").arg(motor.dados.join("cfg"))
-        .arg("-nvram_directory").arg(motor.dados.join("nvram"))
-        .arg("-snapshot_directory").arg(motor.dados.join("snap"))
-        .arg("-inipath").arg(motor.dados.join("ini"))
-        .args(["-plugin", "shmupx", "-skip_gameinfo"]);
+    let caminho = |sub: &str| motor.dados.join(sub).to_string_lossy().into_owned();
+    let mut args: Vec<String> = vec![
+        "-rompath".into(), rompath,
+        "-cfg_directory".into(), caminho("cfg"),
+        "-nvram_directory".into(), caminho("nvram"),
+        "-snapshot_directory".into(), caminho("snap"),
+        "-inipath".into(), caminho("ini"),
+        "-plugin".into(), "shmupx".into(), "-skip_gameinfo".into(),
+    ];
+    let mut ambiente: Vec<(String, String)> = Vec::new();
     if motor.ranking {
-        comando.arg("-shmupx_ranked");
+        args.push("-shmupx_ranked".into());
     }
     // Treino em dupla online: o motor conecta ao parceiro antes do primeiro quadro.
-    if let Some(dupla) = motor.dupla.as_ref().filter(|_| !motor.ranking) {
+    let dupla = motor.dupla.as_ref().filter(|_| !motor.ranking);
+    if let Some(dupla) = dupla {
         dupla.validar()?;
         if !motor_conhece_opcao(&motor.exe, "shmupx_netplay") {
             return Err("este ShmupX Emulator ainda não tem o treino em dupla; atualize o ShmupX Client".to_string());
         }
-        comando.args(dupla.argumentos());
+        args.extend(dupla.argumentos());
     }
     // Caravan: o plugin do ShmupX desenha o contador e o resultado no fim do tempo.
     if let Some(segundos) = motor.caravan_segundos.filter(|_| motor.ranking) {
-        comando.env("SHMUPX_CARAVAN_SEGUNDOS", segundos.to_string());
+        ambiente.push(("SHMUPX_CARAVAN_SEGUNDOS".into(), segundos.to_string()));
     }
     // Tela final da partida ranked (game over ou fim do tempo): o cartão do jogador e a posição.
     if motor.ranking {
         if let Some(cartao) = &motor.cartao_jogador {
-            comando.env("SHMUPX_JOGADOR_CARTAO", cartao);
+            ambiente.push(("SHMUPX_JOGADOR_CARTAO".into(), cartao.to_string_lossy().into_owned()));
         }
         if let Some(arquivo) = &motor.posicao_arquivo {
-            comando.env("SHMUPX_POSICAO_ARQUIVO", arquivo);
+            ambiente.push(("SHMUPX_POSICAO_ARQUIVO".into(), arquivo.to_string_lossy().into_owned()));
         }
         if let Some(idioma) = &motor.idioma {
-            comando.env("SHMUPX_IDIOMA", idioma);
+            ambiente.push(("SHMUPX_IDIOMA".into(), idioma.clone()));
         }
     }
     let scanlines_disponiveis = pasta_do_motor.join("bgfx").join("chains").join(format!("{CADEIA_SCANLINES}.json")).is_file();
@@ -646,26 +714,34 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
     if motor.video.borderless && !motor_sem_borda {
         log::warn!("emulador: este ShmupX Engine não tem -{OPCAO_SEM_BORDA}; a tela cheia sem borda pode sumir ao perder o foco");
     }
-    comando.args(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, gravada, motor_sem_borda));
+    args.extend(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, gravada, motor_sem_borda));
     // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
     // abre com os controles padrão.
     match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
-        Ok(args) => {
-            comando.args(args);
-        }
+        Ok(extra) => args.extend(extra),
         Err(e) => log::warn!("emulador: {e}"),
     }
+    Ok(Lancamento { rom: rom.clone(), args, ambiente, pasta_do_motor, ranking: motor.ranking, dupla: dupla.is_some() })
+}
+
+/// Abre o motor num processo novo. Os eventos do plugin (`SHMUPX {...}`) saem na saída padrão; a
+/// entrada padrão fica com o Client, para trocar de jogo no mesmo processo (`sessao_motor`).
+fn abrir_processo(motor: &Motor, lancamento: Lancamento) -> Result<(u32, String), String> {
+    let mut comando = comando_exe(&motor.exe);
+    comando.arg(&lancamento.rom).args(&lancamento.args).envs(lancamento.ambiente.iter().map(|(n, v)| (n, v)));
     // O motor acha bgfx/, artwork/ e plugins/ relativos à pasta dele.
     if motor.exe.parent().is_some() {
-        comando.current_dir(&pasta_do_motor);
+        comando.current_dir(&lancamento.pasta_do_motor);
     }
-    log::info!("emulador: ShmupX Engine {} com {rom}{}", motor.exe.display(), if motor.ranking { " (ranking)" } else { "" });
+    log::info!("emulador: ShmupX Engine {} com {}{}", motor.exe.display(), lancamento.rom, if lancamento.ranking { " (ranking)" } else { "" });
     // A saída padrão traz a telemetria (`SHMUPX {...}`): a run ranked usa o placar da memória.
     // Os avisos do motor (ROM incompleto etc.) vão para o log do Client, não para um terminal.
-    comando.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+    comando.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
     let mut filho = comando.spawn().map_err(erro_ao_abrir)?;
+    let pid = filho.id();
+    super::sessao_motor::registrar(pid, filho.stdin.take(), lancamento.dupla);
     if let Some(saida) = filho.stdout.take() {
-        super::telemetria::acompanhar(filho.id(), saida);
+        super::telemetria::acompanhar(pid, saida);
     }
     if let Some(erros) = filho.stderr.take() {
         std::thread::spawn(move || {
@@ -678,7 +754,7 @@ fn abrir_no_motor(motor: &Motor, pastas: &[PathBuf], roms: &[String], janela: bo
             }
         });
     }
-    Ok((filho.id(), rom.clone()))
+    Ok((pid, lancamento.rom))
 }
 
 #[cfg(test)]
@@ -736,6 +812,28 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn comando_trocar_leva_o_jogo_as_opcoes_e_o_ambiente() {
+        let lancamento = Lancamento {
+            rom: "ket".into(),
+            args: vec!["-rompath".into(), r"D:\roms".into(), "-shmupx_ranked".into()],
+            ambiente: vec![("SHMUPX_IDIOMA".into(), "en".into())],
+            pasta_do_motor: PathBuf::new(),
+            ranking: true,
+            dupla: false,
+        };
+        let linha = lancamento.comando_trocar().unwrap();
+        assert!(linha.starts_with("trocar\trom=ket\t"));
+        assert!(linha.ends_with('\n'));
+        assert!(linha.contains("\tpadrao=shmupx_ranked\t"), "a opção do jogo anterior volta ao padrão");
+        assert!(linha.contains("\targ=-rompath\targ=D:\\roms\targ=-shmupx_ranked\t"));
+        assert!(linha.contains("\tenv=SHMUPX_IDIOMA=en"));
+        // A variável que o jogo novo não usa vai vazia: não fica a do jogo anterior.
+        assert!(linha.contains("\tenv=SHMUPX_CARAVAN_SEGUNDOS=\t"));
+        let com_tab = Lancamento { args: vec!["-rompath".into(), "D:\\a\tb".into()], ..lancamento };
+        assert!(com_tab.comando_trocar().is_none(), "TAB no valor não cabe no comando");
+    }
 
     /// Monta uma instalação falsa do Fightcade numa pasta temporária.
     fn fightcade_falso(nome: &str) -> PathBuf {

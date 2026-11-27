@@ -117,7 +117,7 @@ pub async fn iniciar_corrida_safe(
     };
     let run_id = inicio.run_id.clone();
     if live_broadcast.is_some() {
-        live.vincular_run(&jogo_id, &run_id);
+        live.vincular_run(&app, &jogo_id, &run_id);
     }
 
     *guard = Some(RunHandle {
@@ -219,6 +219,24 @@ pub async fn encerrar_run_pelo_resultado(app: &AppHandle, jogo_pid: u32) -> bool
     let _ = parar_gravacao(app, &mut handle).await;
     encerrar_e_enfileirar(app, handle).await;
     true
+}
+
+/// O jogo da run foi trocado por outro no mesmo ShmupX Emulator (mesma janela): a run termina como
+/// se o jogo tivesse fechado, já, sem esperar a vigia, para a run do jogo novo poder começar.
+pub async fn encerrar_run_do_jogo_trocado(app: &AppHandle, jogo_pid: u32) {
+    let state = app.state::<RunState>();
+    let mut guard = state.0.lock().await;
+    if guard.as_ref().is_none_or(|handle| handle.jogo_pid != Some(jogo_pid)) {
+        return;
+    }
+    let Some(mut handle) = guard.take() else { return };
+    drop(guard);
+    log::info!("o jogo foi trocado no ShmupX Emulator: encerrando a run {}", handle.run_id);
+    let _ = app.emit("run://game-closed", GameClosedPayload { jogo_id: handle.jogo_id.clone(), pid: handle.pid });
+    if parar_gravacao(app, &mut handle).await.is_err() {
+        return;
+    }
+    encerrar_e_enfileirar(app, handle).await;
 }
 
 /// Quanto o jogo tem para fechar sozinho no PARAR JOGO antes de o processo ser encerrado.

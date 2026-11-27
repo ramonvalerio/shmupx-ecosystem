@@ -21,10 +21,9 @@ struct Encerrado {
     pid: u32,
 }
 
+/// O jogo do treino segue aberto (no ShmupX Emulator, a partida: outro jogo na mesma janela a fecha).
 fn vivo(pid: u32) -> bool {
-    let mut sistema = System::new();
-    sistema.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
-    sistema.process(Pid::from_u32(pid)).is_some()
+    super::detector::processo_vivo(pid)
 }
 
 /// Grava o treino, se "Gravar gameplays" estiver marcado. Uma falha só vai para o log: o treino segue.
@@ -75,6 +74,11 @@ pub fn treino_parar(pid: u32) -> Result<(), String> {
     if !treinos().lock().unwrap_or_else(|e| e.into_inner()).contains(&pid) {
         return Err("esse jogo não foi aberto no modo treino".into());
     }
+    // Partida do ShmupX Emulator: só se ainda for o jogo na tela (fecha o motor dela).
+    if super::sessao_motor::partida_atual(pid) == Some(false) {
+        return Ok(());
+    }
+    let pid = super::sessao_motor::pid_real(pid).unwrap_or(pid);
     let mut sistema = System::new();
     sistema.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
     match sistema.process(Pid::from_u32(pid)) {

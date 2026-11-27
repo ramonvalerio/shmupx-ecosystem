@@ -180,10 +180,26 @@ pub async fn inicializar_jogo_emulador(
             mapeados => mapeados,
         }
     };
-    let (pid, rom) = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), &roms, janela, motor.as_ref()))
+    let aberto = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
+    // Jogo trocado no ShmupX Emulator aberto (mesma janela): a run do jogo anterior termina agora,
+    // antes de a do jogo novo começar.
+    if let Some(anterior) = aberto.trocou_de {
+        crate::capture::commands::encerrar_run_do_jogo_trocado(&app, anterior).await;
+        // Com a live no ar: o jogo ranked novo entra nela; um treino a encerra (não há live fora
+        // do Ranked).
+        let live = app.state::<crate::live::LiveState>();
+        if live.ativa() {
+            if treino {
+                live.encerrar();
+            } else {
+                live.jogo_trocado();
+            }
+        }
+    }
+    let (pid, rom) = (aberto.id, aberto.rom);
     let _ = app.emit("emulator://game-launched", EmuladorAbertoPayload { game_id: jogo_id, pid, rom, treino });
     if !treino {
         // Partida ranked: quando o motor pausar o jogo e mostrar o resultado, a run se encerra.

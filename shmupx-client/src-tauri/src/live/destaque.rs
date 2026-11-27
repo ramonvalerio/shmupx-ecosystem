@@ -88,7 +88,7 @@ pub fn enviar(app: &AppHandle, jogo_id: &str, run_id: &str, destaque: Destaque) 
         let pasta = pasta_temporaria(&app, &run_id);
         let resultado = async {
             let baixado = ytdlp::baixar(&live.video_id, &pasta).await?;
-            let cortado = cortar_espera(&baixado, live.corte_s).await;
+            let cortado = cortar_espera(&baixado, live.corte_s, live.fim_s).await;
             let arquivo = cortado.as_deref().unwrap_or(&baixado);
             let video_id = enviar_arquivo(&destaque.upload_url, arquivo, |p| avisar("uploading", None, Some(p))).await?;
             registrar(&app, &run_id, &video_id).await?;
@@ -110,16 +110,21 @@ pub fn enviar(app: &AppHandle, jogo_id: &str, run_id: &str, destaque: Destaque) 
     });
 }
 
-/// Tira a tela de espera do começo (sem recodificar: corta no quadro-chave anterior). `None`:
-/// sem nada a cortar, ou o corte falhou (vai o vídeo inteiro).
-async fn cortar_espera(video: &Path, corte_s: f64) -> Option<PathBuf> {
-    if corte_s < 1.0 {
+/// Tira a tela de espera do começo (sem recodificar: corta no quadro-chave anterior) e, numa live
+/// com outras runs depois desta, o que veio depois dela (`fim_s`). `None`: sem nada a cortar, ou o
+/// corte falhou (vai o vídeo inteiro).
+async fn cortar_espera(video: &Path, corte_s: f64, fim_s: Option<f64>) -> Option<PathBuf> {
+    let fim_s = fim_s.filter(|fim| *fim > corte_s + 1.0);
+    if corte_s < 1.0 && fim_s.is_none() {
         return None;
     }
     let saida = video.with_extension("destaque.mp4");
     let mut cmd = tokio::process::Command::new(ffmpeg::programa());
-    cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-ss", &format!("{corte_s:.2}")])
-        .arg("-i")
+    cmd.args(["-hide_banner", "-loglevel", "error", "-y", "-ss", &format!("{corte_s:.2}")]);
+    if let Some(fim) = fim_s {
+        cmd.args(["-t", &format!("{:.2}", fim - corte_s)]);
+    }
+    cmd.arg("-i")
         .arg(video)
         .args(["-c", "copy", "-movflags", "+faststart"])
         .arg(&saida)
