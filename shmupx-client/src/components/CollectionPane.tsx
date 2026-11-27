@@ -77,7 +77,7 @@ function Segmented<T extends string>({ label, value, options, onChange }: { labe
 /** Jogo ainda sem script de validação: as runs dele ainda não entram no ranking. */
 function ComingSoonBadge({ room }: { room: GameRoom }) {
   const { t } = useI18n();
-  return isSupported(room) ? null : <span className="coming-soon" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Em breve")}</span>;
+  return isSupported(room) ? null : <span className="coming-soon" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Ranking em breve")}</span>;
 }
 
 /** MODO TREINO no painel: abre o jogo sem gravar run nem gastar ficha (as mesmas regras da sala). */
@@ -253,7 +253,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
           const favorite = preferences.favorites.includes(room.id);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
             <button type="button" className="game-card" data-tutorial={inLibrary(room) ? "game-owned" : undefined} aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onFocus={() => { if (selectedRoomId !== room.id) onSelectRoom(room.id); }} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter" && !event.altKey) { event.preventDefault(); onOpenRoom(room.id); } }}>
-              <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}{!isSupported(room) && <span className="coming-soon-sticker" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Em breve")}</span>}</GameArt>
+              <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}{!isSupported(room) && <span className="coming-soon-sticker" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Ranking em breve")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>
                 <span className="game-card-developer">{room.developer ?? " "}</span>
