@@ -154,7 +154,7 @@ const ROOM_ENGLISH: Record<string, string> = {
   "Coming soon: a live ranked fica disponível quando o jogo tiver o script de validação.": "Coming soon: live ranked becomes available once the game has its validation script.",
   "Em breve: o Play Ranked fica disponível quando o jogo tiver o script de validação.": "Coming soon: Play Ranked becomes available once the game has its validation script.",
   "A live captura a janela do jogo neste PC: escolha Steam ou Emulador para transmitir.": "The live captures the game window on this PC: pick Steam or Emulator to stream.",
-  "Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.": "This game doesn't have a validation script yet: you can train, and Play Ranked and live ranked arrive once it's approved.",
+  "Por enquanto, só treino. O Ranked e a live ranked chegam quando o jogo for aprovado.": "Training only for now. Ranked and live ranked arrive once the game is approved.",
 };
 for (const [key, value] of Object.entries(ROOM_ENGLISH)) ENGLISH[key] ??= value;
 

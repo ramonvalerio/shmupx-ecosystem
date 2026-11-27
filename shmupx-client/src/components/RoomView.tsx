@@ -325,7 +325,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                 </button>
               </div>
             )}
-            {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Em breve")}</span>{t("Este jogo ainda não tem script de validação: dá para treinar, e Play Ranked e a live ranked chegam quando ele for aprovado.")}</p>}
+            {comingSoon && <p className="room-soon-note"><span className="coming-soon-tag">{t("Em breve")}</span>{t("Por enquanto, só treino. O Ranked e a live ranked chegam quando o jogo for aprovado.")}</p>}
           </div>
           {/* Destaque à direita: a ficha é o Play Ranked (clique nela); abaixo, as opções da partida. */}
           <RankedPanel room={room} uid={playerId} launcher={launcher} mode={mode} platform={platform} ranked={ranked} busy={gameOpen || stopping}
