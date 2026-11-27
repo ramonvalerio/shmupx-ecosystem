@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Roda dentro do contêiner (linux/Dockerfile): copia o repositório de /src (sem node_modules nem
 # builds do Windows), monta o que o pacote leva (motor de validação, scripts aceitos, FFmpeg e o
-# ShmupX Emulator, que no Linux roda pelo Wine) e gera o .deb e o AppImage assinados em /out.
+# ShmupX Emulator, que no Linux roda pelo Wine) e gera o AppImage assinado em /out
+# (o .deb deixou de ser gerado em 2026-11-27: o AppImage basta e é o que se atualiza sozinho).
 # Equivalente Linux do scripts/prepare-bundle.ps1 + bundle.
 set -euo pipefail
 # Embutida na interface pelo Vite: sem ela o botão "Entrar com Google" não funciona.
@@ -89,13 +90,11 @@ export LD_LIBRARY_PATH
 # A interface é montada aqui (o tauri.bundle.conf.json não roda o beforeBuildCommand), como no
 # `npm run bundle` do Windows.
 npm run build
-npx tauri build --verbose --bundles deb,appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
+npx tauri build --verbose --bundles appimage --config src-tauri/tauri.bundle.conf.json "${extra[@]}"
 
 mkdir -p /out
 # O target vem do cache: leva só os pacotes desta versão, não os de builds anteriores.
 versao=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
-cp /cache/target/release/bundle/deb/*_"$versao"_*.deb /out/
-cp /cache/target/release/bundle/deb/*_"$versao"_*.deb.sig /out/ 2>/dev/null || true
 cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage /out/
 cp /cache/target/release/bundle/appimage/*_"$versao"_*.AppImage.sig /out/ 2>/dev/null || true
 ls -la /out

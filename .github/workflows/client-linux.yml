@@ -1,4 +1,4 @@
-# ShmupX Client para Linux (.deb e AppImage), no mesmo contêiner do build local
+# ShmupX Client para Linux (AppImage), no mesmo contêiner do build local
 # (shmupx-client/linux/Dockerfile + build.sh). Os pacotes ficam como artefato da execução; a
 # publicação no site é manual (S3), como a do instalador do Windows.
 name: client-linux

@@ -1,4 +1,4 @@
-# Ambiente de build do ShmupX Client para Linux (.deb e AppImage). Ubuntu 24.04 (glibc 2.39): o
+# Ambiente de build do ShmupX Client para Linux (AppImage). Ubuntu 24.04 (glibc 2.39): o
 # ONNX Runtime estático do `ort` exige glibc 2.38+. O pacote roda no Ubuntu 24.04+ / Mint 22+ /
 # Debian 13+ / Fedora 39+.
 # Uso: scripts/bundle-linux.ps1 ou o workflow client-linux (repositório em /src, pacotes em /out).
