@@ -162,14 +162,16 @@ async fn do_jogo(
     for entrada in &mut entradas {
         entrada.nome = nome_ou_padrao(&nomes, &entrada.jogador_id);
     }
-    // Vídeo do registro no canal oficial: o destaque da run, quando já publicado.
+    // Vídeo do registro: o destaque da run no canal oficial, quando já publicado; senão a live que o
+    // jogador transmitiu (no canal dele).
     let caminhos: Vec<String> = entradas.iter().map(|e| format!("highlights/{}", e.run_id)).collect();
     let destaques = firestore.ler_varios(&caminhos).await?;
     for entrada in &mut entradas {
         entrada.youtube_url = destaques
             .get(&format!("highlights/{}", entrada.run_id))
             .filter(|d| ler_texto(d, "status").as_deref() == Some("posted"))
-            .and_then(|d| ler_texto(d, "videoUrl"));
+            .and_then(|d| ler_texto(d, "videoUrl"))
+            .or(entrada.youtube_url.take());
     }
     let valor = json!({
         "jogo_id": jogo_id,
@@ -218,7 +220,7 @@ pub(crate) async fn ler_partidas(
         ] } }),
         None => status,
     };
-    let campos_lidos: Vec<Value> = ["ownerId", "gameId", "status", "mode", "gameVersion", "source", "result"]
+    let campos_lidos: Vec<Value> = ["ownerId", "gameId", "status", "mode", "gameVersion", "source", "result", "live"]
         .iter()
         .map(|c| json!({ "fieldPath": c }))
         .collect();
@@ -259,6 +261,7 @@ fn partida(run_id: String, campos: &Campos) -> Option<Partida> {
         origem: ler_texto(campos, "source"),
         verificada: ler_texto(campos, "status").as_deref() == Some("approved"),
         enviada_em: ler_data(&resultado, "submittedAt"),
+        live_url: ler_mapa(campos, "live").and_then(|live| ler_texto(&live, "watchUrl")),
     })
 }
 

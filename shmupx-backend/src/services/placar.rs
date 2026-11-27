@@ -42,6 +42,8 @@ pub struct Partida {
     /// `true` só para gameplays aprovadas; `needs_review` aparece como pendente de revisão.
     pub verificada: bool,
     pub enviada_em: Option<DateTime<Utc>>,
+    /// Live do YouTube da partida (`live.watchUrl`), quando o jogador transmitiu a run.
+    pub live_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -265,7 +267,8 @@ pub fn ranking_do_jogo(partidas: &[Partida], jogo: &str, modo: Option<&str>, ver
             verificada: p.verificada,
             conquistado_em: p.enviada_em,
             run_id: p.run_id.clone(),
-            youtube_url: None,
+            // A live da própria run; a rota pública troca pelo vídeo do canal oficial, se houver.
+            youtube_url: p.live_url.clone(),
         });
     }
     entradas
@@ -339,6 +342,7 @@ mod tests {
             origem: Some("pc".into()),
             verificada: false,
             enviada_em: None,
+            live_url: None,
         }
     }
 
@@ -426,6 +430,7 @@ mod tests {
             sobrevivencia_ms: Some(300_000),
             bombas_usadas: Some(0),
             enviada_em: Some(Utc.with_ymd_and_hms(2026, 11, 26, 10, minuto, 0).unwrap()),
+            live_url: None,
             ..partida(jogador, "j", 500)
         };
         let r = ranking_do_jogo(&[caravan("depois", 9), caravan("antes", 1)], "j", Some("caravan"), None);
