@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, type Timestamp } from "firebase/firestore";
 import { invoke } from "@tauri-apps/api/core";
 import { db } from "../auth/firebase";
@@ -161,4 +162,20 @@ export async function launchNetplay(room: GameRoom, role: "host" | "guest", mine
 export interface NetplayEngineEvent {
   pid: number;
   evento: { event: string; reason?: string; rtt?: number; delay?: number; frame?: number; [key: string]: unknown };
+}
+
+/** Parceiro da dupla em andamento neste Client (o jogo já aberto), para a lista de jogadores da sala. */
+export interface NetplayPartner {
+  gameId: string;
+  name: string;
+}
+let partner: NetplayPartner | null = null;
+const partnerListeners = new Set<() => void>();
+export function setNetplayPartner(next: NetplayPartner | null) {
+  if (partner?.gameId === next?.gameId && partner?.name === next?.name) return;
+  partner = next;
+  partnerListeners.forEach((listener) => listener());
+}
+export function useNetplayPartner(): NetplayPartner | null {
+  return useSyncExternalStore((listener) => { partnerListeners.add(listener); return () => partnerListeners.delete(listener); }, () => partner);
 }

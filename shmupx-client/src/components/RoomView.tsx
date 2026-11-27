@@ -15,6 +15,9 @@ import { usePresenceMode } from "../data/presenceMode";
 import { useAccountPlaying } from "../data/playing";
 import { useRecordGameplay } from "../data/recordGameplay";
 import { useMyJoinedAt } from "../data/useRoomPresence";
+import { connectionLevel, estimatePing, useNetProfile, type NetProfile } from "../data/connectionQuality";
+import { useNetplayPartner } from "../data/netplay";
+import { useLastRankedMode } from "../data/gameModes";
 import { stopGame as stopPlaying, useStoppingGame } from "../data/stopGame";
 import { openWatchWindow } from "./WatchWindow";
 import { useGameLauncher } from "./useGameLauncher";
@@ -65,10 +68,22 @@ type SortBy = "score" | "name";
 /** Modo do jogo aberto, em etiqueta ao lado do título na lista de jogadores. No treino, a lista não
  *  mostra o jogo: só "Treinando". */
 const KIND_LABEL = { ranked: "Ranked", live: "Live" } as const;
+const MODE_LABEL = { highscore: "Hi-Score", caravan: "Caravan" } as const;
 const ROBOTX = "RobotX";
 
 const MEDAL_LABEL = ["", "1º lugar no ranking deste jogo", "2º lugar no ranking deste jogo", "3º lugar no ranking deste jogo"];
 /** Medalha de ouro, prata ou bronze: 1º, 2º ou 3º lugar no ranking (Hi-Score) do jogo da sala. */
+/** Barrinhas da conexão com o jogador (verde, amarelo ou vermelho); o ping aparece ao passar o mouse. */
+function ConnectionBars({ ping }: { ping: number | null }) {
+  const { t } = useI18n();
+  const level = ping === null ? null : connectionLevel(ping);
+  const label = ping === null ? t("Conexão ainda sem medida") : t("Ping: ~{ms} ms", { ms: String(ping) });
+  const filled = level === "good" ? 3 : level === "fair" ? 2 : level === "poor" ? 1 : 0;
+  return <span className={`connection-bars ${level ? `is-${level}` : "is-unknown"}`} role="img" aria-label={label} title={label}>
+    {[1, 2, 3].map((bar) => <i key={bar} className={bar <= filled ? "is-on" : undefined} />)}
+  </span>;
+}
+
 function Medal({ place }: { place: number | undefined }) {
   const { t } = useI18n();
   if (!place || place > 3) return null;
@@ -172,7 +187,9 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   // Ao fim de uma ranked, o backend devolve o pódio já com a run: se a ordem for outra, a sala
   // reordena na hora (a rota pública do ranking guarda 60 s em cache, e um pódio mais antigo que o
   // mostrado é ignorado). A cada minuto a sala confere o ranking de novo, para as runs dos outros.
-  const podiumRanking = useGameRanking(room.id, "highscore", 3);
+  // Ranking online (Hi-Score) da sala: o pódio (medalhas e ordem da lista) e a posição de cada
+  // jogador, à direita na linha dele.
+  const podiumRanking = useGameRanking(room.id, "highscore", 100);
   const [podiumState, setPodiumState] = useState<{ roomId: string; places: Map<string, number>; at: number }>(() => ({ roomId: room.id, places: new Map(), at: 0 }));
   const keepPodium = useCallback((places: Map<string, number>, at: number) => setPodiumState((current) => {
     if (current.roomId !== room.id) return { roomId: room.id, places, at };
@@ -194,6 +211,7 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
     return () => window.clearInterval(timer);
   }, [reloadPodium]);
   const podium = podiumState.roomId === room.id ? podiumState.places : new Map<string, number>();
+  const rankPositions = new Map<string, number>(podiumRanking.data?.jogo_id === room.id ? podiumRanking.data.entradas.map((e) => [e.jogador_id, e.posicao] as const) : []);
   const [filter, setFilter] = useState<ChatFilter>("everyone");
   const [sortBy, setSortBy] = useState<SortBy>("score");
   // Respostas do RobotX desta sessão (locais, por sala).
@@ -276,10 +294,16 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
   const meLive = liveHere && live.state.status === "live";
   // O próprio status segue o escolhido no avatar (Ausente vale em todas as salas), como os outros veem.
   // O jogo aberto na conta (aqui, no MiSTer ou pelo celular) aparece na linha do jogador.
-  const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind } : undefined;
-  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "invisible" ? "offline" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true };
+  const netplayPartner = useNetplayPartner();
+  const myLastMode = useLastRankedMode(accountPlaying?.gameId ?? null);
+  const myGame = accountPlaying ? { id: accountPlaying.gameId, title: accountPlaying.title, kind: accountPlaying.kind,
+    with: netplayPartner?.gameId === accountPlaying.gameId ? netplayPartner.name : undefined,
+    mode: accountPlaying.kind !== "training" && myLastMode ? (myLastMode === "caravan" ? "caravan" as const : "highscore" as const) : undefined } : undefined;
+  const me = { id: "you", name: playerName, score: null as number | null, playing: isRecording || Boolean(myGame), status: (meLive ? "live" : presenceMode === "invisible" ? "offline" : presenceMode === "away" ? "away" : "online") as PresenceStatus, live: undefined as RoomPresence["live"], game: myGame, you: true, net: undefined as NetProfile | undefined };
+  // Conexão com cada jogador (barrinhas): ping estimado pelos pontos de referência dos dois.
+  const myNet = useNetProfile();
   const rest = others
-    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false, joinedAt: o.joinedAt }));
+    .map((o) => ({ id: o.uid, name: o.name, score: null as number | null, playing: o.playing, status: o.status, live: o.live, game: o.game, you: false, joinedAt: o.joinedAt, net: o.net as NetProfile | undefined }));
   // Ranking: 1º, 2º e 3º do ranking do jogo da sala primeiro; os outros na ordem em que chegaram à
   // sala (quem não tem a chegada gravada, de um Client antigo, vai para o fim). Nome: alfabética.
   const place = (p: { id: string; you: boolean }) => podium.get(p.you ? playerId ?? "" : p.id) ?? 99;
@@ -405,12 +429,14 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                   {player.name}{player.you && ` ${t("(você)")}`}
                   <Medal place={podium.get(player.you ? playerId ?? "" : player.id)} />
                 </strong>
-                {player.game?.kind === "training"
-                  ? <small className="room-player-game">▶ {t("Treinando")}</small>
+                {player.game?.with
+                  ? <small className="room-player-game" title={t("Jogando {game} com {name}", { game: player.game.title, name: player.game.with })}>▶ {t("Jogando {game} com {name}", { game: player.game.title, name: player.game.with })}</small>
+                  : player.game?.kind === "training"
+                  ? <small className="room-player-game" title={t("Treinando {game}", { game: player.game.title })}>▶ {t("Treinando {game}", { game: player.game.title })}</small>
                   : player.game
                   ? <small className="room-player-game" title={t("Jogando {game}", { game: player.game.title })}>
-                      ▶ {player.game.title}
-                      {player.game.kind && <span className={`room-player-kind is-${player.game.kind}`}>{t(KIND_LABEL[player.game.kind])}</span>}
+                      ▶ {t("Jogando {game}", { game: player.game.title })}
+                      {player.game.kind && <span className={`room-player-kind is-${player.game.kind}`}>{t(KIND_LABEL[player.game.kind])}{player.game.mode && ` ${MODE_LABEL[player.game.mode]}`}</span>}
                     </small>
                   // Sem jogo aberto: online, "Disponível para jogar" (verde); ausente ou offline, o status.
                   : player.status === "away" || player.status === "offline"
@@ -418,10 +444,14 @@ export default function RoomView({ room, messages, chatStatus, chatError, player
                   : <small className="room-player-idle is-available">{t("Disponível para jogar")}</small>}
               </span>
               <span className="room-player-state">
+                {!player.you && player.status !== "offline" && <ConnectionBars ping={estimatePing(myNet, player.net)} />}
                 {player.status === "live"
                   ? <span className="live-badge" role="img" aria-label={t("Ao vivo")} title={t("Ao vivo")}>LIVE</span>
                   : <>
-                    {player.playing && t("JOGANDO")}
+                    {(() => {
+                      const position = podium.get(player.you ? playerId ?? "" : player.id) ?? rankPositions.get(player.you ? playerId ?? "" : player.id);
+                      return position ? <span className="room-player-rank" title={t("{n}º no ranking online deste jogo (Hi-Score)", { n: String(position) })}>#{position}</span> : null;
+                    })()}
                     <span className={`presence-dot is-${player.status}`} role="img" aria-label={t(STATUS_LABEL[player.status])} title={t(STATUS_LABEL[player.status])} />
                   </>}
               </span>

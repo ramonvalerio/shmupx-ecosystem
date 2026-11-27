@@ -137,7 +137,7 @@ const LITE_ENGLISH: Record<string, string> = {
   "Entrar na sala de {game}": "Open the {game} room", "Jogar {game} agora": "Play {game} now", "Jogar com a configuração acima": "Play with the setup above",
   "Ligue o MiSTer para jogar na TV.": "Link your MiSTer to play on the TV.",
   "Steam e Emulador abrem no seu PC: deixe o ShmupX Client aberto no PC com a mesma conta.": "Steam and Emulator open on your PC: keep the ShmupX Client open on the PC with the same account.",
-  "Treino ou ranking": "Training or ranked", "Treino": "Training", "Treinando": "Training", "Ranked": "Ranked",
+  "Treino ou ranking": "Training or ranked", "Treino": "Training", "Treinando": "Training", "Treinando {game}": "Training {game}", "Jogando {game} com {name}": "Playing {game} with {name}", "Ping: ~{ms} ms": "Ping: ~{ms} ms", "Conexão ainda sem medida": "Connection not measured yet", "{n}º no ranking online deste jogo (Hi-Score)": "#{n} in this game's online ranking (Hi-Score)", "Ranked": "Ranked",
   "Toque no jogo para entrar na sala, ou no ▶ para jogar direto com a configuração acima.": "Tap a game to open its room, or ▶ to play right away with the setup above.",
 };
 for (const [key, value] of Object.entries(LITE_ENGLISH)) ENGLISH[key] ??= value;

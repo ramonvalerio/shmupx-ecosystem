@@ -725,3 +725,17 @@
 /* Aviso discreto da dupla online (abrindo, conectando, em dupla com o ping, conexão instável). */
 .netplay-status { position: fixed; right: 18px; bottom: 18px; z-index: 55; padding: 10px 14px; background: #0d1418; border: 1px solid var(--cyan); color: #f0fcff; font-size: 12px; box-shadow: 0 10px 30px -10px #000c; pointer-events: none; }
 .netplay-status.is-unstable { border-color: #ffb547; color: #ffd79a; }
+
+/* Conexão com o jogador (lista da sala): 3 barrinhas; verde, amarelo ou vermelho pelo ping estimado. */
+.connection-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-right: 8px; vertical-align: middle; cursor: default; }
+.connection-bars i { display: block; width: 3px; background: #ffffff26; }
+.connection-bars i:nth-child(1) { height: 5px; }
+.connection-bars i:nth-child(2) { height: 8px; }
+.connection-bars i:nth-child(3) { height: 12px; }
+.connection-bars.is-good i.is-on { background: #3fd98b; }
+.connection-bars.is-fair i.is-on { background: #f2c14e; }
+.connection-bars.is-poor i.is-on { background: #e5484d; }
+.theme-light .connection-bars i { background: #10233f22; }
+/* Posição no ranking online da sala (Hi-Score), à direita na linha do jogador. */
+.room-player-rank { color: #d7e4e8; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.theme-light .room-player-rank { color: #10233f; }

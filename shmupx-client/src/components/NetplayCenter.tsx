@@ -6,7 +6,7 @@ import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
 import { useEmulatorLibrary } from "../data/emulatorLibrary";
 import {
-  createInvite, finishSession, INVITE_TTL_MS, launchNetplay, prepareSide, READY_TTL_MS, updateSession, watchSessions,
+  createInvite, finishSession, INVITE_TTL_MS, launchNetplay, prepareSide, READY_TTL_MS, setNetplayPartner, updateSession, watchSessions,
   type NetplayEngineEvent, type NetplaySession, type NetplaySide,
 } from "../data/netplay";
 import { useDialogFocus } from "./useDialogFocus";
@@ -120,6 +120,13 @@ export default function NetplayCenter({ me, rooms }: { me: { uid: string; name: 
   const ownsRef = useRef(emulator.owns);
   ownsRef.current = emulator.owns;
   const handled = useRef(new Set<string>());
+  // Com o jogo aberto, a lista de jogadores da sala mostra "Jogando X com <parceiro>".
+  const partnerGame = flow && (flow.phase === "connecting" || flow.phase === "playing") ? flow.room.id : null;
+  const partnerName = partnerGame ? flow!.partner : null;
+  useEffect(() => {
+    setNetplayPartner(partnerGame && partnerName ? { gameId: partnerGame, name: partnerName } : null);
+  }, [partnerGame, partnerName]);
+  useEffect(() => () => setNetplayPartner(null), []);
 
   function setFlow(next: Flow | null | ((current: Flow | null) => Flow | null)) {
     const value = typeof next === "function" ? next(flowRef.current) : next;

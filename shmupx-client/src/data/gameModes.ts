@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { GameMode, GameRoom } from "../types/room";
 
 /** Modos na ordem em que aparecem para escolher. */
@@ -54,7 +55,23 @@ export function modesFor(room: GameRoom): GameMode[] {
 
 /** O modo escolhido no Play Ranked vale para a run que começa quando o jogo abrir. */
 const pending = new Map<string, GameMode>();
-export function setPendingRunMode(roomId: string, mode: GameMode) { pending.set(roomId, mode); }
+export function setPendingRunMode(roomId: string, mode: GameMode) { pending.set(roomId, mode); setLastRankedMode(roomId, mode); }
+
+/** Último modo do Ranked (ou da Live) aberto em cada jogo neste Client: a lista de jogadores da
+ *  sala mostra "RANKED HI-SCORE" ou "RANKED CARAVAN". */
+const lastRanked = new Map<string, GameMode>();
+let lastRankedVersion = 0;
+const lastRankedListeners = new Set<() => void>();
+export function setLastRankedMode(roomId: string, mode: GameMode) {
+  if (lastRanked.get(roomId) === mode) return;
+  lastRanked.set(roomId, mode);
+  lastRankedVersion += 1;
+  lastRankedListeners.forEach((listener) => listener());
+}
+export function useLastRankedMode(roomId: string | null): GameMode | null {
+  useSyncExternalStore((listener) => { lastRankedListeners.add(listener); return () => lastRankedListeners.delete(listener); }, () => lastRankedVersion);
+  return roomId ? lastRanked.get(roomId) ?? null : null;
+}
 /**
  * Modo da partida como o backend recebe (`/api/runs/start`); Caravan = caravana clássica. Um 1CC
  * pedido por um Lite antigo vira Hi-Score (o 1CC sai da run de Hi-Score).

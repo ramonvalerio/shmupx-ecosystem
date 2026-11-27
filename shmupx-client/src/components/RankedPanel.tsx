@@ -4,7 +4,7 @@ import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { liveActive, liveTakesGame, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
 import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
 import { readEmulatorSettings } from "../data/emulatorSettings";
-import { caravanSecondsOf, runModeOf } from "../data/gameModes";
+import { caravanSecondsOf, runModeOf, setLastRankedMode } from "../data/gameModes";
 import { rankedLaunchFields } from "../data/playerCard";
 import { readEmulatorControls } from "../data/emulatorControls";
 import { isSupported } from "../data/validation";
@@ -69,6 +69,7 @@ export function useRankedLive(room: GameRoom) {
       // O servidor monta o título com o jogador (`Ketsui · HI-SCORE — jogador | ShmupX`); este é o
       // de reserva, para um servidor antigo.
       const runMode = runModeOf(mode ?? "highscore");
+      setLastRankedMode(room.id, mode === "caravan" ? "caravan" : "highscore");
       await live.start(room.id, `${room.title} · ${runMode.startsWith("caravan") ? "CARAVAN" : "HI-SCORE"} | ShmupX`, prefs.public, launch, runMode);
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : String(error));

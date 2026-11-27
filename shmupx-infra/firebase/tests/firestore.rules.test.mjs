@@ -230,6 +230,19 @@ test("room presence: each player writes only their own entry, with profile name 
   await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing", playingGameId: "ketsui", playingTitle: "Ketsui", playingKind: "ranked" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing", playingGameId: "ketsui", playingTitle: "Ketsui", playingKind: "pro" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ state: "playing", playingKind: "training" })));
+  // Dupla online (com quem) e modo do Ranked; ping até os pontos de referência (sem IP).
+  const k = { state: "playing", playingGameId: "ketsui", playingTitle: "Ketsui" };
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ ...k, playingKind: "training", playingWith: "Bob" })));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ ...k, playingKind: "ranked", playingMode: "caravan" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ ...k, playingKind: "training", playingMode: "highscore" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ ...k, playingKind: "ranked", playingMode: "1cc" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingWith: "Bob" })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ ...k, playingWith: "B".repeat(65) })));
+  await assertSucceeds(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ net: { sa: 14, use: 129, euw: 153 } })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ net: { sa: 14, ip: 1 } })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ net: { sa: "14" } })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ net: { sa: 0 } })));
+  await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ net: {} })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "darius-gaiden" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "x/../y", playingTitle: "X" })));
   await assertFails(setDoc(doc(alice, "rooms/earthion/presence/alice"), presence({ playingGameId: "ketsui", playingTitle: "" })));

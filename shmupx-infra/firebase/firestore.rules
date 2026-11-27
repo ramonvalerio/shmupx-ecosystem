@@ -18,7 +18,8 @@ service cloud.firestore {
     // rooms/{gameId}/presence/{uid}: who joined the room. Each player writes only their own
     //   doc (name = profile displayName, state online|away|playing|live, lastSeen = server time; live
     //   adds liveVideoId and liveViewers; playingGameId + playingTitle = the game open on the
-    //   account, shown in the room's player list) every
+    //   account, shown in the room's player list, with playingKind, playingWith (duo partner) and
+    //   playingMode (ranked mode); net = ping in ms to AWS reference regions, no IP) every
     //   30 s and deletes it on leaving the room; entries older than 75 s show as offline.
     // moderation/{uid}: Users Manager do Lab (banned, muted, disabled, chatHidden). Server-only
     //   write; the player reads their own. Banned/disabled can't read/post chat or show presence;
@@ -70,9 +71,18 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
     // state 'live' traz o vídeo do YouTube e quantos assistem (só nesse estado).
+    function netPing(net, key) {
+      return !(key in net) || (net[key] is int && net[key] >= 1 && net[key] <= 3000);
+    }
+    function validNet(net) {
+      return net is map && net.size() >= 1
+        && net.keys().hasOnly(['sa', 'use', 'usw', 'euw', 'euc', 'apne'])
+        && netPing(net, 'sa') && netPing(net, 'use') && netPing(net, 'usw')
+        && netPing(net, 'euw') && netPing(net, 'euc') && netPing(net, 'apne');
+    }
     function validPresence(data) {
       return data.keys().hasAll(['name', 'state', 'lastSeen'])
-        && data.keys().hasOnly(['name', 'state', 'lastSeen', 'liveVideoId', 'liveViewers', 'playingGameId', 'playingTitle', 'playingKind', 'joinedAt'])
+        && data.keys().hasOnly(['name', 'state', 'lastSeen', 'liveVideoId', 'liveViewers', 'playingGameId', 'playingTitle', 'playingKind', 'playingWith', 'playingMode', 'joinedAt', 'net'])
         && data.name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
         && data.state in ['online', 'away', 'playing', 'live']
         && data.lastSeen == request.time
@@ -84,6 +94,11 @@ service cloud.firestore {
         && (!data.keys().hasAny(['playingTitle']) || (data.playingTitle is string && data.playingTitle.size() >= 1 && data.playingTitle.size() <= 80))
         // Modo do jogo aberto (Training, Ranked ou Live): só junto com o jogo.
         && (!data.keys().hasAny(['playingKind']) || (data.keys().hasAll(['playingGameId']) && data.playingKind in ['training', 'ranked', 'live']))
+        // Dupla online: com quem joga (só junto com o jogo). Ranked/Live: Hi-Score ou Caravan.
+        && (!data.keys().hasAny(['playingWith']) || (data.keys().hasAll(['playingGameId']) && data.playingWith is string && data.playingWith.size() >= 1 && data.playingWith.size() <= 64))
+        && (!data.keys().hasAny(['playingMode']) || (data.keys().hasAll(['playingKind']) && data.playingKind in ['ranked', 'live'] && data.playingMode in ['highscore', 'caravan']))
+        // Ping (ms) até os pontos de referência da AWS, para as barrinhas de conexão (sem IP).
+        && (!data.keys().hasAny(['net']) || validNet(data.net))
         // Chegada na sala (ordem da lista de jogadores): a hora de agora ou o valor já gravado, para
         // ninguém se pôr antes de quem chegou primeiro.
         && (!data.keys().hasAny(['joinedAt']) || (data.joinedAt is timestamp
