@@ -500,7 +500,7 @@
 .room-action.stop-action { min-width: 190px; justify-content: center; }
 
 /* Menu lateral com o dobro da largura (40 → 80px); texto e ícones crescem na mesma proporção. */
-.client-shell:not(.big-picture) { grid-template-columns: 80px minmax(0, 1fr); }
+.client-shell { grid-template-columns: 80px minmax(0, 1fr); }
 .navigation-rail button { width: 79px; font-size: 17px; gap: 10px; }
 .navigation-rail button[aria-current] { border-right-width: 5px; }
 .navigation-tabs .rail-room { min-height: 120px; max-height: 240px; padding-top: 14px; padding-bottom: 50px; font-size: 17px; }

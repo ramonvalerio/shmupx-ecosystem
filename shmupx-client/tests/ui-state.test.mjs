@@ -37,6 +37,14 @@ test("directional repeat has an initial delay and back never repeats", () => {
   assert.equal(input.read(pad([1]), 700), "back");
   assert.equal(input.read(pad([1]), 1700), null);
 });
+test("START is read once per press and wins over the other buttons", () => {
+  const input = new GamepadNavigationInput();
+  input.read(pad(), 0);
+  assert.equal(input.read(pad([9, 0]), 10), "start");
+  assert.equal(input.read(pad([9, 0]), 2000), null);
+  input.read(pad(), 2100);
+  assert.equal(input.read(pad([9]), 2200), "start");
+});
 test("stick dead zone filters drift and supports all directions", () => {
   const input = new GamepadNavigationInput();
   assert.equal(input.read(pad([], [0.4, -0.4]), 0), null);

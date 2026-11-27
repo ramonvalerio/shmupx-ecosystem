@@ -15,6 +15,7 @@ import { useSteamLibrary } from "../data/steamLibrary";
 import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 import { isSupported } from "../data/validation";
 import DialogClose from "./DialogClose";
+import { isGameCard, moveBetweenCards, visibleDialog, type Direction } from "./navigationInput";
 
 export { isSupported };
 
@@ -174,6 +175,23 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
     setRefreshing(true);
     try { await steam.refresh(); } finally { setRefreshing(false); }
   }
+  // Setas do teclado: andam entre os cards e selecionam o jogo (o Enter abre a sala). Não roubam as
+  // setas de um campo de digitação, de uma lista ou de uma modal. No Big Picture, fora dos cards, as
+  // setas seguem movendo o foco pela tela.
+  useEffect(() => {
+    function handleArrows(event: KeyboardEvent) {
+      if (!event.key.startsWith("Arrow") || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || visibleDialog()) return;
+      const focused = document.activeElement;
+      const onCard = isGameCard(focused);
+      // Com o foco num outro controle, só os da lista de jogos (filtros, ordenação) passam para os cards.
+      if (!onCard && focused instanceof HTMLElement && focused !== document.body) {
+        if (bigPicture || !focused.closest(".collection-pane") || focused.matches("input,select,textarea,[contenteditable=true]")) return;
+      }
+      if (moveBetweenCards(event.key.slice(5).toLowerCase() as Direction)) { event.preventDefault(); event.stopPropagation(); }
+    }
+    window.addEventListener("keydown", handleArrows, { capture: true });
+    return () => window.removeEventListener("keydown", handleArrows, { capture: true });
+  }, [bigPicture]);
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(preferences)); setStorageError(false); } catch { setStorageError(true); } }, [preferences]);
 
   // Plataforma: Todas = os jogos de qualquer plataforma; uma plataforma = os jogos já validados que
@@ -228,7 +246,7 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
         {visible.map((room) => {
           const favorite = preferences.favorites.includes(room.id);
           return <article className={`collection-card ${selectedRoomId === room.id ? "selected" : ""}`} key={room.id}>
-            <button type="button" className="game-card" data-tutorial={inLibrary(room) ? "game-owned" : undefined} aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onOpenRoom(room.id); } }}>
+            <button type="button" className="game-card" data-tutorial={inLibrary(room) ? "game-owned" : undefined} aria-label={t("Selecionar {game}", { game: room.title })} aria-pressed={selectedRoomId === room.id} title={t("Clique duas vezes para abrir a sala")} onClick={() => onSelectRoom(room.id)} onFocus={() => { if (selectedRoomId !== room.id) onSelectRoom(room.id); }} onDoubleClick={() => onOpenRoom(room.id)} onKeyDown={(event) => { if (event.key === "Enter" && !event.altKey) { event.preventDefault(); onOpenRoom(room.id); } }}>
               <GameArt room={room} decorative>{!inLibrary(room) && <span className="not-owned-chip">{t("Não tenho ainda")}</span>}{!isSupported(room) && <span className="coming-soon-sticker" title={t("O Client ainda não valida as runs deste jogo: elas não entram no ranking.")}>{t("Em breve")}</span>}</GameArt>
               <div className="game-card-info">
                 <strong>{room.title}</strong>

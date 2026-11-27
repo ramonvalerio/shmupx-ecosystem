@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { GamepadNavigationInput, moveFocus, visibleControls, visibleDialog, type NavigationAction } from "./navigationInput";
+import { GamepadNavigationInput, isGameCard, moveBetweenCards, moveFocus, pressCoin, visibleControls, visibleDialog, type Direction } from "./navigationInput";
 import { readMappings, mappedPad, MAPPINGS_EVENT } from "./controllerMappings";
 
 /** One shared shell and launch path, with directional keyboard focus in the larger layout. */
@@ -30,8 +30,13 @@ export function useBigPicture(startInBigPicture = false) {
       if (isTauri()) await getCurrentWindow().setFullscreen(next);
       setActive(next);
       requestAnimationFrame(() => {
-        if (next) rootRef.current?.querySelector<HTMLButtonElement>(".navigation-tabs button[aria-current]")?.focus();
-        else previousFocus.current?.focus();
+        if (!next) { previousFocus.current?.focus(); return; }
+        // Entra no Big Picture com o foco no jogo selecionado (ou na sala aberta) para o controle já andar dali.
+        const root = rootRef.current;
+        const target = root?.querySelector<HTMLElement>('.game-grid .game-card[aria-pressed="true"]')
+          ?? root?.querySelector<HTMLElement>(".navigation-tabs button[aria-current]")
+          ?? root?.querySelector<HTMLElement>(".game-grid .game-card");
+        target?.focus();
       });
     } catch { setError("Não foi possível alterar o modo de tela. Tente novamente."); }
     finally { switching.current = false; }
@@ -42,9 +47,22 @@ export function useBigPicture(startInBigPicture = false) {
   }, [changeMode]);
 
   useEffect(() => {
+    // Alt+Enter liga/desliga o Big Picture. Na captura, antes de tudo: o Enter não chega ao botão ou
+    // card com foco (que abriria a sala), e segurar as teclas não fica alternando.
+    function handleShortcut(event: KeyboardEvent) {
+      if (!event.altKey || event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) void changeMode(!active);
+    }
+    window.addEventListener("keydown", handleShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleShortcut, { capture: true });
+  }, [active, changeMode]);
+
+  useEffect(() => {
     function handleKey(event: KeyboardEvent) {
-      if (event.altKey && event.key === "Enter") { event.preventDefault(); void changeMode(!active); return; }
-      if (!active) return;
+      // Setas já tratadas (ex.: andar entre os cards da Coleção) não movem o foco de novo.
+      if (!active || event.defaultPrevented) return;
       // A modal owns its focus while open; the shell must not steal arrow keys or Escape.
       if (visibleDialog()) return;
       if (event.key === "Escape") { event.preventDefault(); void changeMode(false); return; }
@@ -52,14 +70,16 @@ export function useBigPicture(startInBigPicture = false) {
       const current = document.activeElement;
       if (!(current instanceof HTMLElement) || !rootRef.current?.contains(current)) return;
       if (current.matches("input,select,textarea,[contenteditable=true]")) return;
-      if (moveFocus(rootRef.current, event.key.slice(5).toLowerCase() as NavigationAction)) event.preventDefault();
+      if (moveFocus(rootRef.current, event.key.slice(5).toLowerCase() as Direction)) event.preventDefault();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [active, changeMode]);
 
+  // O controle também funciona fora do Big Picture: o direcional anda entre os cards da Coleção, o A
+  // abre a sala do card e o START clica na ficha (Play Ranked). Com o jogo em primeiro plano (o Client
+  // sem foco), nada é lido.
   useEffect(() => {
-    if (!active) return;
     const input = new GamepadNavigationInput();
     let frame = 0;
     let padIdentity = "";
@@ -74,11 +94,21 @@ export function useBigPicture(startInBigPicture = false) {
       const identity = `${pad.index}:${pad.id}`;
       if (identity !== padIdentity) { padIdentity = identity; input.reset(); }
       setController("Controle conectado · direcional / A confirmar / B voltar");
-      const scope = visibleDialog() ?? rootRef.current;
+      const dialog = visibleDialog();
+      const scope = dialog ?? rootRef.current;
       if (scope?.dataset.capturingController === "true") { input.reset(); return; }
       const mapping=mappings.find((profile)=>profile.deviceId===pad.id);
       const action = input.read(mapping ? mappedPad(pad,mapping) : pad, now);
       if (!action || !scope) return;
+      if (action === "start") { pressCoin(); return; }
+      const card = document.activeElement;
+      // A no card: abre a sala do jogo, como o Enter (o card já foi selecionado ao receber o foco).
+      const openCard = () => { if (!dialog && isGameCard(card)) { card.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); return true; } return false; };
+      if (!active) {
+        if (action === "confirm") openCard();
+        else if (action !== "back") moveBetweenCards(action);
+        return;
+      }
       if (action === "back") {
         const dialog = visibleDialog();
         if (dialog) dialog.querySelector<HTMLButtonElement>("[data-dialog-close]")?.click();
@@ -93,11 +123,11 @@ export function useBigPicture(startInBigPicture = false) {
       const focused = document.activeElement;
       if (!(focused instanceof HTMLElement) || !scope.contains(focused) || focused.getClientRects().length === 0) { visibleControls(scope)[0]?.focus(); return; }
       if (action === "confirm") {
-        if (focused.matches("button:not(:disabled),input[type=checkbox],input[type=radio],a[href]")) focused.click();
+        if (!openCard() && focused.matches("button:not(:disabled),input[type=checkbox],input[type=radio],a[href]")) focused.click();
       } else if (focused instanceof HTMLSelectElement && (action === "left" || action === "right")) {
         const next = Math.max(0, Math.min(focused.options.length - 1, focused.selectedIndex + (action === "left" ? -1 : 1)));
         if (next !== focused.selectedIndex && !focused.options[next]?.disabled) { focused.selectedIndex = next; focused.dispatchEvent(new Event("change", { bubbles: true })); }
-      } else moveFocus(scope, action);
+      } else if (!(isGameCard(focused) && moveBetweenCards(action))) moveFocus(scope, action);
     }
     frame = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(frame);

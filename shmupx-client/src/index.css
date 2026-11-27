@@ -210,17 +210,11 @@ button:disabled { opacity: .5; cursor: default; }
 .run-submitted { color: #3fd98b; background: #3fd98b12; }
 .run-expired { color: #f2c14e; background: #f2c14e12; }
 .mode-error { position: absolute; z-index: 30; right: 20px; top: 72px; padding: 14px; background: #4c292d; border: 1px solid #ff6b76; font-size: 13px; }
-.big-picture { grid-template-columns: minmax(0,1fr); grid-template-rows: auto 72px minmax(0,1fr) 38px; }
-.big-picture .navigation-rail { grid-row: 1; display: flex; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--stroke); padding: 12px 24px; gap: 20px; }
-.big-picture .navigation-tabs { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; }
-.big-picture .navigation-tabs button { writing-mode: horizontal-tb; transform: none; width: auto; height: auto; min-height: 52px; padding: 12px 20px; font-size: 16px; border: 1px solid transparent; border-radius: 6px; white-space: nowrap; }
-.big-picture .navigation-tabs button[aria-current] { border: 1px solid var(--cyan); }
-.big-picture .profile-menu-anchor { margin-left: auto; }
-.big-picture .rail-avatar { width: 40px; height: 40px; margin: 0; font-size: 14px; }
-.big-picture .profile-menu { top: 80px; right: 24px; bottom: auto; left: auto; }
-.big-picture .client-topbar { grid-row: 2; padding: 16px 32px; }
-.big-picture .client-content { grid-row: 3; }
-.big-picture .client-footer { grid-row: 4; padding: 0 28px; font-size: 12px; }
+/* Big Picture (Alt+Enter): o mesmo layout do Client (menu lateral com as salas abertas, topo e rodapé),
+   em tela cheia e com tudo maior para jogar de longe com o controle. */
+.big-picture { grid-template-rows: 72px minmax(0,1fr) 38px; }
+.big-picture .client-topbar { padding: 16px 32px; }
+.big-picture .client-footer { padding: 0 28px; font-size: 12px; }
 .big-picture .client-page, .big-picture .collection-pane { padding: 28px 32px; }
 .big-picture .collection-heading h1, .big-picture .page-heading h1 { font-size: 32px; }
 .big-picture .dashboard-panel h2 { font-size: 20px; }
@@ -234,7 +228,7 @@ button:disabled { opacity: .5; cursor: default; }
 .big-picture button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--cyan) 12.5%, transparent); }
 .big-picture .primary-action, .big-picture .secondary-action { min-height: 44px; font-size: 15px; }
 @media (max-width: 850px) { .profile-layout, .subscription-layout { grid-template-columns: minmax(0,1fr); } .big-picture .game-details { width: 340px; } }
-@media (max-width: 700px) { .big-picture .navigation-rail { padding: 8px 12px; } .big-picture .client-page, .big-picture .collection-pane { padding: 18px; } .big-picture .client-workspace { display: block; } .big-picture .game-details { width: 100%; } .big-picture .client-topbar { padding: 12px; } .big-picture .game-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } .big-picture .game-art { height: 160px; } .big-picture .game-card-info strong { font-size: 14px; } .big-picture .game-card-info { padding: 12px; } .submission-row { flex-wrap: wrap; } }
+@media (max-width: 700px) { .big-picture .client-page, .big-picture .collection-pane { padding: 18px; } .big-picture .client-workspace { display: block; } .big-picture .game-details { width: 100%; } .big-picture .client-topbar { padding: 12px; } .big-picture .game-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } .big-picture .game-art { height: 160px; } .big-picture .game-card-info strong { font-size: 14px; } .big-picture .game-card-info { padding: 12px; } .submission-row { flex-wrap: wrap; } }
 
 .dashboard-tile { display: flex; flex-direction: column; min-width: 0; position: relative; }
 .dashboard-tile > .dashboard-panel { flex: 1; min-height: 0; overflow-y: auto; }
