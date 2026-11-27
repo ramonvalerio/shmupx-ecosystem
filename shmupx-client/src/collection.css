@@ -51,8 +51,10 @@
 .collection-layout .collection-list .collection-card > .favorite-action { position: absolute; top: 50%; transform: translateY(-50%); background: transparent; border: 0; }
 
 .collection-layout .collection-empty { margin-top: 18px; }
-.collection-statusbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; margin: auto -20px 0; padding: 10px 20px; border-top: 1px solid #ffffff14; background: #121212; font-size: 11.5px; color: #d7e4e8; }
+.collection-statusbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; margin: auto -20px 0; padding: 10px 20px; border-top: 1px solid #ffffff14; background: #121212; font-size: 11.5px; color: #d7e4e8; }
 .collection-statusbar > span + span { color: #a8c1cc; }
+/* "Atualizar biblioteca" na mesma linha e no mesmo tamanho dos textos da barra */
+.collection-statusbar > .text-action { padding: 0; font-size: inherit; line-height: inherit; }
 .collection-layout .game-grid + .collection-empty, .collection-layout .game-grid { margin-bottom: 18px; }
 
 /* painel de detalhes */
