@@ -8,5 +8,7 @@
   { "game": "carrier-air-wing", "rom": "cawing" },
   { "game": "dodonpachi", "rom": "ddonpach" },
   { "game": "espgaluda-ii", "rom": "espgal2" },
-  { "game": "raiden-dx", "rom": "raidendx" }
+  { "game": "raiden-dx", "rom": "raidendx" },
+  { "game": "batsugun", "rom": "batsugun" },
+  { "game": "samurai-aces", "rom": "samuraia" }
 ]

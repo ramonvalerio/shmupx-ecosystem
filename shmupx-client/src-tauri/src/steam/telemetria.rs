@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn lista_dos_jogos_pela_memoria() {
-        for rom in ["sonicwi2", "dariusg", "zedblade", "ket", "grindstm", "bgaregga", "cawing", "ddonpach", "espgal2", "raidendx"] {
+        for rom in ["sonicwi2", "dariusg", "zedblade", "ket", "grindstm", "bgaregga", "cawing", "ddonpach", "espgal2", "raidendx", "batsugun", "samuraia"] {
             assert!(rom_pela_memoria(rom), "{rom}");
         }
         assert!(!rom_pela_memoria("ddp3"));
