@@ -115,6 +115,45 @@ pub fn pasta_do_jogo(app_id: u32) -> Option<PathBuf> {
     None
 }
 
+/// Como abrir um jogo da Steam direto, sem a Steam: o executável do "Jogar" dela, com os argumentos e
+/// a pasta de trabalho que ela usaria.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LancamentoDireto {
+    pub exe: PathBuf,
+    pub argumentos: Vec<String>,
+    pub pasta: PathBuf,
+}
+
+/// Caminho relativo seguro (sem `..` nem raiz): fica dentro da pasta do jogo.
+fn dentro_da_pasta(pasta: &Path, relativo: &str) -> Option<PathBuf> {
+    let relativo = Path::new(relativo.trim().trim_start_matches(['/', '\\']));
+    if relativo.components().any(|c| !matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir)) {
+        return None;
+    }
+    Some(pasta.join(relativo))
+}
+
+/// O "Jogar" da Steam para o jogo `app_id` (o `appinfo.vdf` da Steam e a pasta de instalação), para
+/// abrir sem a Steam os jogos sem a proteção SteamStub (No Steam Protection, no Lab). `None`: jogo não
+/// instalado, sem a configuração de lançamento ou com o executável fora da pasta do jogo.
+pub fn lancamento_direto(app_id: u32) -> Option<LancamentoDireto> {
+    let steam = pasta_steam()?;
+    let dados = std::fs::read(steam.join("appcache").join("appinfo.vdf")).ok()?;
+    let lista = super::appinfo::lancamentos(&dados, app_id)?;
+    let sistema = if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" };
+    let padrao = super::appinfo::padrao(&lista, sistema)?;
+    let pasta_do_jogo = pasta_do_jogo(app_id)?;
+    let exe = dentro_da_pasta(&pasta_do_jogo, &padrao.executavel.replace('\\', "/"))?;
+    if !exe.is_file() {
+        return None;
+    }
+    let pasta = match padrao.pasta_de_trabalho.trim() {
+        "" => pasta_do_jogo,
+        relativa => dentro_da_pasta(&pasta_do_jogo, &relativa.replace('\\', "/")).filter(|p| p.is_dir()).unwrap_or(pasta_do_jogo),
+    };
+    Some(LancamentoDireto { exe, argumentos: padrao.argumentos.split_whitespace().map(str::to_string).collect(), pasta })
+}
+
 /// Jogos instalados na Steam deste PC (ferramentas como o Steamworks Redistributable incluídas;
 /// quem usa filtra pelo catálogo).
 pub fn ler() -> Biblioteca {
@@ -141,6 +180,22 @@ pub fn ler() -> Biblioteca {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn caminho_do_executavel_fica_na_pasta_do_jogo() {
+        let pasta = Path::new("jogos").join("Andro Dunos II");
+        assert_eq!(dentro_da_pasta(&pasta, "andro dunos ii.EXE"), Some(pasta.join("andro dunos ii.EXE")));
+        assert_eq!(dentro_da_pasta(&pasta, "bin/game.exe"), Some(pasta.join("bin/game.exe")));
+        assert_eq!(dentro_da_pasta(&pasta, "../../Windows/x.exe"), None);
+    }
+
+    /// Lê a Steam deste PC (Andro Dunos II instalado): `cargo test -- --ignored lancamento_do_andro`.
+    #[test]
+    #[ignore]
+    fn lancamento_do_andro_dunos_ii() {
+        let direto = lancamento_direto(1856900).expect("Andro Dunos II instalado");
+        assert!(direto.exe.to_string_lossy().to_lowercase().ends_with("andro dunos ii.exe"), "{direto:?}");
+    }
 
     #[test]
     fn le_manifesto_e_pastas() {

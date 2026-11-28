@@ -125,6 +125,9 @@
 .am-tile-icon.is-tube { border-radius: 8px / 10px; }
 .am-tile-icon.is-tube::before { content: ""; position: absolute; inset: 3px; border-radius: 6px / 8px; background: repeating-linear-gradient(to bottom, var(--am-dim) 0 1px, transparent 1px 3px); }
 .am-tile[aria-checked=true] .am-tile-icon.is-tube::before { background: repeating-linear-gradient(to bottom, var(--on-cyan) 0 1px, transparent 1px 3px); }
+/* Ícones em SVG (gabinete arcade do 15 kHz, conector de rede do MiSTer), no traço dos outros ícones. */
+.am-tile-svg { grid-row: span 2; width: 34px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; color: var(--am-dim); }
+.am-tile[aria-checked=true] .am-tile-svg { color: var(--on-cyan); }
 
 .am-note { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #aaa; }
 

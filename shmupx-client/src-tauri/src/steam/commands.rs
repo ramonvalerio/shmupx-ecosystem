@@ -28,10 +28,34 @@ struct GameLaunchTimeoutPayload {
 
 /// Inicializa um jogo via protocolo oficial da Steam (`steam://run/<app_id>`), garantindo que
 /// overlay e conquistas funcionem normalmente (ver docs/adr/001, bounded context "Sessão de Jogo").
+///
+/// `sem_steam` (jogo sem a proteção SteamStub, flag No Steam Protection do Lab): abre direto o
+/// executável do "Jogar" da Steam, sem abrir a Steam. Se não der (jogo sem a configuração de
+/// lançamento na Steam deste PC, ou o executável não abre), cai no `steam://run`.
 #[tauri::command]
-pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32, treino: Option<bool>) -> Result<(), String> {
+pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32, treino: Option<bool>, sem_steam: Option<bool>) -> Result<(), String> {
     if steam_app_id == 0 {
         return Err("steam_app_id inválido (esperado um ID positivo)".into());
+    }
+    let treino = treino.unwrap_or(false);
+
+    // Processos de antes de abrir: o do jogo é o novo, dentro da pasta dele (aberto direto, ele
+    // aparece na hora, antes do monitor começar).
+    let baseline = detector::snapshot_pids();
+
+    if sem_steam.unwrap_or(false) {
+        let direto = tauri::async_runtime::spawn_blocking(move || super::biblioteca::lancamento_direto(steam_app_id)).await.ok().flatten();
+        match direto {
+            Some(direto) => match abrir_direto(&direto) {
+                Ok(()) => {
+                    log::info!("steam: {steam_app_id} aberto direto, sem a Steam: {}", direto.exe.display());
+                    spawn_launch_monitor(app, steam_app_id, LAUNCH_MONITOR_TIMEOUT, treino, baseline);
+                    return Ok(());
+                }
+                Err(e) => log::warn!("steam: {steam_app_id} não abriu direto ({}): {e}; abrindo pela Steam", direto.exe.display()),
+            },
+            None => log::warn!("steam: {steam_app_id} sem o executável do Jogar na Steam deste PC; abrindo pela Steam"),
+        }
     }
 
     // Com a Steam fechada, o `steam://run` a abre e ela inicia o jogo em seguida (como no Client
@@ -42,9 +66,22 @@ pub async fn inicializar_jogo_steam(app: AppHandle, steam_app_id: u32, treino: O
         .map_err(|e| format!("falha ao disparar steam://run/{steam_app_id}: {e}"))?;
 
     let limite = if steam_aberta { LAUNCH_MONITOR_TIMEOUT } else { LAUNCH_MONITOR_TIMEOUT_STEAM_FECHADA };
-    spawn_launch_monitor(app, steam_app_id, limite, treino.unwrap_or(false));
+    spawn_launch_monitor(app, steam_app_id, limite, treino, baseline);
 
     Ok(())
+}
+
+/// Abre o executável do jogo na pasta de trabalho dele, solto do Client (fechar o Client não fecha o jogo).
+fn abrir_direto(direto: &super::biblioteca::LancamentoDireto) -> io::Result<()> {
+    let mut comando = std::process::Command::new(&direto.exe);
+    comando.args(&direto.argumentos).current_dir(&direto.pasta);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: sem console e fora do grupo do Client.
+        comando.creation_flags(0x0000_0008 | 0x0000_0200);
+    }
+    comando.spawn().map(|_| ())
 }
 
 /// Dispara o protocolo nativo `steam://run/<app_id>` usando o abridor de URIs do sistema
@@ -78,9 +115,8 @@ pub(crate) fn launch_steam_uri(app_id: u32) -> io::Result<()> {
 /// faz polling por um novo processo no sistema. Quando a detecção precisa (manifesto `.acf`,
 /// TASKS.md 1.2–1.4) existir, este é o ponto que vai disparar a gravação do FFmpeg
 /// automaticamente ao confirmar que o jogo abriu.
-fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration, treino: bool) {
+fn spawn_launch_monitor(app: AppHandle, app_id: u32, limite: Duration, treino: bool, baseline: std::collections::HashSet<u32>) {
     tokio::spawn(async move {
-        let baseline = detector::snapshot_pids();
         let pasta = tauri::async_runtime::spawn_blocking(move || super::biblioteca::pasta_do_jogo(app_id)).await.ok().flatten();
         let mut elapsed = Duration::ZERO;
 
@@ -141,6 +177,8 @@ pub async fn inicializar_jogo_emulador(
     idioma: Option<String>,
     // Treino em dupla online: papel (host/guest), porta e endereços do parceiro (só no treino).
     dupla: Option<super::dupla::Dupla>,
+    // Jogo de console (`roms.json`, campo `system`): o sistema do MAME que abre o cartucho.
+    sistema: Option<String>,
 ) -> Result<(), String> {
     let caravan_segundos = caravan_segundos.filter(|s| (30..=3600).contains(s)).filter(|_| !treino.unwrap_or(false));
     let cartao_jogador = if !treino.unwrap_or(false) && cartao_jogador.unwrap_or(false) {
@@ -168,6 +206,7 @@ pub async fn inicializar_jogo_emulador(
             posicao_arquivo,
             idioma: idioma.filter(|i| i == "pt" || i == "en"),
             dupla: dupla.filter(|_| treino),
+            sistema: sistema.map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty()),
             ..m
         });
     // Ranked de jogo validado só pela memória (sem script de vídeo): só com o ROM mapeado (outra
@@ -180,10 +219,38 @@ pub async fn inicializar_jogo_emulador(
             mapeados => mapeados,
         }
     };
+    // TV do MiSTer (nogpu): o core Groovy precisa estar aberto e ouvindo antes de o motor mandar a imagem.
+    let mister = motor.as_ref().and_then(|m| m.video.mister().map(|host| (host.to_string(), m.video.mister_usuario.clone(), m.video.mister_senha.clone())));
+    // Na TV do MiSTer não há janela no PC para gravar: run só de jogo validado pela memória (o
+    // placar lido do jogo). O Training vale para qualquer jogo.
+    if mister.is_some() && !treino && super::telemetria::roms_pela_memoria(&jogo_id).is_empty() {
+        log::warn!("nogpu: {jogo_id} não é validado pela memória; sem run na TV do MiSTer");
+        return Err("MISTER_SEM_MEMORIA: este jogo só vale run no monitor do PC".into());
+    }
+    if let Some((host, usuario, senha)) = &mister {
+        let (usuario, senha) = (shmupx_mister_link::usuario_ou_padrao(usuario.as_deref()), shmupx_mister_link::senha_ou_padrao(senha.as_deref()));
+        super::mister_ssh::abrir_groovy(host, usuario, senha).await.map_err(|e| {
+            log::warn!("nogpu: o MiSTer em {host} não ficou pronto: {e}");
+            "MISTER_GROOVY: o MiSTer não ficou pronto para mostrar o jogo na TV".to_string()
+        })?;
+    }
     let aberto = tauri::async_runtime::spawn_blocking(move || super::emulador::abrir(escolhida.as_deref(), pasta.as_deref(), padrao.as_deref(), &roms, janela, motor.as_ref()))
         .await
         .map_err(|e| e.to_string())?
         .inspect_err(|e| log::warn!("emulador: {e}"))?;
+    // Fim da partida (o motor fechou): o MiSTer sai do core Groovy e volta ao menu.
+    if let Some((host, usuario, senha)) = mister {
+        let pid = aberto.id;
+        tauri::async_runtime::spawn(async move {
+            while super::detector::processo_vivo_real(pid) {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            let (usuario, senha) = (shmupx_mister_link::usuario_ou_padrao(usuario.as_deref()), shmupx_mister_link::senha_ou_padrao(senha.as_deref()));
+            if let Err(e) = super::mister_ssh::sair_do_groovy(&host, usuario, senha).await {
+                log::warn!("nogpu: o MiSTer em {host} não voltou ao menu: {e}");
+            }
+        });
+    }
     // Jogo trocado no ShmupX Emulator aberto (mesma janela): a run do jogo anterior termina agora,
     // antes de a do jogo novo começar.
     if let Some(anterior) = aberto.trocou_de {
@@ -330,21 +397,39 @@ pub async fn emulador_identificar_monitor(app: AppHandle, id: String) -> Result<
     super::emulador::identificar_monitor(&app, &id).inspect_err(|e| log::warn!("monitor: falha ao identificar {id:?}: {e}"))
 }
 
-/// Baixa para a pasta padrão (`roms` do Client) os ROMs do `roms.json` da pasta do Client que o
+/// Id do jogo → ROM, pelo `roms.json` da pasta do Client (com a lista padrão): a única ligação entre
+/// os jogos do Lab e os ROMs. Ver [`super::roms_auto`].
+#[tauri::command]
+pub async fn emulador_lista_roms(app: AppHandle) -> std::collections::BTreeMap<String, super::roms_auto::RomDoJogo> {
+    let Some(padrao) = super::emulador::pasta_da_lista(&app) else {
+        log::warn!("roms: sem pasta de ROMs para ler o roms.json");
+        return Default::default();
+    };
+    tauri::async_runtime::spawn_blocking(move || super::roms_auto::roms_dos_jogos(&padrao)).await.unwrap_or_default()
+}
+
+/// Baixa para a pasta do `roms.json` (a escolhida pelo jogador ou a padrão) os ROMs da lista que o
 /// jogador ainda não tem em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Só os de
-/// jogos publicados: `permitidos` (os ROMs do catálogo, da interface). Ver [`super::roms_auto`].
+/// jogos publicados: `permitidos` (os ids do catálogo, da interface). Ver [`super::roms_auto`].
 #[tauri::command]
 pub async fn emulador_baixar_roms(app: AppHandle, permitidos: Option<Vec<String>>) -> super::roms_auto::ResultadoDownload {
     let Some(padrao) = super::emulador::pasta_padrao_de_roms(&app) else {
         log::warn!("roms: sem pasta padrão de ROMs para baixar");
         return super::roms_auto::ResultadoDownload::default();
     };
+    // Destino: a pasta do `roms.json` (a escolhida pelo jogador ou a padrão).
+    let destino = super::emulador::pasta_da_lista(&app).unwrap_or_else(|| padrao.clone());
+    // Só na pasta padrão o Client cria o `roms.json`; na escolhida, só baixa se o jogador pôs o arquivo nela.
+    let criar_lista = destino == padrao;
     let escolhida = super::emulador::pasta_escolhida(&app);
     let pasta = padrao.clone();
     let tem = tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), None, Some(&pasta), false).roms)
         .await
         .unwrap_or_default();
-    super::roms_auto::baixar_faltando(&padrao, &tem, &permitidos.unwrap_or_default()).await
+    let emitir = |p: super::roms_auto::Progresso| {
+        let _ = app.emit("roms://progresso", p);
+    };
+    super::roms_auto::baixar_faltando(&destino, &tem, &permitidos.unwrap_or_default(), criar_lista, &emitir).await
 }
 
 /// Guarda a pasta de ROMs escolhida pelo jogador e já lê os ROMs dela. Com `pasta` vazia, esquece a

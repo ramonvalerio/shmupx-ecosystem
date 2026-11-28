@@ -75,6 +75,7 @@ pub fn run() {
             steam::commands::salvar_posicao_jogador,
             steam::commands::imagem_como_data_url,
             steam::commands::emulador_definir_pasta,
+            steam::commands::emulador_lista_roms,
             steam::commands::emulador_baixar_roms,
             steam::commands::mister_biblioteca,
             steam::commands::mister_usuarios,

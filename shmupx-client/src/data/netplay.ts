@@ -3,8 +3,8 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp,
 import { invoke } from "@tauri-apps/api/core";
 import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
-import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
-import { readEmulatorSettings } from "./emulatorSettings";
+import { readEmulatorLibrary, romsFor, systemFor } from "./emulatorLibrary";
+import { emulatorVideoForLaunch } from "./emulatorSettings";
 import { readEmulatorControls } from "./emulatorControls";
 
 /**
@@ -53,13 +53,13 @@ export const READY_TTL_MS = 45_000;
 const COLLECTION = "netplaySessions";
 
 /**
- * Jogos liberados para a dupla (ROMs): passam no SyncTest e no teste entre dois motores
- * (shmupx-engine/docs/NETPLAY.md). Só eles mostram o "Convidar para jogar".
+ * Jogos liberados para a dupla (ids do Lab): passam no SyncTest e no teste entre dois motores
+ * (shmupx-engine/docs/NETPLAY.md). Só eles mostram o "Convidar para jogar", e só com o ROM no `roms.json`.
  */
-export const NETPLAY_ROMS = new Set<string>(["sonicwi2", "bgaregga", "cawing", "ddonpach", "batsugun", "grindstm"]);
+export const NETPLAY_GAMES = new Set<string>(["aero-fighters-2", "battle-garegga", "carrier-air-wing", "dodonpachi", "batsugun", "grind-stormer"]);
 
 export function netplayCertified(room: GameRoom): boolean {
-  return romsFor(room).some((rom) => NETPLAY_ROMS.has(rom));
+  return NETPLAY_GAMES.has(room.id) && romsFor(room).length > 0;
 }
 
 function sessionFrom(id: string, data: Record<string, unknown>): NetplaySession | null {
@@ -149,10 +149,11 @@ export async function launchNetplay(room: GameRoom, role: "host" | "guest", mine
   await invoke("inicializar_jogo_emulador", {
     jogoId: room.id,
     roms: romsFor(room),
+    sistema: systemFor(room),
     pasta: readEmulatorLibrary()?.root || null,
     treino: true,
     janela: false,
-    motorVideo: readEmulatorSettings(),
+    motorVideo: emulatorVideoForLaunch(),
     motorControles: readEmulatorControls(),
     dupla: { modo: role, porta: mine.port, parceiros: partner.candidates, chave: key },
   });

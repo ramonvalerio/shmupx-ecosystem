@@ -1,17 +1,62 @@
 {
-  "sonicwi2": {
-    "download": "https://archive.org/download/fightcaderoms/sonicwi2.zip",
+  "neogeo": {
+    "download": "https://fightcade.download/fbneo/arcade/neogeo.zip"
+  },
+  "pgm": {
+    "download": "https://fightcade.download/fbneo/arcade/pgm.zip"
+  },
+  "aero-fighters-2": {
+    "download": "https://fightcade.download/fbneo/arcade/sonicwi2.zip",
     "require": [
       "neogeo"
     ]
   },
-  "cawing": {
-    "download": "https://archive.org/download/fightcaderoms/cawing.zip"
+  "andro-dunos": {
+    "download": "https://fightcade.download/fbneo/arcade/androdun.zip",
+    "require": [
+      "neogeo"
+    ]
   },
-  "ddonpach": {
-    "download": "https://archive.org/download/fightcaderoms/ddonpach.zip"
+  "batsugun": {
+    "download": "https://fightcade.download/fbneo/arcade/batsugun.zip"
   },
-  "neogeo": {
-    "download": "https://archive.org/download/fightcaderoms/neogeo.zip"
+  "battle-garegga": {
+    "download": "https://fightcade.download/fbneo/arcade/bgaregga.zip"
+  },
+  "carrier-air-wing": {
+    "download": "https://fightcade.download/fbneo/arcade/cawing.zip"
+  },
+  "darius-gaiden": {
+    "download": "https://fightcade.download/fbneo/arcade/dariusg.zip"
+  },
+  "dodonpachi": {
+    "download": "https://fightcade.download/fbneo/arcade/ddonpach.zip"
+  },
+  "dodonpachi-dai-ou-jou": {
+    "download": "https://fightcade.download/fbneo/arcade/ddp3.zip",
+    "require": [
+      "pgm"
+    ]
+  },
+  "grind-stormer": {
+    "download": "https://fightcade.download/fbneo/arcade/grindstm.zip"
+  },
+  "ketsui": {
+    "download": "https://fightcade.download/fbneo/arcade/ket.zip",
+    "require": [
+      "pgm"
+    ]
+  },
+  "raiden-dx": {
+    "download": "https://fightcade.download/fbneo/arcade/raidendx.zip"
+  },
+  "samurai-aces": {
+    "download": "https://fightcade.download/fbneo/arcade/samuraia.zip"
+  },
+  "zed-blade": {
+    "download": "https://fightcade.download/fbneo/arcade/zedblade.zip",
+    "require": [
+      "neogeo"
+    ]
   }
 }

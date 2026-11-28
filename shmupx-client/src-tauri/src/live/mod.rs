@@ -83,6 +83,9 @@ pub enum Abertura {
     Steam {
         #[serde(rename = "steamAppId")]
         steam_app_id: u32,
+        /// Jogo sem a proteção da Steam (No Steam Protection): abre direto, sem a Steam.
+        #[serde(default, rename = "semSteam")]
+        sem_steam: bool,
     },
     Emulator {
         roms: Vec<String>,
@@ -99,13 +102,16 @@ pub enum Abertura {
         cartao_jogador: Option<bool>,
         #[serde(default)]
         idioma: Option<String>,
+        /// Jogo de console: o sistema do MAME que abre o cartucho.
+        #[serde(default)]
+        sistema: Option<String>,
     },
 }
 
 impl Abertura {
     fn steam_app_id(&self) -> Option<u32> {
         match self {
-            Abertura::Steam { steam_app_id } => Some(*steam_app_id).filter(|id| *id > 0),
+            Abertura::Steam { steam_app_id, .. } => Some(*steam_app_id).filter(|id| *id > 0),
             Abertura::Emulator { .. } => None,
         }
     }
@@ -484,9 +490,9 @@ pub async fn trocar_jogo(app: &AppHandle, jogo_id: &str, abertura: &Abertura) ->
 /// (`steam://game-launched` ou `emulator://game-launched`) e começa a run (ficha e gravação).
 async fn abrir_jogo(app: &AppHandle, jogo_id: &str, abertura: &Abertura) -> Result<(), String> {
     let aberto = match abertura.clone() {
-        Abertura::Steam { steam_app_id } => crate::steam::commands::inicializar_jogo_steam(app.clone(), steam_app_id, Some(false)).await,
-        Abertura::Emulator { roms, pasta, motor_video, motor_controles, caravan_segundos, cartao_jogador, idioma } => {
-            crate::steam::commands::inicializar_jogo_emulador(app.clone(), jogo_id.to_string(), roms, pasta, Some(false), Some(false), motor_video, motor_controles, caravan_segundos, cartao_jogador, idioma, None).await
+        Abertura::Steam { steam_app_id, sem_steam } => crate::steam::commands::inicializar_jogo_steam(app.clone(), steam_app_id, Some(false), Some(sem_steam)).await,
+        Abertura::Emulator { roms, pasta, motor_video, motor_controles, caravan_segundos, cartao_jogador, idioma, sistema } => {
+            crate::steam::commands::inicializar_jogo_emulador(app.clone(), jogo_id.to_string(), roms, pasta, Some(false), Some(false), motor_video, motor_controles, caravan_segundos, cartao_jogador, idioma, None, sistema).await
         }
     };
     aberto.map_err(|e| {

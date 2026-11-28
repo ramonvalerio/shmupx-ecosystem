@@ -653,6 +653,8 @@
 .play-mode-choice:disabled { cursor: not-allowed; }
 .play-mode-choice:disabled .play-mode-art { filter: grayscale(1) brightness(.55); }
 .play-mode-choice:disabled .play-mode-text { opacity: .6; }
+/* Jogo sem ranking ainda: o sticker amarelo da coleção (Ranking em breve), fora do cinza do cartão desabilitado. */
+.play-mode-choice .coming-soon-sticker { position: absolute; top: 14px; right: 14px; z-index: 2; padding: 5px 12px; border-radius: 3px; background: #f2c14e; color: #1a1406; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; transform: rotate(4deg); box-shadow: 0 2px 8px #0009; }
 .play-mode-hint { align-self: center; font-size: 12px; color: #8a9aa3; }
 .theme-light .play-mode-choice small { color: #b6c6cf; }
 @media (prefers-reduced-motion: reduce) { .play-mode-choice, .play-mode-art, .play-mode-coin { transition: none; } .play-mode-choice:hover:not(:disabled) { transform: none; } }
@@ -728,6 +730,26 @@
 /* Aviso discreto da dupla online (abrindo, conectando, em dupla com o ping, conexão instável). */
 .netplay-status { position: fixed; right: 18px; bottom: 18px; z-index: 55; padding: 10px 14px; background: #0d1418; border: 1px solid var(--cyan); color: #f0fcff; font-size: 12px; box-shadow: 0 10px 30px -10px #000c; pointer-events: none; }
 .netplay-status.is-unstable { border-color: #ffb547; color: #ffd79a; }
+/* Convite recebido: cartão escuro, avatar com anel ciano, título grande em ciano com brilho, dois botões largos. */
+.netplay-invite { width: min(600px, 100%); background: linear-gradient(180deg, #121a20 0%, #0c1115 100%); border: 1px solid #ffffff1a; border-radius: 14px; box-shadow: 0 24px 80px #000c, 0 0 0 1px #57fcff0d; overflow: hidden; color: #f0fcff; animation: netplay-invite-in .18s ease-out; }
+.netplay-invite:focus { outline: none; }
+.netplay-invite-head { display: flex; align-items: center; gap: 24px; padding: 26px 28px; border-bottom: 1px solid #ffffff14; }
+.netplay-invite-avatar { flex-shrink: 0; width: 112px; height: 112px; border-radius: 50%; object-fit: cover; background: #0d1418; border: 2px solid #ffffff2e; box-shadow: 0 0 0 4px #0c1115, 0 0 22px -4px color-mix(in srgb, var(--cyan) 45%, transparent); }
+.netplay-invite-head h2 { margin: 0; min-width: 0; font-size: 32px; font-weight: 400; line-height: 1.12; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 18px color-mix(in srgb, var(--cyan) 45%, transparent); overflow-wrap: anywhere; }
+.netplay-invite-body { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 28px 6px; text-align: center; }
+.netplay-invite-game { margin: 0; font-size: 22px; color: #f0fcff; }
+.netplay-invite-text { margin: 0; font-size: 13px; line-height: 1.5; color: #8fa6b0; }
+.netplay-invite-timer { display: block; width: 120px; height: 2px; margin-top: 10px; background: #ffffff14; overflow: hidden; border-radius: 2px; }
+.netplay-invite-timer i { display: block; height: 100%; background: var(--cyan); transform-origin: left; animation: netplay-invite-timer linear forwards; }
+.netplay-invite-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 22px 28px 28px; }
+.netplay-invite-actions button { height: 56px; border-radius: 10px; font: inherit; font-size: 20px; cursor: pointer; transition: background .12s, border-color .12s, box-shadow .12s, filter .12s; }
+.netplay-invite-decline { background: #161d22; border: 1px solid #ffffff2e; color: #f0fcff; }
+.netplay-invite-decline:hover, .netplay-invite-decline:focus-visible { background: #1c252b; border-color: #ffffff59; outline: none; }
+.netplay-invite-accept { background: var(--cyan); border: 1px solid var(--cyan); color: var(--on-cyan); box-shadow: 0 0 24px -4px color-mix(in srgb, var(--cyan) 60%, transparent); }
+.netplay-invite-accept:hover, .netplay-invite-accept:focus-visible { filter: brightness(1.08); box-shadow: 0 0 32px -2px color-mix(in srgb, var(--cyan) 75%, transparent); outline: none; }
+@keyframes netplay-invite-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes netplay-invite-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 560px) { .netplay-invite-head { gap: 16px; padding: 20px; } .netplay-invite-avatar { width: 76px; height: 76px; } .netplay-invite-head h2 { font-size: 24px; } .netplay-invite-actions { padding: 18px 20px 20px; gap: 12px; } }
 
 /* Conexão com o jogador (lista da sala): 3 barrinhas; verde, amarelo ou vermelho pelo ping estimado. */
 .connection-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-right: 8px; vertical-align: middle; cursor: default; }

@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { GameRoom } from "../types/room";
-import { romsFor } from "./emulatorRoms";
+import { romListVersion, romsFor, setRomList, subscribeRomList, systemFor, type RomEntry } from "./emulatorRoms";
+import { finishRomDownload, openRomDownload } from "./romDownload";
 
-export { romsFor };
+export { romsFor, systemFor };
 
 /**
  * Biblioteca do ShmupX Emulator: os ROMs `.zip` que o jogador tem. "Ter o jogo" no
- * emulador = ter o ROM (como no Client antigo); a ligação ROM ↔ jogo fica em `emulatorRoms.ts`.
+ * emulador = ter o ROM (como no Client antigo); a ligação jogo ↔ ROM é o `roms.json` (`emulatorRoms.ts`).
  */
 
 export interface EmulatorLibrary {
@@ -78,12 +79,25 @@ export interface RomDownload {
   baixados: string[];
   falhas: string[];
   em_andamento: boolean;
+  /** A pasta escolhida não tem `roms.json`: nada a baixar. */
+  sem_lista?: boolean;
 }
 
-/** ROMs dos jogos publicados pelo Lab (o catálogo do Client): só eles são baixados do `roms.json`. */
-let publishedRoms: string[] | null = null;
+/** Lê de novo o `roms.json` da pasta do Client (id do jogo → ROM); o jogador pode ter editado. */
+export async function loadRomList(): Promise<void> {
+  if (!isTauri()) return;
+  setRomList(await invoke<Record<string, RomEntry>>("emulador_lista_roms"));
+}
+
+/** Muda (re-renderiza) quando a lista do `roms.json` muda. */
+export function useRomList() {
+  return useSyncExternalStore(subscribeRomList, romListVersion);
+}
+
+/** Ids dos jogos publicados pelo Lab (o catálogo do Client): só eles são baixados do `roms.json`. */
+let publishedGames: string[] | null = null;
 export function setPublishedRooms(rooms: GameRoom[]) {
-  publishedRoms = rooms.length > 0 ? [...new Set(rooms.flatMap((room) => romsFor(room)))] : null;
+  publishedGames = rooms.length > 0 ? rooms.map((room) => room.id) : null;
 }
 
 /**
@@ -93,8 +107,8 @@ export function setPublishedRooms(rooms: GameRoom[]) {
  * atualiza a biblioteca: os jogos ganham cor na coleção.
  */
 export async function downloadMissingRoms(): Promise<RomDownload> {
-  if (!isTauri() || !publishedRoms) return { baixados: [], falhas: [], em_andamento: false };
-  const result = await invoke<RomDownload>("emulador_baixar_roms", { permitidos: publishedRoms });
+  if (!isTauri() || !publishedGames) return { baixados: [], falhas: [], em_andamento: false };
+  const result = await invoke<RomDownload>("emulador_baixar_roms", { permitidos: publishedGames });
   if (result.falhas.length > 0) console.warn("ROMs: não deu para baixar:", result.falhas.join(", "));
   if (result.baixados.length > 0 && !emulatorOff()) {
     const scan = await scanEmulator(readEmulatorLibrary()?.root || undefined);
@@ -105,6 +119,7 @@ export async function downloadMissingRoms(): Promise<RomDownload> {
 
 /** Baixa os ROMs que faltam (`roms.json`), lê de novo os ROMs (na pasta já conhecida) e guarda o resultado. */
 export async function refreshEmulatorLibrary(): Promise<EmulatorScan> {
+  await loadRomList().catch((error) => console.warn("ROMs: falha ao ler o roms.json:", error));
   await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
   const result = await scanEmulator(readEmulatorLibrary()?.root || undefined);
   if (result.found) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
@@ -120,6 +135,7 @@ export async function refreshEmulatorLibrary(): Promise<EmulatorScan> {
  */
 export async function autoImportEmulator(): Promise<number | null | "off"> {
   if (!isTauri()) return null;
+  await loadRomList().catch((error) => console.warn("ROMs: falha ao ler o roms.json:", error));
   if (!emulatorOff()) {
     const current = readEmulatorLibrary();
     const result = await scanEmulator(current?.root || undefined);
@@ -141,8 +157,32 @@ export async function chooseEmulatorFolder(title: string): Promise<EmulatorScan 
   const folder = await open({ directory: true, multiple: false, title, defaultPath: current });
   if (typeof folder !== "string") return null;
   const result = await invoke<EmulatorScan>("emulador_definir_pasta", { pasta: folder });
-  if (result.found && readEmulatorLibrary()) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
-  return result;
+  if (!result.found) return result;
+  // Escolher a pasta é importar: reconecta o emulador, lê o `roms.json` dela, baixa os ROMs que
+  // faltam (nela), com a modal de progresso, e atualiza a coleção.
+  publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
+  openRomDownload();
+  await loadRomList().catch((error) => console.warn("ROMs: falha ao ler o roms.json:", error));
+  if (!publishedGames) {
+    finishRomDownload({ baixados: [], falhas: [] }, true);
+  } else {
+    const download = await downloadWhenFree().catch((error) => { console.warn("ROMs: falha no download:", error); return null; });
+    finishRomDownload(download ?? { baixados: [], falhas: [] });
+  }
+  return readEmulatorLibrary() ? { ...result, roms: readEmulatorLibrary()!.roms } : result;
+}
+
+/**
+ * Baixa os ROMs que faltam; se o download automático (ao abrir o Client) ainda está em andamento,
+ * espera ele terminar (a modal mostra o andamento dele) e baixa de novo, agora na pasta escolhida.
+ */
+async function downloadWhenFree(): Promise<RomDownload> {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const result = await downloadMissingRoms();
+    if (!result.em_andamento) return result;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return { baixados: [], falhas: [], em_andamento: true };
 }
 
 /** Esquece a pasta escolhida e volta à pasta padrão dos ROMs (atualiza a biblioteca importada). */
@@ -171,6 +211,7 @@ export function useEmulatorLibrary() {
   /** Escolhe outra pasta de ROMs (janela do sistema); `null` = cancelou. */
   const chooseFolder = useCallback((title: string) => chooseEmulatorFolder(title), []);
   const disconnect = useCallback(() => disconnectEmulator(), []);
-  const owns = useCallback((room: GameRoom) => Boolean(library && romsFor(room).some((rom) => library.roms.includes(rom))), [library]);
+  const romList = useRomList();
+  const owns = useCallback((room: GameRoom) => Boolean(library && romsFor(room).some((rom) => library.roms.includes(rom))), [library, romList]);
   return { library, owns, refresh, chooseFolder, disconnect };
 }

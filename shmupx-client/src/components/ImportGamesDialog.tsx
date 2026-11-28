@@ -10,10 +10,9 @@ import type { PlayOn } from "../types/room";
 import DialogClose from "./DialogClose";
 
 const SOURCES = [
-  { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", short: "Importe os jogos instalados na sua Steam.", cta: "Importar agora", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem.", available: true },
-  { id: "emulator", title: "Emulador", icon: "E", detail: "ROMs do ShmupX Emulator", short: "Importe os ROMs (.zip) deste computador.", cta: "Escolher pasta de ROMs", body: "Leia os ROMs deste computador para marcar na coleção os jogos que você tem. Eles abrem no ShmupX Emulator.", available: true },
-  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Jogos do MiSTer na rede", short: "Importe os jogos do seu MiSTer pela rede.", cta: "Conectar MiSTer", body: "Informe o IP do MiSTer (Menu › Sistema mostra o endereço). Os jogos de arcade, Mega Drive e Neo Geo dele que têm sala no ShmupX ficam marcados na coleção, e as partidas valem para o ranking.", available: true },
-  { id: "local", title: "Jogos locais", icon: "▣", detail: "Jogos instalados no computador", short: "Escolha jogos instalados numa pasta do computador.", cta: "Procurar pasta", body: "Escolha os jogos instalados no computador que deseja incluir na coleção.", available: false },
+  { id: "steam", title: "Steam", icon: "S", detail: "Biblioteca da Steam", short: "Importe os jogos instalados na sua Steam.", cta: "Importar agora", body: "Leia os jogos instalados na Steam deste computador para marcar na coleção os que você tem." },
+  { id: "emulator", title: "Emulador", icon: "E", detail: "ROMs do ShmupX Emulator", short: "Importe os ROMs (.zip) deste computador.", cta: "Escolher pasta de ROMs", body: "Leia os ROMs deste computador para marcar na coleção os jogos que você tem. Eles abrem no ShmupX Emulator." },
+  { id: "mister", title: "MiSTer FPGA", icon: "M", detail: "Jogos do MiSTer na rede", short: "Importe os jogos do seu MiSTer pela rede.", cta: "Conectar MiSTer", body: "Informe o IP do MiSTer (Menu › Sistema mostra o endereço). Os jogos de arcade, Mega Drive e Neo Geo dele que têm sala no ShmupX ficam marcados na coleção, e as partidas valem para o ranking." },
 ] as const;
 
 type SourceId = (typeof SOURCES)[number]["id"];
@@ -25,7 +24,6 @@ function SourceIcon({ id }: { id: SourceId }) {
     case "steam": return <svg {...common}><circle cx="24" cy="24" r="20" className="fill" /><circle cx="30.5" cy="18.5" r="6" className="cut" /><circle cx="30.5" cy="18.5" r="3" className="fill" /><circle cx="17" cy="31" r="4.6" className="cut" /><path d="M5 28.5l9.5 4M21 29l7-7.5" className="cut-line" /></svg>;
     case "emulator": return <svg {...common}><path d="M14 14h20c6 0 9.5 4.2 10.4 10.6l1.3 8.9c.6 4.1-2.4 7.5-6.2 7.5-2.3 0-4.3-1.3-5.4-3.3L32 34H16l-2.1 3.7c-1.1 2-3.1 3.3-5.4 3.3-3.8 0-6.8-3.4-6.2-7.5l1.3-8.9C4.5 18.2 8 14 14 14Z" className="fill" /><path d="M14.5 21v8M10.5 25h8" className="cut-line" /><circle cx="32" cy="22.5" r="2.2" className="cut" /><circle cx="36.5" cy="27" r="2.2" className="cut" /></svg>;
     case "mister": return <svg {...common}><path d="M17 5v6M24 5v6M31 5v6M17 37v6M24 37v6M31 37v6M5 17h6M5 24h6M5 31h6M37 17h6M37 24h6M37 31h6" className="line" /><rect x="11" y="11" width="26" height="26" rx="3" className="line" /><text x="24" y="27.5" textAnchor="middle" className="chip-text">FPGA</text></svg>;
-    case "local": return <svg {...common}><path d="M4 12a3 3 0 0 1 3-3h11l4 4.5h19a3 3 0 0 1 3 3V37a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3Z" className="line" /><path d="M4 19h40" className="line" /></svg>;
   }
 }
 
@@ -80,15 +78,15 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
       <div className="controller-dialog-body">
         {!source && <>
           <div className="import-cards" data-tutorial="import-sources">{SOURCES.map((item) => {
-            const id = item.id === "local" ? null : (item.id as PlayOn);
-            const lib = id ? playable.library(id) : null;
+            const id: PlayOn = item.id;
+            const lib = playable.library(id);
             const connected = Boolean(lib?.connected);
-            const count = id && connected ? counts(id) : null;
-            const state = !item.available ? "soon" : connected ? "connected" : lib?.off ? "off" : "ready";
+            const count = connected ? counts(id) : null;
+            const state = connected ? "connected" : lib.off ? "off" : "ready";
             const busy = busyId === item.id;
             const locked = busyId !== null;
             const error = cardError?.id === item.id ? cardError.message : null;
-            const actions = id && lib && connected && <div className="import-card-row">
+            const actions = connected && <div className="import-card-row">
               <button type="button" className="import-card-secondary" disabled={locked} onClick={() => void refreshLibrary(id)} title={t("Lê de novo e importa os jogos instalados depois da última vez")}>{t(busy ? "Atualizando…" : "Atualizar")}</button>
               <button type="button" className="import-card-secondary" disabled={locked} onClick={() => { setCardError(null); lib.disconnect(); }}>{t("Desconectar")}</button>
             </div>;
@@ -98,7 +96,7 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
               <p>{t(item.short)}</p>
               <span className="import-card-status">
                 <i aria-hidden="true" />
-                {state === "soon" ? t("EM BREVE") : state === "connected" ? t("CONECTADO") : state === "off" ? t("DESCONECTADO") : t("PRONTO")}
+                {state === "connected" ? t("CONECTADO") : state === "off" ? t("DESCONECTADO") : t("PRONTO")}
               </span>
               {count && <small className="import-card-count">{t("{owned} de {total} jogos do ShmupX", { owned: count.owned, total: count.total })}</small>}
               {item.id === "emulator" && connected && emulatorLibrary?.root && <code className="import-card-path" title={emulatorLibrary.root}>{emulatorLibrary.root}</code>}
@@ -108,7 +106,6 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
                 {item.id === "steam" && !connected && <button type="button" className="import-card-cta" disabled={locked} onClick={() => void importSteamNow()}>{t(busy ? "Importando…" : item.cta)}</button>}
                 {item.id === "emulator" && <button type="button" className="import-card-cta" disabled={locked} onClick={() => void pickRomFolder()}>{t(busy ? "Abrindo…" : connected ? "Alterar pasta" : item.cta)}</button>}
                 {item.id === "mister" && <button type="button" className="import-card-cta" disabled={locked} onClick={() => setSourceId(item.id)}>{t(connected ? "Gerenciar" : item.cta)}</button>}
-                {item.id === "local" && <button type="button" className="import-card-cta" disabled>{t("Em breve")}</button>}
                 {actions}
               </div>
             </article>;
@@ -122,7 +119,6 @@ export default function ImportGamesDialog({ onClose, onViewCollection, rooms = [
           <MisterConnect rooms={rooms} tutorial onImported={() => setImportedHere(true)} />
         </>}
 
-        {source && !source.available && <><div className="import-platform-heading"><span className="platform-mark" aria-hidden="true">{source.icon}</span><h3>{t(source.title)}</h3></div><p className="muted">{t(source.body)}</p><div className="integration-notice" role="status"><strong>{t("Em breve")}</strong><p>{t("A leitura desta biblioteca ainda não está disponível nesta versão.")}</p></div></>}
       </div>
       {/* Aberta pelas Configurações, leva à coleção; aberta pela coleção, basta o Fechar do topo. */}
       {onViewCollection && <footer style={{ justifyContent: "flex-end" }}><button className="secondary-action" onClick={() => { onClose(); onViewCollection(); }}>{t("Ver coleção")}</button></footer>}

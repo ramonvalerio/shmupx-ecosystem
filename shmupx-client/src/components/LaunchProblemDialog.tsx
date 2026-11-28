@@ -17,6 +17,8 @@ export type LaunchProblemKind =
   | "rom-missing"
   | "emulator-missing"
   | "ranked-needs-update"
+  | "mister-groovy"
+  | "mister-no-memory"
   | "launch-failed";
 
 type Translate = ReturnType<typeof useI18n>["t"];
@@ -116,6 +118,25 @@ function content(kind: LaunchProblemKind, game: string, t: Translate): { title: 
         title: t("ShmupX Emulator não encontrado"),
         text: t("O ShmupX Emulator vem com o ShmupX Client, mas não foi encontrado nesta instalação."),
         steps: [t("Reinstale o ShmupX Client."), t("Depois, volte aqui e tente de novo.")],
+      };
+    case "mister-groovy":
+      return {
+        title: t("Não deu para mostrar o jogo na TV do MiSTer"),
+        text: t("O jogo roda neste computador e a imagem vai para a TV ligada no MiSTer, mas o MiSTer não ficou pronto para receber."),
+        steps: [
+          t("Confira se o MiSTer está ligado e mostrando o menu na TV."),
+          t("Veja se o MiSTer e este computador estão na mesma internet de casa."),
+          t("Tente de novo. Se continuar, escolha um monitor do PC em Configurações › Emulador › Monitor dos jogos para jogar neste computador."),
+        ],
+      };
+    case "mister-no-memory":
+      return {
+        title: t("{game} não vale run no monitor CRT do MiSTer", { game }),
+        text: t("No monitor CRT do MiSTer, só valem runs dos jogos em que o ShmupX lê o placar direto do jogo. {game} é conferido pela gravação da tela, que só acontece no monitor do PC.", { game }),
+        steps: [
+          t("Para treinar na TV, abra {game} no Play Training.", { game }),
+          t("Para valer run, escolha um monitor do PC em Configurações › Emulador › Monitor dos jogos."),
+        ],
       };
     case "ranked-needs-update":
       return {

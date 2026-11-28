@@ -278,6 +278,32 @@ pub async fn voltar_ao_menu(host: &str, usuario: &str, senha: &str) -> Result<()
     Ok(())
 }
 
+/// Prepara o MiSTer para receber a imagem de um jogo rodando no PC (nogpu, core Groovy): abre o core
+/// Groovy mais novo e espera o servidor de rede dele (UDP 32100). O `MiSTer.ini` precisa ter
+/// `[Groovy]` com `main=MiSTer_groovy` e o `/media/fat/MiSTer_groovy`: o MiSTer troca sozinho para
+/// esse programa ao abrir o core e volta ao oficial ao sair dele.
+pub async fn abrir_groovy(host: &str, usuario: &str, senha: &str) -> Result<(), String> {
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
+    let script = r#"
+CORE=$(ls -t /media/fat/Groovy_*.rbf /media/fat/_Utility/Groovy_*.rbf 2>/dev/null | head -1)
+[ -n "$CORE" ] || { echo "sem o core Groovy"; exit 3; }
+[ -x /media/fat/MiSTer_groovy ] || { echo "sem o MiSTer_groovy"; exit 4; }
+awk '{sub(/\r$/,"")} /^\[/{s=($0=="[Groovy]")} s && /^main=MiSTer_groovy/{ok=1} END{exit !ok}' /media/fat/MiSTer.ini || { echo "MiSTer.ini sem [Groovy] main=MiSTer_groovy"; exit 5; }
+if ! netstat -uln 2>/dev/null | grep -q ':32100 '; then
+  timeout 5 sh -c "echo 'load_core $CORE' > /dev/MiSTer_cmd" || { echo "o MiSTer não leu o comando"; exit 6; }
+fi
+i=0; while [ $i -lt 15 ]; do netstat -uln 2>/dev/null | grep -q ':32100 ' && exit 0; sleep 1; i=$((i+1)); done
+echo "o core Groovy não abriu a rede"; exit 7
+"#;
+    ssh.exigir(script, None, "abrir o core Groovy").await.map(|_| ())
+}
+
+/// Sai do core Groovy (fim da partida no PC) e volta ao menu do MiSTer, com o programa oficial.
+pub async fn sair_do_groovy(host: &str, usuario: &str, senha: &str) -> Result<(), String> {
+    let ssh = Ssh::conectar(host, usuario, senha).await?;
+    ssh.exigir("timeout 5 sh -c \"echo 'load_core /media/fat/menu.rbf' > /dev/MiSTer_cmd\"", None, "voltar ao menu").await.map(|_| ())
+}
+
 /// O aparelho em `host` é um MiSTer que aceita este usuário e senha (tem `/media/fat`)?
 pub async fn eh_mister(host: &str, usuario: &str, senha: &str) -> bool {
     let Ok(ssh) = Ssh::conectar(host, usuario, senha).await else { return false };
@@ -288,6 +314,23 @@ pub async fn eh_mister(host: &str, usuario: &str, senha: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Abre e fecha o core Groovy num MiSTer de verdade: `SHMUPX_TESTE_MISTER=192.168.0.7 cargo test -- --ignored groovy`.
+    #[tokio::test]
+    #[ignore]
+    async fn groovy_abre_e_volta_ao_menu() {
+        let host = std::env::var("SHMUPX_TESTE_MISTER").expect("SHMUPX_TESTE_MISTER");
+        abrir_groovy(&host, "root", "1").await.expect("core Groovy pronto");
+        let ssh = Ssh::conectar(&host, "root", "1").await.unwrap();
+        let (_, portas) = ssh.executar("netstat -uln", None).await.unwrap();
+        assert!(portas.contains(":32100 "), "{portas}");
+        // Já aberto: abrir de novo não recarrega o core.
+        abrir_groovy(&host, "root", "1").await.expect("de novo");
+        sair_do_groovy(&host, "root", "1").await.expect("menu");
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let (_, nome) = ssh.executar("cat /tmp/CORENAME", None).await.unwrap();
+        assert_eq!(nome.trim(), "MENU");
+    }
 
     #[test]
     fn atualiza_quando_a_versao_instalada_e_outra() {

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef } from "react";
 import { onSnapshot } from "firebase/firestore";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
-import { readEmulatorLibrary, romsFor } from "./emulatorLibrary";
-import { readEmulatorSettings } from "./emulatorSettings";
+import { readEmulatorLibrary, romsFor, systemFor } from "./emulatorLibrary";
+import { emulatorVideoForLaunch } from "./emulatorSettings";
 import { readEmulatorControls } from "./emulatorControls";
 import { caravanSecondsOf, setPendingRunEvent, setPendingRunMode } from "./gameModes";
 import { rankedLaunchFields } from "./playerCard";
@@ -93,9 +93,9 @@ export function useRemoteLaunchHost(uid: string | null, state: HostState) {
         setPendingRunEvent(room.id, null);
         if (command.platform === "steam") {
           if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
-          await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training });
+          await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: training, semSteam: room.noSteamProtection === true });
         } else {
-          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+          await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), sistema: systemFor(room), pasta: readEmulatorLibrary()?.root || null, treino: training, motorVideo: emulatorVideoForLaunch(), motorControles: readEmulatorControls(),
             ...(await rankedLaunchFields(caravanSecondsOf(room), command.mode === "caravan", !training)) });
         }
         awaitingRun.current = training ? null : { id: command.id, gameId: room.id };

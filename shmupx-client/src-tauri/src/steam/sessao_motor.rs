@@ -117,6 +117,18 @@ pub fn jogo_fechou(pid: u32) {
     }
 }
 
+/// Pede ao motor `pid` para fechar o jogo pela entrada padrão (comando `sair` do plugin), como o X
+/// da janela: o motor sai normalmente e o fim da partida é registrado. É o que fecha o jogo quando
+/// não há janela no PC (TV pelo MiSTer). `false`: sem motor aberto com a entrada (um motor antigo
+/// ignora o comando; quem chama segue com a janela e, por fim, encerra o processo).
+pub fn pedir_saida(pid: u32) -> bool {
+    let mut e = travar();
+    let Some(a) = e.aberto.as_mut().filter(|a| a.pid == pid) else { return false };
+    let Some(entrada) = a.entrada.as_mut() else { return false };
+    entrada.write_all(b"sair
+").and_then(|_| entrada.flush()).is_ok()
+}
+
 /// O motor `pid` fechou (fim da saída padrão).
 pub fn encerrado(pid: u32) {
     let mut e = travar();
@@ -271,6 +283,7 @@ mod neste_pc {
             posicao_arquivo: None,
             idioma: None,
             dupla: None,
+            sistema: None,
         };
         let primeiro = abrir(Some(&roms), None, None, &["sonicwi2".into()], true, Some(&motor)).expect("primeiro jogo");
         let (hwnd1, titulo1) = esperar_janela(primeiro.id);

@@ -59,6 +59,9 @@ pub fn fechar_jogo(pid: u32, prazo: std::time::Duration) {
         return;
     }
     let pid = super::sessao_motor::pid_real(pid).unwrap_or(pid);
+    // ShmupX Emulator: o comando `sair` pela entrada padrão (funciona sem janela, como na TV pelo
+    // MiSTer); a janela recebe o pedido também, para o motor antigo que não conhece o comando.
+    super::sessao_motor::pedir_saida(pid);
     pedir_para_fechar(pid);
     let limite = std::time::Instant::now() + prazo;
     while std::time::Instant::now() < limite {

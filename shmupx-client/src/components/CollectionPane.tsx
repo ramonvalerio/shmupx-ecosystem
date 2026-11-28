@@ -44,10 +44,10 @@ function PlatformTags({ tags }: { tags: PlatformTag[] }) {
 type PlatformFilter = "all" | "emulator" | "mister" | "steam" | "soon";
 const PLATFORM_FILTERS: { id: PlatformFilter; label: string }[] = [
   { id: "all", label: "Todas" },
+  { id: "steam", label: "Steam" },
   { id: "emulator", label: "Emulador" },
   { id: "mister", label: "MiSTer" },
-  { id: "steam", label: "Steam" },
-  { id: "soon", label: "Em breve" },
+  { id: "soon", label: "Ranking em breve" },
 ];
 type LibraryFilter = "all" | "owned" | "missing";
 const LIBRARY_FILTERS: { id: LibraryFilter; label: string }[] = [

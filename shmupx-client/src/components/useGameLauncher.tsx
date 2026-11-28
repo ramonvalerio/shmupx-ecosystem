@@ -5,10 +5,9 @@ import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { rankedLaunchFields } from "../data/playerCard";
 import { caravanSecondsOf, misterEntryMatches, playableMode, playModesFor, setPendingRunEvent, setPendingRunMode } from "../data/gameModes";
-import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import { readEmulatorSettings } from "../data/emulatorSettings";
+import { readEmulatorLibrary, romsFor, systemFor } from "../data/emulatorLibrary";
+import { emulatorVideoForLaunch } from "../data/emulatorSettings";
 import { readEmulatorControls } from "../data/emulatorControls";
-import { tableRomsFor } from "../data/emulatorRoms";
 import { misterAuth, readMisterPlayer, saveMisterPlayer, type MisterMenuGame } from "../data/misterPlayer";
 import { readMisterLibrary } from "../data/misterLibrary";
 import { PLAY_ON, installCheck, usePlatformOwnership } from "../data/platforms";
@@ -92,7 +91,7 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
   function options(): PlayOn[] {
     const ids = new Set<PlayOn>(playable.tags(room).map((tag) => tag.id));
     if (room.steamAppId > 0) ids.add("steam");
-    if (tableRomsFor(room).length > 0) ids.add("emulator");
+    if (romsFor(room).length > 0) ids.add("emulator");
     return PLAY_ON.map((p) => p.id).filter((id) => ids.has(id));
   }
 
@@ -310,9 +309,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       if (platform === "steam") {
         if (room.steamAppId === 0) throw "Este jogo não tem app_id da Steam no catálogo.";
         await watchSteamLaunch(room.steamAppId, retry);
-        await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice });
+        await invoke("inicializar_jogo_steam", { steamAppId: room.steamAppId, treino: forPractice, semSteam: room.noSteamProtection === true });
       } else {
-        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+        await invoke("inicializar_jogo_emulador", { jogoId: room.id, roms: romsFor(room), sistema: systemFor(room), pasta: readEmulatorLibrary()?.root || null, treino: forPractice, janela: !forPractice && recordingWindowed, motorVideo: emulatorVideoForLaunch(), motorControles: readEmulatorControls(),
           ...(await rankedLaunchFields(caravanSecondsOf(room), chosenMode === "caravan", !forPractice)) });
       }
       if (forPractice) setNotice(t("Modo treino: {game} abre sem gastar ficha.", { game: room.title }));
@@ -320,7 +319,9 @@ export function useGameLauncher(room: GameRoom, { onLive, recordingWindowed = fa
       logFailure(platform === "steam" ? "steam" : "emulador", failure);
       // Ranked sem o estado de 1 crédito no pacote do motor (motor antigo): pede a atualização.
       const semEstado = platform !== "steam" && String(failure).includes("ainda não tem o Ranked");
-      setProblem({ kind: semEstado ? "ranked-needs-update" : "launch-failed", retry });
+      const semMister = platform !== "steam" && String(failure).includes("MISTER_GROOVY");
+      const semMemoria = platform !== "steam" && String(failure).includes("MISTER_SEM_MEMORIA");
+      setProblem({ kind: semEstado ? "ranked-needs-update" : semMemoria ? "mister-no-memory" : semMister ? "mister-groovy" : "launch-failed", retry });
     } finally {
       setIsLaunching(false);
     }

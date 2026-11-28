@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNod
 import { useI18n } from "../i18n";
 import type { GameMode, GameRoom, PlayOn } from "../types/room";
 import { liveActive, liveTakesGame, useLive, useYouTube, type LiveLaunch } from "../data/useLive";
-import { readEmulatorLibrary, romsFor } from "../data/emulatorLibrary";
-import { readEmulatorSettings } from "../data/emulatorSettings";
+import { readEmulatorLibrary, romsFor, systemFor } from "../data/emulatorLibrary";
+import { emulatorVideoForLaunch } from "../data/emulatorSettings";
 import { caravanSecondsOf, runModeOf, setLastRankedMode } from "../data/gameModes";
 import { rankedLaunchFields } from "../data/playerCard";
 import { readEmulatorControls } from "../data/emulatorControls";
@@ -62,8 +62,8 @@ export function useRankedLive(room: GameRoom) {
     if (platform === "mister") return;
     if (!(await ensureInstalled(platform))) return;
     const launch: LiveLaunch = platform === "steam"
-      ? { platform: "steam", steamAppId: room.steamAppId }
-      : { platform: "emulator", roms: romsFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: readEmulatorSettings(), motorControles: readEmulatorControls(),
+      ? { platform: "steam", steamAppId: room.steamAppId, semSteam: room.noSteamProtection === true }
+      : { platform: "emulator", roms: romsFor(room), sistema: systemFor(room), pasta: readEmulatorLibrary()?.root || null, motorVideo: emulatorVideoForLaunch(), motorControles: readEmulatorControls(),
         ...(await rankedLaunchFields(caravanSecondsOf(room), mode === "caravan", true)) };
     try {
       // O servidor monta o título com o jogador (`Ketsui · HI-SCORE — jogador | ShmupX`); este é o
@@ -95,8 +95,10 @@ const PLATFORM_LABEL: Record<PlayOn, string> = { steam: "Steam", emulator: "Emul
 /** Event Mode: um evento em que o jogador se inscreveu e que vale neste jogo, e por que não dá para jogar agora. */
 interface EventChoice { event: ClientEvent; blocked: string | null }
 
-function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBlocked, events, onTraining, onRanked, onEvent, onClose }: {
+function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBlocked, rankingSoon, events, onTraining, onRanked, onEvent, onClose }: {
   game: string; mode: GameMode; platform: PlayOn | null; withLive: boolean; livePublic: boolean; rankedBlocked: string | null;
+  /** O jogo ainda não tem ranking (sem script de validação): o cartão do Ranked Mode leva o sticker. */
+  rankingSoon: boolean;
   events: EventChoice[];
   onTraining: () => void; onRanked: () => void; onEvent: (event: ClientEvent) => void; onClose: () => void;
 }) {
@@ -141,6 +143,7 @@ function PlayModeDialog({ game, mode, platform, withLive, livePublic, rankedBloc
             <span className="play-mode-art" aria-hidden="true">
               <img className="play-mode-coin" src="/img/shmupx-token-front.png" alt="" draggable={false} />
             </span>
+            {rankingSoon && <span className="coming-soon-sticker">{t("Ranking em breve")}</span>}
             <span className="play-mode-text">
               <strong>{t("Ranked Mode")}</strong>
               {rankedBlocked ? <small>{rankedBlocked}</small> : <>
@@ -277,7 +280,7 @@ export default function RankedPanel({ room, uid, launcher, mode, platform, ranke
       playDisabled={launcher.isLaunching || busy || (liveOn && !liveSwitch)}
       playTitle={liveSwitch ? t("A live continua: o jogo abre na mesma janela e a partida entra na live.") : liveOn && !liveHere ? t("Há uma live em andamento em outra sala.") : t(eventChoices.length > 0 ? "Clique na ficha para jogar: Training Mode, Ranked Mode ou o evento." : "Clique na ficha para jogar: Training Mode ou Ranked Mode.")} />
   );
-  const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} events={eventChoices} onTraining={playTraining} onRanked={playRanked} onEvent={playEvent} onClose={() => setChoosing(false)} />;
+  const dialog = choosing && <PlayModeDialog game={room.title} mode={mode} platform={target} withLive={withLive} livePublic={prefs.public} rankedBlocked={rankedBlocked} rankingSoon={comingSoon} events={eventChoices} onTraining={playTraining} onRanked={playRanked} onEvent={playEvent} onClose={() => setChoosing(false)} />;
   const recordGameplay = useRecordGameplay();
   // Com a live ligada, a partida não grava no PC (a live fica no YouTube): o interruptor desabilita.
   const liveSwitchOn = liveHereOn ? true : withLive;

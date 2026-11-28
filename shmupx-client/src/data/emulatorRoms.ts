@@ -1,66 +1,66 @@
 import type { GameRoom } from "../types/room";
 
 /**
- * ROMs de cada jogo do catálogo (nomes curtos do MAME/FBNeo). O ROM é ligado ao jogo pelo nome (id ou
- * título normalizado) com esta tabela, a mesma do Client antigo; sem entrada na tabela, vale o
- * título sem separadores (`R-Type` → `rtype`), o nome curto que o FBNeo usa em muitos jogos.
+ * ROM de cada jogo do catálogo: vem só do `roms.json` da pasta do Client (Rust `roms_auto`), em que
+ * a chave é o id do jogo cadastrado no Lab e o nome do ROM é o do `.zip` do download. O Client não
+ * tem nome de ROM no código: jogo fora da lista não tem ROM (não é reconhecido nem aberto no emulador).
+ * Jogo de console traz também o sistema do MAME que abre o cartucho (`snes`, `genesis`…).
  */
-const ROM_GAMES: Record<string, string[]> = {
-  ket: ["ketsui", "ketsui-kizuna-jigoku-tachi"],
-  esprade: ["esprade", "esp-ra-de"],
-  espgal: ["espgaluda"],
-  espgal2: ["espgaluda-ii", "espgaluda-2"],
-  guwange: ["guwange"],
-  bgaregga: ["battle-garegga"],
-  airduel: ["air-duel"],
-  dariusg: ["darius-gaiden"],
-  dariusgx: ["darius-gaiden"],
-  ddonpach: ["dodonpachi"],
-  ddp3: ["dodonpachi-daioujou", "dodonpachi-dai-ou-jou"],
-  ddpdoj: ["dodonpachi-daioujou", "dodonpachi-dai-ou-jou"],
-  ddpdojblk: ["dodonpachi-daioujou-black-label", "dodonpachi-dai-ou-jou-black-label"],
-  gunbird: ["gunbird"],
-  gunbird2: ["gunbird-2"],
-  blazstar: ["blazing-star"],
-  sonicwi2: ["aero-fighters-2", "sonic-wings-2"],
-  aerofgt: ["aero-fighters", "sonic-wings"],
-  sonicwi: ["aero-fighters", "sonic-wings"],
-  samuraia: ["samurai-aces", "sengoku-ace"],
-  truxton: ["truxton", "tatsujin"],
-  truxton2: ["truxton-ii", "truxton-2", "tatsujin-oh"],
-  zedblade: ["zed-blade"],
-  batsugun: ["batsugun"],
-  batrider: ["armed-police-batrider", "batrider"],
-  grindstm: ["grind-stormer"],
-  gradius3: ["gradius-iii", "gradius-3"],
-  raiden: ["raiden"],
-  raiden2: ["raiden-ii", "raiden-2"],
-  raidendx: ["raiden-dx"],
-  mazinger: ["mazinger-z"],
-  akatana: ["akai-katana"],
-  cawing: ["carrier-air-wing"],
-  airbustr: ["air-buster"],
-  androdun: ["andro-dunos"],
-  mushisam: ["mushihimesama", "mushihime-sama"],
-  rtype: ["r-type"],
-  rtype2: ["r-type-ii", "r-type-2"],
-  rtypeleo: ["r-type-leo"],
-};
+const KEY = "shmupx.client.romList.v2";
 
-const slug = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-/** ROMs da tabela para um jogo do catálogo (vazio = o Client não conhece o ROM dele). */
-export function tableRomsFor(room: GameRoom): string[] {
-  const names = new Set([room.id, slug(room.id), slug(room.title)]);
-  return Object.entries(ROM_GAMES).filter(([rom, games]) => names.has(rom) || games.some((g) => names.has(g))).map(([rom]) => rom);
+/** ROM do jogo e, se for de console, o sistema do MAME (Rust `RomDoJogo`). */
+export interface RomEntry {
+  rom: string;
+  sistema?: string;
 }
 
-/** ROMs que podem ser deste jogo: os da tabela primeiro, depois o título sem separadores. */
-export function romsFor(room: GameRoom): string[] {
-  const roms = tableRomsFor(room);
-  for (const name of [slug(room.title), slug(room.id)]) {
-    const compact = name.replace(/-/g, "");
-    if (compact && compact.length <= 32 && !roms.includes(compact)) roms.push(compact);
+/** Id do jogo → ROM. Guardado para valer já ao abrir o Client, antes de ler o `roms.json` de novo. */
+let romList: Record<string, RomEntry> = readCached();
+let version = 0;
+const listeners = new Set<() => void>();
+
+function entryOf(value: unknown): RomEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const { rom, sistema } = value as { rom?: unknown; sistema?: unknown };
+  if (typeof rom !== "string" || !rom) return null;
+  return typeof sistema === "string" && sistema ? { rom, sistema } : { rom };
+}
+
+function readCached(): Record<string, RomEntry> {
+  try {
+    const value = JSON.parse(globalThis.localStorage?.getItem(KEY) ?? "null") as unknown;
+    if (!value || typeof value !== "object") return {};
+    return Object.fromEntries(Object.entries(value).flatMap(([id, entry]) => { const e = entryOf(entry); return e ? [[id, e]] : []; }));
+  } catch {
+    return {};
   }
-  return roms;
+}
+
+/** Troca a lista (lida do `roms.json`) e avisa quem depende dela. */
+export function setRomList(list: Record<string, RomEntry>) {
+  romList = Object.fromEntries(Object.entries(list).flatMap(([id, entry]) => { const e = entryOf(entry); return e ? [[id, e]] : []; }));
+  version += 1;
+  try { globalThis.localStorage?.setItem(KEY, JSON.stringify(romList)); } catch { /* vale só nesta sessão */ }
+  listeners.forEach((listener) => listener());
+}
+
+/** Para `useSyncExternalStore`: muda a cada lista nova. */
+export function romListVersion() {
+  return version;
+}
+
+export function subscribeRomList(listener: () => void) {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
+/** ROMs do jogo pelo id cadastrado no Lab (vazio = o jogo não está no `roms.json`). */
+export function romsFor(room: Pick<GameRoom, "id">): string[] {
+  const entry = romList[room.id];
+  return entry ? [entry.rom] : [];
+}
+
+/** Sistema do MAME que abre o cartucho do jogo de console; `null` = jogo de arcade. */
+export function systemFor(room: Pick<GameRoom, "id">): string | null {
+  return romList[room.id]?.sistema ?? null;
 }

@@ -85,9 +85,10 @@ fn tem_roms(pasta: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Entende a pasta que o jogador escolheu: qualquer pasta com ROMs (`.zip`) ou uma instalação antiga
-/// do Fightcade (a raiz, `emulator`, `fbneo`, as pastas de ROMs dela ou a pasta que a contém), de
-/// onde os ROMs são lidos. Erro (em português, para o jogador) se não houver ROMs.
+/// Entende a pasta que o jogador escolheu: qualquer pasta com ROMs (`.zip`) ou com o `roms.json`
+/// (os ROMs dele são baixados nela), ou uma instalação antiga do Fightcade (a raiz, `emulator`,
+/// `fbneo`, as pastas de ROMs dela ou a pasta que a contém), de onde os ROMs são lidos. Erro (em
+/// português, para o jogador) se não houver nenhum dos dois.
 fn resolver_escolhida(caminho: &Path) -> Result<Instalacao, String> {
     let caminho = if caminho.is_file() { caminho.parent().unwrap_or(caminho) } else { caminho };
     if !caminho.is_dir() {
@@ -103,8 +104,8 @@ fn resolver_escolhida(caminho: &Path) -> Result<Instalacao, String> {
     if let Some(raiz) = ["Fightcade", "Fightcade2"].iter().map(|n| caminho.join(n)).find(|c| executavel(c).is_file()) {
         return Ok(Instalacao { raiz: Some(raiz), roms: None });
     }
-    // Qualquer pasta com ROMs (`.zip`).
-    if tem_roms(caminho) {
+    // Qualquer pasta com ROMs (`.zip`) ou com a lista de download (`roms.json`).
+    if tem_roms(caminho) || super::roms_auto::arquivo_da_lista(caminho).is_file() {
         return Ok(Instalacao { raiz: None, roms: Some(caminho.to_path_buf()) });
     }
     Err(format!("Não achamos ROMs (arquivos .zip) em {}. Escolha a pasta onde estão os ROMs dos seus jogos.", caminho.display()))
@@ -159,9 +160,17 @@ fn pastas_de_roms(inst: &Instalacao) -> Vec<PathBuf> {
     pastas
 }
 
-/// Pastas onde os ROMs são lidos, em ordem (no `-rompath` do motor, a primeira com o ROM vale): a
-/// escolhida pelo jogador, a padrão (`roms` do Client) e as do Fightcade.
-fn pastas_para_ler(inst: &Instalacao, padrao: Option<&Path>) -> Vec<PathBuf> {
+/// Pastas onde os ROMs são lidos, em ordem (no `-rompath` do motor, a primeira com o ROM vale).
+/// Com pasta escolhida pelo jogador (`manual`), só ela (ou, se ele escolheu uma instalação do
+/// Fightcade, só as pastas de ROMs dela). Sem escolha: a padrão (`roms` do Client) e as do
+/// Fightcade achado pela busca automática.
+fn pastas_para_ler(inst: &Instalacao, padrao: Option<&Path>, manual: bool) -> Vec<PathBuf> {
+    if manual {
+        return match &inst.roms {
+            Some(roms) => vec![roms.clone()],
+            None => pastas_de_roms(inst),
+        };
+    }
     let mut pastas: Vec<PathBuf> = inst.roms.iter().cloned().collect();
     if let Some(padrao) = padrao {
         if !pastas.iter().any(|p| p == padrao) {
@@ -194,6 +203,15 @@ pub fn pasta_padrao_de_roms(app: &AppHandle) -> Option<PathBuf> {
     Some(pasta)
 }
 
+/// Pasta do `roms.json` e dos ROMs baixados: a escolhida pelo jogador, se é uma pasta de ROMs (não
+/// uma instalação do Fightcade) e está acessível; senão, a padrão.
+pub fn pasta_da_lista(app: &AppHandle) -> Option<PathBuf> {
+    let escolhida = pasta_escolhida(app)
+        .and_then(|p| resolver_escolhida(Path::new(&p)).ok())
+        .and_then(|inst| inst.roms.filter(|_| inst.raiz.is_none()));
+    escolhida.or_else(|| pasta_padrao_de_roms(app))
+}
+
 /// Lê os ROMs. `escolhida`: a pasta guardada pelo jogador; `informada`: a que a interface conhece;
 /// `padrao`: a pasta padrão (ver [`pasta_padrao_de_roms`]); `emulador`: o ShmupX Emulator está
 /// nesta instalação (ver [`motor`]).
@@ -208,7 +226,7 @@ pub fn ler(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&Pat
         return BibliotecaEmulador { pasta_escolhida, indisponivel, emulador, ..BibliotecaEmulador::nao_encontrada() };
     };
     let mut roms: Vec<String> = Vec::new();
-    for pasta in pastas_para_ler(&inst, padrao) {
+    for pasta in pastas_para_ler(&inst, padrao, manual) {
         let Ok(entradas) = std::fs::read_dir(&pasta) else { continue };
         for entrada in entradas.flatten() {
             let nome = entrada.file_name().to_string_lossy().to_lowercase();
@@ -299,6 +317,9 @@ pub struct Motor {
     pub idioma: Option<String>,
     /// Treino em dupla online (`-shmupx_netplay`): papel, porta e endereços do parceiro.
     pub dupla: Option<super::dupla::Dupla>,
+    /// Jogo de console (`roms.json`, campo `system`): o sistema do MAME (`snes`, `genesis`…) que
+    /// abre o cartucho (`<sistema> -cart <rom>.zip`). `None`: jogo de arcade, aberto pelo nome do ROM.
+    pub sistema: Option<String>,
 }
 
 /// Como o ShmupX Engine mostra o jogo no PC (Configurações › Emulador). Valores ausentes ficam
@@ -310,16 +331,50 @@ pub struct VideoDoMotor {
     /// Tela cheia sem borda (borderless), em vez da exclusiva: vale com `windowed` desmarcado.
     pub borderless: bool,
     pub scanlines: bool,
-    /// `native`: resolução do monitor do PC; `crt15`: TV de tubo de 15 kHz (240p) ligada no PC.
+    /// `native`: resolução do monitor do PC; `crt15`: monitor CRT de arcade de 15 kHz (240p) ligado no PC;
+    /// `crt31`: monitor CRT de PC de 31 kHz (VGA) ligado no PC;
+    /// `mister`: a imagem vai para a TV ligada no MiSTer (nogpu, core Groovy) e os controles vêm de lá.
     pub resolution: String,
     /// Monitor onde o jogo abre, pelo nome do Windows (`\\.\DISPLAY2`); vazio = o principal do
     /// Windows. Monitor que não está mais ligado: o motor abre no principal.
     pub monitor: String,
+    /// `mister`: endereço do MiSTer na rede e o acesso SSH (nulos = `root` / `1`), para abrir o core
+    /// Groovy antes da partida e voltar ao menu no fim.
+    pub mister_host: String,
+    pub mister_usuario: Option<String>,
+    pub mister_senha: Option<String>,
+    /// Play on MiSTer: na TV pelo MiSTer, o controle é o ligado no MiSTer; desmarcado, o do PC
+    /// (com o mapeamento do Client).
+    pub play_on_mister: bool,
 }
 
 impl Default for VideoDoMotor {
     fn default() -> Self {
-        Self { windowed: true, borderless: false, scanlines: true, resolution: "native".into(), monitor: String::new() }
+        Self {
+            windowed: true,
+            borderless: false,
+            scanlines: true,
+            resolution: "native".into(),
+            monitor: String::new(),
+            mister_host: String::new(),
+            mister_usuario: None,
+            mister_senha: None,
+            play_on_mister: false,
+        }
+    }
+}
+
+impl VideoDoMotor {
+    /// Imagem na TV do MiSTer (nogpu): o endereço do MiSTer, se é esse o modo e o endereço é válido.
+    pub fn mister(&self) -> Option<&str> {
+        let host = self.mister_host.trim();
+        let valido = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+        (self.resolution == "mister" && valido).then_some(host)
+    }
+
+    /// Controle ligado no MiSTer: na TV pelo MiSTer com Play on MiSTer marcado.
+    pub fn controle_do_mister(&self) -> bool {
+        self.mister().is_some() && self.play_on_mister
     }
 }
 
@@ -445,13 +500,32 @@ const CADEIA_SCANLINES: &str = "shmupx-scanlines";
 /// Precisa dos shaders do bgfx no pacote (`bgfx_disponivel`); sem eles, fica o vídeo comum do motor.
 /// O bgfx também é o que a captura da run gravada vê (a tela cheia exclusiva sai preta).
 fn argumentos_de_video(video: &VideoDoMotor, janela: bool, scanlines_disponiveis: bool, bgfx_disponivel: bool, motor_sem_borda: bool) -> Vec<String> {
+    // TV do MiSTer (nogpu): o motor manda cada quadro ao core Groovy, no modo de 15 kHz do jogo.
+    // Nada aparece no monitor do PC. `-aspect 4:3`: a TV é 4:3; sem isso o Switchres usa a proporção
+    // do monitor do PC (16:9) e estica a imagem (Darius Gaiden em 426x232 em vez dos 320x232
+    // originais). Com Play on MiSTer, os controles vêm do MiSTer; sem, ficam os do PC.
+    if let Some(host) = video.mister() {
+        let mut args: Vec<String> = ["-video", "mister", "-mister_ip", host, "-aspect", "4:3"].map(String::from).to_vec();
+        if video.play_on_mister {
+            args.extend(["-joystickprovider".into(), "mister".into()]);
+        } else {
+            // Sem janela no PC, o motor nunca fica em foco: o controle do PC (DirectInput) só chega
+            // ao jogo com a leitura em segundo plano.
+            args.push("-background_input".into());
+        }
+        return args;
+    }
     let mut args: Vec<String> = Vec::new();
     let tela_cheia = !(janela || video.windowed);
     args.push(if tela_cheia { "-nowindow" } else { "-window" }.into());
-    let crt = video.resolution == "crt15";
+    let crt31 = video.resolution == "crt31";
+    let crt = video.resolution == "crt15" || crt31;
     // O GroovyMAME vem configurado para TV de tubo (generic_15); num monitor comum isso trocaria o
-    // monitor para 640x480. `lcd` mantém a resolução nativa do monitor.
-    if !crt {
+    // monitor para 640x480. `lcd` mantém a resolução nativa do monitor. Monitor de tubo de PC
+    // (31 kHz): `pc_31_120`, o modo do jogo em 31 kHz (240p em 120 Hz, cada quadro mostrado duas vezes).
+    if crt31 {
+        args.extend(["-monitor".into(), "pc_31_120".into()]);
+    } else if !crt {
         args.extend(["-monitor".into(), "lcd".into()]);
     }
     if bgfx_disponivel {
@@ -518,7 +592,7 @@ pub fn motor(app: &AppHandle) -> Option<Motor> {
     }
     let exe = pastas.into_iter().map(|p| p.join(MOTOR_EXE)).find(|e| e.is_file())?;
     let dados = app.path().app_data_dir().ok()?.join("engine");
-    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None, idioma: None, dupla: None })
+    Some(Motor { exe, dados, ranking: false, video: VideoDoMotor::default(), controles: vec![], caravan_segundos: None, cartao_jogador: None, posicao_arquivo: None, idioma: None, dupla: None, sistema: None })
 }
 
 /// Nome curto de ROM (`sonicwi2`, `md_xxx`): vai como argumento do emulador, então só
@@ -579,8 +653,8 @@ pub fn abrir(escolhida: Option<&str>, informada: Option<&str>, padrao: Option<&P
         return Err("o Client ainda não sabe abrir este jogo no emulador".into());
     }
     let motor = motor.ok_or(SEM_EMULADOR)?;
-    let Resolvida { inst, .. } = resolver(escolhida, informada);
-    let lancamento = preparar_lancamento(motor, &pastas_para_ler(&inst, padrao), &roms, janela)?;
+    let Resolvida { inst, manual, .. } = resolver(escolhida, informada);
+    let lancamento = preparar_lancamento(motor, &pastas_para_ler(&inst, padrao, manual), &roms, janela)?;
     if !lancamento.dupla {
         match super::sessao_motor::trocar(&lancamento) {
             Ok(Some((id, anterior))) => {
@@ -612,6 +686,8 @@ const AMBIENTE_DA_PARTIDA: &[&str] = &["SHMUPX_CARAVAN_SEGUNDOS", "SHMUPX_JOGADO
 #[derive(Debug, Clone)]
 pub struct Lancamento {
     pub rom: String,
+    /// Console: o sistema do MAME que abre o cartucho (o `-cart` vai em `args`).
+    pub sistema: Option<String>,
     pub args: Vec<String>,
     pub ambiente: Vec<(String, String)>,
     pub pasta_do_motor: PathBuf,
@@ -624,6 +700,10 @@ impl Lancamento {
     /// Linha do comando `trocar` para o plugin do ShmupX (campos separados por TAB). `None`: algum
     /// valor tem TAB ou quebra de linha e não cabe no comando.
     pub fn comando_trocar(&self) -> Option<String> {
+        // Console abre num processo novo: o plugin troca só jogos de arcade, pelo nome do ROM.
+        if self.sistema.is_some() {
+            return None;
+        }
         let mut campos = vec!["trocar".to_string(), format!("rom={}", self.rom)];
         campos.extend(OPCOES_DA_PARTIDA.iter().map(|o| format!("padrao={o}")));
         campos.extend(self.args.iter().map(|a| format!("arg={a}")));
@@ -658,18 +738,25 @@ fn preparar_lancamento(motor: &Motor, pastas: &[PathBuf], roms: &[String], janel
         return Err(format!("o ROM deste jogo ({}) não está nas pastas de ROMs deste computador", roms.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(" ou ")));
     };
     let rompath = pastas.iter().map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>().join(";");
+    // Console: o sistema do MAME abre o cartucho (o `.zip` do ROM, da primeira pasta que o tem).
+    let sistema = match motor.sistema.as_deref() {
+        Some(sistema) if !rom_valido(sistema) => return Err(format!("sistema de console inválido: {sistema:?}")),
+        outro => outro.map(str::to_string),
+    };
+    let cartucho = sistema.as_ref().and_then(|_| pastas.iter().map(|p| p.join(format!("{rom}.zip"))).find(|c| c.is_file()));
     for sub in ["cfg", "nvram", "snap", "ini"] {
         std::fs::create_dir_all(motor.dados.join(sub)).map_err(|e| format!("não foi possível preparar a pasta do ShmupX Engine: {e}"))?;
     }
     let caminho = |sub: &str| motor.dados.join(sub).to_string_lossy().into_owned();
-    let mut args: Vec<String> = vec![
+    let mut args: Vec<String> = cartucho.iter().flat_map(|c| ["-cart".to_string(), c.to_string_lossy().into_owned()]).collect();
+    args.extend([
         "-rompath".into(), rompath,
         "-cfg_directory".into(), caminho("cfg"),
         "-nvram_directory".into(), caminho("nvram"),
         "-snapshot_directory".into(), caminho("snap"),
         "-inipath".into(), caminho("ini"),
         "-plugin".into(), "shmupx".into(), "-skip_gameinfo".into(),
-    ];
+    ]);
     let mut ambiente: Vec<(String, String)> = Vec::new();
     if motor.ranking {
         args.push("-shmupx_ranked".into());
@@ -715,18 +802,21 @@ fn preparar_lancamento(motor: &Motor, pastas: &[PathBuf], roms: &[String], janel
     args.extend(argumentos_de_video(&motor.video, janela, scanlines_disponiveis, bgfx_disponivel, motor_sem_borda));
     // Controles mapeados no Client: arquivo do MAME que vale para todos os jogos. Se falhar, o jogo
     // abre com os controles padrão.
-    match super::controles::preparar_ctrlr(&motor.dados, &motor.controles) {
+    // Na TV do MiSTer os controles vêm do MiSTer (o mapeamento dele): o do PC não vale.
+    let controles: &[super::controles::ControleMapeado] = if motor.video.controle_do_mister() { &[] } else { &motor.controles };
+    match super::controles::preparar_ctrlr(&motor.dados, controles) {
         Ok(extra) => args.extend(extra),
         Err(e) => log::warn!("emulador: {e}"),
     }
-    Ok(Lancamento { rom: rom.clone(), args, ambiente, pasta_do_motor, ranking: motor.ranking, dupla: dupla.is_some() })
+    Ok(Lancamento { rom: rom.clone(), sistema, args, ambiente, pasta_do_motor, ranking: motor.ranking, dupla: dupla.is_some() })
 }
 
 /// Abre o motor num processo novo. Os eventos do plugin (`SHMUPX {...}`) saem na saída padrão; a
 /// entrada padrão fica com o Client, para trocar de jogo no mesmo processo (`sessao_motor`).
 fn abrir_processo(motor: &Motor, lancamento: Lancamento) -> Result<(u32, String), String> {
     let mut comando = comando_exe(&motor.exe);
-    comando.arg(&lancamento.rom).args(&lancamento.args).envs(lancamento.ambiente.iter().map(|(n, v)| (n, v)));
+    // Arcade: o nome do ROM; console: o sistema (o cartucho vai no `-cart`).
+    comando.arg(lancamento.sistema.as_deref().unwrap_or(&lancamento.rom)).args(&lancamento.args).envs(lancamento.ambiente.iter().map(|(n, v)| (n, v)));
     // O motor acha bgfx/, artwork/ e plugins/ relativos à pasta dele.
     if motor.exe.parent().is_some() {
         comando.current_dir(&lancamento.pasta_do_motor);
@@ -780,9 +870,19 @@ mod tests {
         // Sem os shaders do bgfx no pacote, fica o vídeo comum do motor.
         assert_eq!(argumentos_de_video(&tela_cheia, false, true, false, true), ["-nowindow", "-monitor", "lcd"]);
         // TV de tubo: sem borda também, mas com a troca para 15 kHz e sem scanlines por cima.
+        // TV do MiSTer (nogpu): só a saída de rede e os controles do MiSTer; sem endereço, o vídeo comum.
+        let mister = VideoDoMotor { resolution: "mister".into(), mister_host: "192.168.0.7".into(), ..padrao.clone() };
+        assert_eq!(argumentos_de_video(&mister, true, true, true, true), ["-video", "mister", "-mister_ip", "192.168.0.7", "-aspect", "4:3", "-background_input"]);
+        let com_controle = VideoDoMotor { play_on_mister: true, ..mister.clone() };
+        assert_eq!(argumentos_de_video(&com_controle, true, true, true, true), ["-video", "mister", "-mister_ip", "192.168.0.7", "-aspect", "4:3", "-joystickprovider", "mister"]);
+        assert_eq!(argumentos_de_video(&VideoDoMotor { mister_host: "x; rm".into(), ..mister.clone() }, false, true, true, true)[0], "-window");
+        assert_eq!(argumentos_de_video(&VideoDoMotor { mister_host: String::new(), ..mister }, false, true, true, true)[0], "-window");
         let crt = VideoDoMotor { resolution: "crt15".into(), ..padrao.clone() };
         assert_eq!(argumentos_de_video(&crt, false, true, true, true), ["-window", "-shmupx_borderless", "-video", "bgfx"]);
         assert_eq!(argumentos_de_video(&VideoDoMotor { windowed: false, ..crt.clone() }, false, true, true, true), ["-nowindow", "-shmupx_borderless", "-video", "bgfx"]);
+        // Monitor de tubo de PC (31 kHz): troca para o modo do jogo em 31 kHz, sem scanlines por cima.
+        let crt31 = VideoDoMotor { resolution: "crt31".into(), windowed: false, ..padrao.clone() };
+        assert_eq!(argumentos_de_video(&crt31, false, true, true, true), ["-nowindow", "-monitor", "pc_31_120", "-shmupx_borderless", "-video", "bgfx"]);
         // Monitor escolhido vai no -screen; nome estranho é ignorado (abre no principal).
         let segundo = VideoDoMotor { monitor: r"\\.\DISPLAY2".into(), scanlines: false, ..padrao.clone() };
         assert_eq!(argumentos_de_video(&segundo, false, true, true, true), com(&["-window", "-monitor", "lcd"], &[&sem_borda[..], &["-screen", r"\\.\DISPLAY2"]].concat()));
@@ -802,6 +902,7 @@ mod tests {
     fn comando_trocar_leva_o_jogo_as_opcoes_e_o_ambiente() {
         let lancamento = Lancamento {
             rom: "ket".into(),
+            sistema: None,
             args: vec!["-rompath".into(), r"D:\roms".into(), "-shmupx_ranked".into()],
             ambiente: vec![("SHMUPX_IDIOMA".into(), "en".into())],
             pasta_do_motor: PathBuf::new(),
@@ -818,6 +919,8 @@ mod tests {
         assert!(linha.contains("\tenv=SHMUPX_CARAVAN_SEGUNDOS=\t"));
         let com_tab = Lancamento { args: vec!["-rompath".into(), "D:\\a\tb".into()], ..lancamento };
         assert!(com_tab.comando_trocar().is_none(), "TAB no valor não cabe no comando");
+        let console = Lancamento { rom: "axelayu".into(), sistema: Some("snes".into()), args: vec![], ..com_tab };
+        assert!(console.comando_trocar().is_none(), "console abre num processo novo");
     }
 
     /// Monta uma instalação falsa do Fightcade numa pasta temporária.
@@ -876,6 +979,15 @@ mod tests {
     }
 
     #[test]
+    fn pasta_so_com_roms_json_vale() {
+        let base = std::env::temp_dir().join(format!("shmupx-fc-teste-{}-lista", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("roms.json"), "{}").unwrap();
+        assert_eq!(resolver_escolhida(&base), Ok(Instalacao { raiz: None, roms: Some(base.clone()) }));
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
     fn pasta_sem_roms_da_erro_claro() {
         let base = std::env::temp_dir().join(format!("shmupx-fc-teste-{}-vazia", std::process::id()));
         std::fs::create_dir_all(&base).unwrap();
@@ -914,8 +1026,11 @@ mod tests {
         let lida = ler(Some(&escolhida.to_string_lossy()), None, Some(&padrao), true);
         assert!(lida.manual);
         assert_eq!(lida.root.as_deref(), Some(&*escolhida.to_string_lossy()));
+        // Com pasta escolhida, só ela é lida: os ROMs da padrão e do Fightcade ficam de fora.
+        assert_eq!(lida.roms, ["sonicwi2"]);
         let inst = resolver(Some(&escolhida.to_string_lossy()), None).inst;
-        assert_eq!(pastas_para_ler(&inst, Some(&padrao))[..2], [escolhida.clone(), padrao.clone()]);
+        assert_eq!(pastas_para_ler(&inst, Some(&padrao), true), [escolhida.clone()]);
+        assert_eq!(pastas_para_ler(&inst, Some(&padrao), false)[..2], [escolhida.clone(), padrao.clone()]);
         let _ = std::fs::remove_dir_all(base);
     }
 

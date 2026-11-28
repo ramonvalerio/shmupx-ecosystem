@@ -24,7 +24,8 @@ import { useRemoteLaunch } from "./data/remoteLaunch";
 import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
 import { runLibrarySync } from "./data/librarySync";
-import { setPublishedRooms } from "./data/emulatorLibrary";
+import { loadRomList, setPublishedRooms, useRomList } from "./data/emulatorLibrary";
+import { RomDownloadDialog } from "./components/RomDownloadDialog";
 import { publishPlacement } from "./data/playerCard";
 
 interface GameLaunchedPayload {
@@ -116,6 +117,9 @@ export default function App() {
   const librarySyncedFor = useRef<string | null>(null);
   // ROMs que o `roms.json` pode baixar: os dos jogos publicados, acompanhando o catálogo.
   useEffect(() => setPublishedRooms(rooms), [rooms]);
+  // Id do jogo → ROM (`roms.json`): lida ao abrir; mudar a lista redesenha as telas que usam o ROM.
+  useRomList();
+  useEffect(() => { void loadRomList().catch((error) => console.warn("ROMs: falha ao ler o roms.json:", error)); }, []);
   useEffect(() => {
     if (!signedUid) { librarySyncedFor.current = null; return; }
     if (!isTauri() || rooms.length === 0 || librarySyncedFor.current === signedUid) return;
@@ -257,6 +261,7 @@ export default function App() {
         />
       )}
     />
+    <RomDownloadDialog rooms={rooms} />
 
       {/* Treino em dupla online: convites (clique direito num jogador › Convidar para jogar) e a conexão. */}
       <NetplayCenter me={{ uid: profileUid, name: profileName }} rooms={rooms} />

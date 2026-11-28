@@ -18,6 +18,8 @@ export interface GameRoom {
   modes?: GameMode[];
   /** Ranked no MiSTer liberado no Lab (o agente lê o placar da memória lá). Sem isso, MiSTer é só Training. */
   rankedMister?: boolean;
+  /** Jogo da Steam sem a proteção SteamStub (No Steam Protection, no Lab): abre direto, sem abrir a Steam. */
+  noSteamProtection?: boolean;
   /** Tempo do Caravan no Lab, em segundos: na partida Caravan o jogo fecha nesse tempo (padrão 300). */
   caravanSeconds?: number;
   /** Metadados do catálogo (Lab); ausentes quando o admin não preencheu. */

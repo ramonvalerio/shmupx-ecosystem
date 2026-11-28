@@ -10,7 +10,7 @@ async function sourceModule(path) {
 }
 const { GamepadNavigationInput } = await sourceModule("../src/components/navigationInput.ts");
 const { defaultDashboard, validateDashboard, reorderPanel } = await sourceModule("../src/components/dashboardState.ts");
-const { romsFor, tableRomsFor } = await sourceModule("../src/data/emulatorRoms.ts");
+const { romsFor, setRomList, systemFor } = await sourceModule("../src/data/emulatorRoms.ts");
 function pad(buttons = [], axes = [0, 0]) { return { buttons: Array.from({ length: 16 }, (_, index) => ({ pressed: buttons.includes(index) })), axes }; }
 
 test("held confirmation cannot activate a control on entry or after focus recovery", () => {
@@ -232,12 +232,16 @@ test("chat profanity filter masks pt/en/ja bad words without false positives", (
     assert.deepEqual(censor(text), { text, changed: false }, text);
   }
 });
-test("ROM do emulador: tabela primeiro e, sem entrada, o título sem separadores (R-Type → rtype)", () => {
-  assert.deepEqual(romsFor({ id: "r-type", title: "R-Type" }), ["rtype"]);
-  assert.deepEqual(romsFor({ id: "xyz123", title: "R-Type" }).slice(0, 1), ["rtype"]);
-  assert.deepEqual(romsFor({ id: "aero-fighters-2", title: "Aero Fighters 2" }), ["sonicwi2", "aerofighters2"]);
-  assert.deepEqual(tableRomsFor({ id: "earthion", title: "Earthion" }), []);
-  assert.deepEqual(romsFor({ id: "earthion", title: "Earthion" }), ["earthion"]);
+test("ROM do emulador: só pelo id do jogo no roms.json, sem nome de ROM no código", () => {
+  assert.deepEqual(romsFor({ id: "aero-fighters-2" }), []);
+  setRomList({ "aero-fighters-2": { rom: "sonicwi2" }, neogeo: { rom: "neogeo" }, axelay: { rom: "axelayu", sistema: "snes" }, ruim: "x" });
+  assert.deepEqual(romsFor({ id: "aero-fighters-2", title: "Aero Fighters 2" }), ["sonicwi2"]);
+  assert.equal(systemFor({ id: "aero-fighters-2" }), null);
+  assert.deepEqual(romsFor({ id: "axelay" }), ["axelayu"]);
+  assert.equal(systemFor({ id: "axelay" }), "snes");
+  assert.deepEqual(romsFor({ id: "ruim" }), []);
+  assert.deepEqual(romsFor({ id: "r-type", title: "R-Type" }), []);
+  assert.deepEqual(romsFor({ id: "sonicwi2", title: "Aero Fighters 2" }), []);
 });
 
 const { emojify, emojifyTyping, emojiSuggestions, applySuggestion } = await sourceModule("../src/data/emoji.ts");

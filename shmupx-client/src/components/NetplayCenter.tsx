@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { listen } from "@tauri-apps/api/event";
 import { useI18n } from "../i18n";
 import { db } from "../auth/firebase";
 import type { GameRoom } from "../types/room";
 import { useEmulatorLibrary } from "../data/emulatorLibrary";
+import { avatarOf, usePublicProfiles } from "../data/publicProfile";
 import {
   createInvite, finishSession, INVITE_TTL_MS, launchNetplay, prepareSide, READY_TTL_MS, setNetplayPartner, updateSession, watchSessions,
   type NetplayEngineEvent, type NetplaySession, type NetplaySide,
@@ -321,22 +322,31 @@ export default function NetplayCenter({ me, rooms }: { me: { uid: string; name: 
   </>;
 }
 
+/**
+ * Convite recebido: avatar de quem convidou, "<nome> convidou você para jogar" grande em ciano, o
+ * jogo e os dois botões largos. A barrinha embaixo do jogo esvazia até o convite expirar.
+ */
 function InviteDialog({ session, onAccept, onDecline }: { session: NetplaySession; onAccept: () => void; onDecline: () => void }) {
   const { t } = useI18n();
   const ref = useDialogFocus(true, onDecline);
+  const profiles = usePublicProfiles([session.hostUid]);
+  // Medido uma vez por convite (o NetplayCenter re-renderiza todo segundo e a barrinha pularia).
+  const elapsed = useMemo(() => Math.min(INVITE_TTL_MS, Math.max(0, Date.now() - session.createdAt)), [session.id]);
   return (
     <div className="controller-dialog-backdrop">
-      <div ref={ref} role="alertdialog" aria-modal="true" aria-labelledby="netplay-invite-title" aria-describedby="netplay-invite-text" tabIndex={-1} className="controller-dialog close-room-dialog netplay-dialog">
-        <header>
-          <div>
-            <h2 id="netplay-invite-title">{t("{name} convidou você para jogar", { name: session.hostName })}</h2>
-            <p id="netplay-invite-text">{t("{game} em dupla, online, no ShmupX Emulator. É treino: não vale ranking nem gasta ficha. {name} é o jogador 1 e você, o jogador 2.", { game: session.title, name: session.hostName })}</p>
-          </div>
-          <DialogClose onClick={onDecline} label={t("Recusar")} />
+      <div ref={ref} role="alertdialog" aria-modal="true" aria-labelledby="netplay-invite-title" aria-describedby="netplay-invite-text" tabIndex={-1} className="netplay-invite">
+        <header className="netplay-invite-head">
+          <img className="netplay-invite-avatar" src={avatarOf(profiles, session.hostUid)} alt="" />
+          <h2 id="netplay-invite-title">{t("{name} convidou você para jogar", { name: session.hostName })}</h2>
         </header>
-        <footer>
-          <button type="button" className="secondary-action" onClick={onDecline}>{t("Recusar")}</button>
-          <button type="button" className="primary-action" onClick={onAccept}>{t("Aceitar e jogar")}</button>
+        <div className="netplay-invite-body">
+          <p className="netplay-invite-game">{t("{game} em dupla", { game: session.title })}</p>
+          <p id="netplay-invite-text" className="netplay-invite-text">{t("Treino online: não vale ranking nem gasta ficha. Você é o jogador 2.")}</p>
+          <span className="netplay-invite-timer" aria-hidden="true"><i style={{ animationDuration: `${INVITE_TTL_MS}ms`, animationDelay: `-${elapsed}ms` }} /></span>
+        </div>
+        <footer className="netplay-invite-actions">
+          <button type="button" className="netplay-invite-decline" onClick={onDecline}>{t("Recusar")}</button>
+          <button type="button" className="netplay-invite-accept" onClick={onAccept}>{t("Aceitar e jogar")}</button>
         </footer>
       </div>
     </div>

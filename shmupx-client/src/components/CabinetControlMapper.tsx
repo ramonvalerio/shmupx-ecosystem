@@ -4,6 +4,8 @@ import { CONTROLS, describeInput, useControlMapping, type ControlId, type Mapped
 import { useEngineCapture, type CaptureEvent } from "../data/engineCapture";
 import { useCabinetPanel, type LeverGeometry } from "./cabinetPanel";
 import { acceptsInput, sameController, useConnectedControllers, useControllerChoice, type ControllerChoice } from "../data/connectedControllers";
+import { useEmulatorSettings } from "../data/emulatorSettings";
+import { useMisterLibrary } from "../data/misterLibrary";
 
 /**
  * Posição de cada controle no painel (coordenadas do SVG). O gabinete segue o desenho do
@@ -213,6 +215,7 @@ export default function CabinetControlMapper() {
             {choice.kind === "pad" && !controllers.some((pad) => pad.name === choice.name) && <option value={`pad:${choice.name}`}>{`${choice.name} · ${t("Desconectado")}`}</option>}
           </select>
         </label>
+        <PlayOnMister />
         {controllers.length === 0 && <p className="muted">{t("Nenhum controle conectado. Plugue o controle e aperte um botão para ele aparecer na lista.")}</p>}
         {choice.kind === "pad" && !controllers.find((pad) => pad.name === choice.name)?.connected && <p className="mode-error" role="status">{t("{controller} está desconectado. Plugue o controle para mapear os botões.", { controller: choice.name })}</p>}
         <ul className="cabinet-mapper-list">
@@ -257,4 +260,26 @@ function parseChoice(value: string): ControllerChoice {
   if (value === "keyboard") return { kind: "keyboard" };
   if (value.startsWith("pad:")) return { kind: "pad", name: value.slice(4) };
   return { kind: "all" };
+}
+
+/**
+ * Play on MiSTer: no Monitor CRT no MiSTer (Configurações › Emulador › Monitor dos jogos), o jogo usa o controle
+ * ligado no MiSTer. Desmarcado, usa o controle deste PC, com o mapeamento desta tela. Só habilita com
+ * o MiSTer conectado em Importar jogos › MiSTer FPGA.
+ */
+function PlayOnMister() {
+  const { t } = useI18n();
+  const { settings, update } = useEmulatorSettings();
+  const connected = Boolean(useMisterLibrary().library);
+  const hint = !connected
+    ? "Conecte o seu MiSTer em Importar jogos › MiSTer FPGA para usar esta opção."
+    : settings.resolution === "mister"
+      ? "Marcado, você joga com o controle ligado no MiSTer. Desmarcado, com o controle deste PC e os botões desta tela."
+      : "Vale com o Monitor CRT no MiSTer escolhido (Configurações › Emulador › Monitor dos jogos).";
+  return (
+    <div className="cabinet-mapper-mister">
+      <label className="checkbox-field"><input type="checkbox" disabled={!connected} checked={connected && settings.playOnMister} onChange={(event) => update({ ...settings, playOnMister: event.target.checked })} />{t("Play on MiSTer")}</label>
+      <p className="muted">{t(hint)}</p>
+    </div>
+  );
 }

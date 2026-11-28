@@ -350,6 +350,19 @@ button:disabled { opacity: .5; cursor: default; }
 .controller-mapping-row:last-child { border-bottom: 0; }
 .controller-mapping-row > span:nth-child(2) { color: var(--cyan); font-family: "Share Tech", Consolas, monospace; }
 .controller-dialog > footer { display: flex; justify-content: space-between; gap: 12px; padding: 18px 22px; border-top: 1px solid var(--stroke); flex-shrink: 0; }
+/* Modal do download dos ROMs (Escolher pasta de ROMs): fica acima da modal de importar. */
+.rom-download-backdrop { z-index: 70; }
+.rom-download-dialog { width: min(560px,100%); }
+.rom-download-dialog .controller-dialog-body { padding-top: 22px; }
+.rom-download-bar { position: relative; height: 12px; overflow: hidden; background: var(--surface-recessed, var(--gray-1f1f1f)); border: 1px solid var(--stroke); border-radius: 3px; }
+.rom-download-bar > span { display: block; height: 100%; background: var(--cyan); transition: width .2s linear; }
+.rom-download-bar > span.is-indeterminate { width: 30%; animation: rom-download-reading 1.1s ease-in-out infinite alternate; }
+@keyframes rom-download-reading { from { transform: translateX(0); } to { transform: translateX(233%); } }
+.rom-download-status { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; font-size: 14px; }
+.rom-download-status p { margin: 0; }
+.rom-download-status span { color: var(--cyan); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rom-download-failed { margin: 14px 0 0; font-size: 13px; line-height: 1.5; color: #ff8a8a; }
+@media (prefers-reduced-motion: reduce) { .rom-download-bar > span { transition: none; } .rom-download-bar > span.is-indeterminate { animation: none; width: 100%; opacity: .5; } }
 .controller-capture-notice { padding: 14px; background: color-mix(in srgb, var(--cyan) 7.1%, transparent); border: 1px solid var(--cyan); border-radius: 4px; font-size: 13px; }
 .theme-light .controller-dialog header p { color: #475569; }
 @media (max-width: 700px) { .controller-dialog-backdrop { padding: 10px; } .controller-dialog { max-height: calc(100dvh - 20px); } .controller-dialog > header { padding: 16px; gap: 12px; } .controller-dialog-body { padding: 0 16px 16px; } .controller-mapping-row { grid-template-columns: 1fr 1fr; } .controller-mapping-row button { grid-column: 1 / -1; } }

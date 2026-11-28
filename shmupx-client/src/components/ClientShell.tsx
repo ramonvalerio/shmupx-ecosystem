@@ -33,6 +33,7 @@ import HowToUseDialog from "./HowToUseDialog";
 import LibrarySyncStatus from "./LibrarySyncStatus";
 import DialogClose from "./DialogClose";
 import RoomLimitDialog from "./RoomLimitDialog";
+import { isSupported } from "../data/validation";
 
 /** Salas abertas nas abas, por jogador: fechar o app não tira o jogador da sala. */
 const openRoomsKey = (uid: string) => `shmupx.client.openRooms.v1.${uid}`;
@@ -218,11 +219,24 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     });
   }, [shownView, stageRoomIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Jogo sem ranking ainda (sem script de validação nem leitura da memória): sem as abas Ranking e Eventos.
+  function hasRanking(id: string) {
+    const room = rooms.find((candidate) => candidate.id === id);
+    return !room || isSupported(room);
+  }
+  // Abas guardadas de um jogo que ficou sem ranking (ou de uma versão anterior): fecham.
+  useEffect(() => {
+    const keep = (current: string[]) => (current.every(hasRanking) ? current : current.filter(hasRanking));
+    setRankingRoomIds(keep);
+    setEventsRoomIds(keep);
+  }, [rooms]); // eslint-disable-line react-hooks/exhaustive-deps
   function setRanking(id: string, open: boolean) {
+    if (open && !hasRanking(id)) return;
     setRankingRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
     if (open) setEventsRoomIds((current) => current.filter((roomId) => roomId !== id));
   }
   function setEvents(id: string, open: boolean) {
+    if (open && !hasRanking(id)) return;
     setEventsRoomIds((current) => (open ? [...current.filter((roomId) => roomId !== id), id] : current.filter((roomId) => roomId !== id)));
     if (open) setRankingRoomIds((current) => current.filter((roomId) => roomId !== id));
   }
@@ -254,9 +268,12 @@ export default function ClientShell({ rooms, selectedRoomId, recordingRoomId, on
     const inRanking = inRoom && rankingRoomIds.includes(crumbRoom.id);
     const inEvents = inRoom && eventsRoomIds.includes(crumbRoom.id);
     crumbs.push({ label: crumbRoom.title, onClick: () => (inRoom ? showRoom(crumbRoom.id) : openGame(crumbRoom.id)), current: inRoom && !inRanking && !inEvents });
-    crumbs.push({ label: t("Ranking"), onClick: () => (inRoom ? setRanking(crumbRoom.id, true) : openGame(crumbRoom.id, true)), current: inRanking });
-    // Eventos: depois do Ranking. Fora da sala, abre a sala já nessa aba.
-    crumbs.push({ label: t("Eventos"), onClick: () => { if (!inRoom) openGame(crumbRoom.id); setEvents(crumbRoom.id, true); }, current: inEvents });
+    // Ranking e Eventos só nos jogos com ranking (Ranked Mode disponível).
+    if (isSupported(crumbRoom)) {
+      crumbs.push({ label: t("Ranking"), onClick: () => (inRoom ? setRanking(crumbRoom.id, true) : openGame(crumbRoom.id, true)), current: inRanking });
+      // Eventos: depois do Ranking. Fora da sala, abre a sala já nessa aba.
+      crumbs.push({ label: t("Eventos"), onClick: () => { if (!inRoom) openGame(crumbRoom.id); setEvents(crumbRoom.id, true); }, current: inEvents });
+    }
   }
 
   // Esc volta um nível no menu de navegação: Ranking → sala → Minhas coleções; telas internas
