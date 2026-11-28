@@ -56,12 +56,14 @@ jobs:
           "motor: $motor"
           $p = Start-Process $motor -ArgumentList "-help" -WorkingDirectory (Split-Path $motor) -Wait -PassThru -RedirectStandardOutput motor-help.txt -NoNewWindow
           "motor -help saiu com $($p.ExitCode)"; Get-Content motor-help.txt -TotalCount 2
-          $p = Start-Process $motor -ArgumentList "___empty","-video","none","-sound","none","-str","3","-skip_gameinfo" -WorkingDirectory (Split-Path $motor) -PassThru -NoNewWindow
+          # Entrada vazia (NUL): com a entrada aberta, a leitura de comandos do plugin segura a saída.
+          $p = Start-Process cmd.exe -ArgumentList "/c", "`"$motor`" ___empty -video none -sound none -str 3 -skip_gameinfo < NUL" -WorkingDirectory (Split-Path $motor) -PassThru -NoNewWindow
           if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "o motor não saiu em 60 s" }
           "motor ___empty saiu com $($p.ExitCode)"
           if ($p.ExitCode -ne 0) { throw "o motor falhou ($($p.ExitCode))" }
 
       - name: Abrir o Client
+        if: always()
         run: |
           $exe = Join-Path $env:PASTA "shmupx-client.exe"
           $p = Start-Process $exe -PassThru
