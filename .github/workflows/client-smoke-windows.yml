@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       versao:
-        description: Versão publicada (ex.: 0.1.27)
+        description: "Versão publicada, por exemplo 0.1.27"
         required: true
 
 jobs:
