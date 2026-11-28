@@ -1,0 +1,73 @@
+# Teste de fumaça do ShmupX Client publicado num Windows mais antigo que o do desenvolvimento
+# (Windows Server 2022, build 20348: anterior ao Windows 11). Instala em silêncio, abre o Client e
+# confere se ele continua aberto, e roda o FFmpeg e o ShmupX Engine do pacote. Sem ROMs: o motor
+# abre só o sistema vazio. Não substitui um Windows 10 de verdade, mas pega DLL ou função que falta.
+name: client-smoke-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: Versão publicada (ex.: 0.1.27)
+        required: true
+
+jobs:
+  smoke:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Sistema
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          "$($os.Caption) build $($os.BuildNumber)"
+          Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue | Select-Object pv
+
+      - name: Baixar o instalador publicado
+        run: |
+          $v = "${{ inputs.versao }}"
+          Invoke-WebRequest "https://www.shmupx.com/downloads/ShmupX-Setup-$v.exe" -OutFile setup.exe -UseBasicParsing
+          (Get-Item setup.exe).Length
+
+      - name: Instalar em silêncio
+        run: |
+          $p = Start-Process .\setup.exe -ArgumentList "/S" -Wait -PassThru
+          "instalador saiu com $($p.ExitCode)"
+          $pasta = @("$env:ProgramFiles\ShmupX", "${env:LOCALAPPDATA}\ShmupX", "${env:LOCALAPPDATA}\Programs\ShmupX") | Where-Object { Test-Path "$_\shmupx-client.exe" } | Select-Object -First 1
+          if (-not $pasta) { Get-ChildItem $env:ProgramFiles, $env:LOCALAPPDATA -Recurse -Filter shmupx-client.exe -ErrorAction SilentlyContinue | Select-Object -First 5 FullName; throw "shmupx-client.exe não encontrado depois da instalação" }
+          "pasta: $pasta"
+          "PASTA=$pasta" >> $env:GITHUB_ENV
+
+      - name: FFmpeg do pacote
+        run: |
+          $ff = Join-Path $env:PASTA "ffmpeg\ffmpeg.exe"
+          if (-not (Test-Path $ff)) { $ff = (Get-ChildItem $env:PASTA -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName }
+          & $ff -hide_banner -version | Select-Object -First 1
+          "exit=$LASTEXITCODE"
+          & $ff -hide_banner -loglevel error -f lavfi -i "color=c=black:s=1280x720:r=60:d=1" -pix_fmt nv12 -c:v libx264 -preset ultrafast -f null -
+          if ($LASTEXITCODE) { throw "FFmpeg falhou ($LASTEXITCODE)" }
+          "FFmpeg ok"
+
+      - name: ShmupX Engine do pacote
+        run: |
+          $motor = (Get-ChildItem $env:PASTA -Recurse -Filter shmupx-engine.exe | Select-Object -First 1).FullName
+          "motor: $motor"
+          $p = Start-Process $motor -ArgumentList "-help" -WorkingDirectory (Split-Path $motor) -Wait -PassThru -RedirectStandardOutput motor-help.txt -NoNewWindow
+          "motor -help saiu com $($p.ExitCode)"; Get-Content motor-help.txt -TotalCount 2
+          $p = Start-Process $motor -ArgumentList "___empty","-video","none","-sound","none","-str","3","-skip_gameinfo" -WorkingDirectory (Split-Path $motor) -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "o motor não saiu em 60 s" }
+          "motor ___empty saiu com $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "o motor falhou ($($p.ExitCode))" }
+
+      - name: Abrir o Client
+        run: |
+          $exe = Join-Path $env:PASTA "shmupx-client.exe"
+          $p = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 40
+          if ($p.HasExited) { "Client FECHOU sozinho com o código $($p.ExitCode) (0x{0:X})" -f $p.ExitCode; $falhou = $true } else { "Client continua aberto depois de 40 s"; $p.Kill() }
+          $log = Join-Path $env:LOCALAPPDATA "com.shmupx.client\logs\ShmupX.log"
+          if (Test-Path $log) { "--- log do Client"; Get-Content $log -Tail 40 }
+          Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 2; StartTime = (Get-Date).AddMinutes(-5) } -ErrorAction SilentlyContinue | Select-Object -First 5 TimeCreated, ProviderName, Message | Format-List
+          if ($falhou) { throw "o Client não ficou aberto" }
