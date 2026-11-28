@@ -456,6 +456,9 @@
 .room-credits .credits-coin { grid-row: 1 / 3; width: 160px; height: 160px; }
 .room-credits strong { align-self: end; font-size: 52px; line-height: 1; }
 .room-credits .credits-label { align-self: start; font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
+/* Saldo e "COINS" da sala em branco, como os outros textos do cabeçalho (com poucas fichas, continua vermelho). */
+.room-credits:not(.is-low), .room-credits:not(.is-low) strong { color: #f0fcff; }
+.theme-light .room-credits:not(.is-low), .theme-light .room-credits:not(.is-low) strong { color: #10233f; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
