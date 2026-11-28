@@ -429,7 +429,7 @@
 .game-room-stats { display: flex; flex-wrap: wrap; gap: 10px 32px; margin: 0; }
 .game-room-stats div { display: flex; flex-direction: column; gap: 4px; }
 .game-room-stats dt { font-size: 15px; color: #8a9aa1; }
-.game-room-stats dd { margin: 0; font-size: 26px; font-weight: 400; line-height: 1.1; color: var(--cyan); }
+.game-room-stats dd { margin: 0; font-size: 26px; font-weight: 400; line-height: 1.1; color: #f0fcff; }
 
 /* Play: modo de jogo e plataforma */
 .play-dialog { width: min(620px,100%); }
@@ -739,3 +739,5 @@
 /* Posição no ranking online da sala (Hi-Score), à direita na linha do jogador. */
 .room-player-rank { color: #d7e4e8; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .theme-light .room-player-rank { color: #10233f; }
+/* Tema claro: os valores das estatísticas da sala no texto escuro do tema (o branco some no fundo claro). */
+.theme-light .game-room-stats dd { color: #10233f; }
