@@ -58,5 +58,8 @@
     "require": [
       "neogeo"
     ]
+  },
+  "dimahoo": {
+    "download": "https://fightcade.download/fbneo/arcade/dimahoo.zip"
   }
 }

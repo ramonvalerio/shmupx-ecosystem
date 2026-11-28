@@ -10,5 +10,7 @@
   { "game": "espgaluda-ii", "rom": "espgal2" },
   { "game": "raiden-dx", "rom": "raidendx" },
   { "game": "batsugun", "rom": "batsugun" },
-  { "game": "samurai-aces", "rom": "samuraia" }
+  { "game": "samurai-aces", "rom": "samuraia" },
+  { "game": "andro-dunos", "rom": "androdun" },
+  { "game": "dimahoo", "rom": "dimahoo" }
 ]
