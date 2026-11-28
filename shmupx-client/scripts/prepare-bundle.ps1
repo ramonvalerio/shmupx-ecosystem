@@ -17,7 +17,7 @@
               Visual C++ (msvcp140*, vcruntime140*, puxados pelo ONNX Runtime) e o DirectML 1.15
               (o do Windows 10 antigo não tem DMLCreateDevice1). O instalador põe ao lado do exe
               (tauri.bundle.windows.conf.json), então o jogador não instala nada à parte.
-  webview2\   instalador oficial do WebView2, só para a versão portátil (make-portable.ps1)
+  webview2\   instalador oficial do WebView2: o Client roda quando falta o WebView2 (src-tauri\src\inicio.rs)
 
   Depois: npm run bundle (o tauri build com tauri.bundle.conf.json). O Linux faz o mesmo em linux/build.sh.
 
