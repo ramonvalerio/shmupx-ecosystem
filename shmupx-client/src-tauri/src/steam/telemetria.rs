@@ -263,6 +263,9 @@ pub fn acompanhar(pid: u32, saida: impl Read + Send + 'static) {
                         mapa.entry(anterior).or_default().encerrado = true;
                         mapa.insert(nova, Telemetria::default());
                     }
+                } else {
+                    // Fim sem troca: o motor está saindo; sem a entrada aberta ele consegue sair.
+                    super::sessao_motor::jogo_fechou(pid);
                 }
             }
         }

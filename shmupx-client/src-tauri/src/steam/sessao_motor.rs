@@ -106,6 +106,17 @@ pub fn fim_do_jogo(pid: u32) -> Option<(u32, u32)> {
     Some((anterior, nova))
 }
 
+/// O jogo do motor `pid` fechou sem troca pendente (a janela fechou, PARAR JOGO, fim do ranked):
+/// fecha a entrada padrão dele. A leitura de comandos do plugin fica parada nela, com a trava do
+/// arquivo, e a saída do processo espera essa trava: com a entrada aberta, o motor fechava a janela
+/// mas o processo continuava vivo, e o Client seguia mostrando a partida em andamento.
+pub fn jogo_fechou(pid: u32) {
+    let mut e = travar();
+    if let Some(a) = e.aberto.as_mut().filter(|a| a.pid == pid && a.pendente.is_none()) {
+        a.entrada = None;
+    }
+}
+
 /// O motor `pid` fechou (fim da saída padrão).
 pub fn encerrado(pid: u32) {
     let mut e = travar();
