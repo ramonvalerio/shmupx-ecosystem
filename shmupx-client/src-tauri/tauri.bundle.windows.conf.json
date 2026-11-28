@@ -6,7 +6,8 @@
       "bundle/runtime/vcruntime140.dll": "vcruntime140.dll",
       "bundle/runtime/vcruntime140_1.dll": "vcruntime140_1.dll",
       "bundle/runtime/DirectML.dll": "DirectML.dll",
-      "bundle/ytdlp/": "ytdlp/"
+      "bundle/ytdlp/": "ytdlp/",
+      "bundle/webview2/": "webview2/"
     },
     "windows": {
       "webviewInstallMode": {

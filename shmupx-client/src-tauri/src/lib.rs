@@ -9,6 +9,7 @@ pub mod analysis;
 pub mod auth;
 pub mod capture;
 pub mod chat;
+pub mod inicio;
 pub mod input;
 pub mod interface;
 pub mod live;
@@ -25,10 +26,15 @@ fn app_version() -> &'static str {
 }
 
 pub fn run() {
+    // O que impediria a janela de abrir vira mensagem para o jogador (e o motivo, um arquivo no log).
+    inicio::vigiar_panics();
+    if !inicio::garantir_webview2() {
+        return;
+    }
     // A interface baixada (sem instalador) entra no lugar da embutida, na mesma origem.
     let mut context = tauri::generate_context!();
     interface::instalar(&mut context);
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -131,11 +137,18 @@ pub fn run() {
             input::spawn_listener(app.handle().clone());
             portatil::limpar_atualizacoes();
 
+            inicio::abriu();
             Ok(())
         })
-        .build(context)
-        .expect("error while building tauri application")
-        .run(|app, event| {
+        .build(context);
+    let app = match app {
+        Ok(app) => app,
+        Err(e) => {
+            inicio::falha_ao_abrir(&format!("falha ao montar o app: {e}"));
+            return;
+        }
+    };
+    app.run(|app, event| {
             // O motor escondido da tela de controles não pode sobrar depois do app fechar.
             if let tauri::RunEvent::Exit = event {
                 steam::controles::encerrar(app);
