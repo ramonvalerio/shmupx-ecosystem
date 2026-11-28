@@ -71,6 +71,10 @@ pub struct JogoEntrada {
     /// core de Mega Drive). Desligado, o jogo no MiSTer é só Training. Exige MiSTer em `platforms`.
     #[serde(default)]
     pub ranked_mister: bool,
+    /// Sem proteção da Steam (SteamStub/DRM): o Client abre o executável do jogo direto, sem abrir a
+    /// Steam. Exige Steam em `platforms` e um `steam_app_id` (é a instalação da Steam que é aberta).
+    #[serde(default)]
+    pub no_steam_protection: bool,
     /// Tempo do Caravan em segundos: na partida Caravan, o jogo fecha nesse tempo e o placar feito
     /// até ali vale. Ausente = `CARAVAN_PADRAO_SEGUNDOS`. Menor que `max_duration_segundos`.
     #[serde(default)]
@@ -100,6 +104,8 @@ pub struct Jogo {
     pub cover_url: Option<String>,
     /// Ranked no MiSTer liberado (leitura de placar pela memória no agente do MiSTer).
     pub ranked_mister: bool,
+    /// Jogo da Steam sem proteção: o Client abre o executável direto, sem a Steam.
+    pub no_steam_protection: bool,
     /// Tempo do Caravan em segundos (o jogo fecha nesse tempo na partida Caravan).
     pub caravan_segundos: i64,
     /// Quando o jogo foi cadastrado (RFC 3339, do Firestore). Só na visão do admin.
@@ -172,6 +178,9 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
     if entrada.ranked_mister && !platforms.iter().any(|p| p == "mister") {
         return Err(AppError::bad_request("Ranked no MiSTer exige MiSTer nas plataformas do jogo"));
     }
+    if entrada.no_steam_protection && (!platforms.iter().any(|p| p == "steam") || entrada.steam_app_id == 0) {
+        return Err(AppError::bad_request("No Steam Protection exige Steam nas plataformas e o app_id da Steam"));
+    }
     let cover_url = entrada.cover_url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
     if let Some(url) = &cover_url {
         let nome = url.strip_prefix(PREFIXO_CAPA).unwrap_or("");
@@ -195,7 +204,7 @@ fn validar(id: &str, entrada: JogoEntrada) -> Result<JogoEntrada, AppError> {
 
 /// Campos do catálogo que a gravação controla. Os opcionais ausentes na entrada estão na máscara
 /// mas não nos valores, o que os apaga do documento.
-const MASCARA: [&str; 15] = [
+const MASCARA: [&str; 16] = [
     "title",
     "steamAppId",
     "maxDurationSeconds",
@@ -210,6 +219,7 @@ const MASCARA: [&str; 15] = [
     "modes",
     "coverUrl",
     "rankedMister",
+    "noSteamProtection",
     "caravanSeconds",
 ];
 
@@ -250,6 +260,7 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
     inserir("maxDurationSeconds", inteiro(entrada.max_duration_segundos));
     inserir("published", booleano(entrada.published));
     inserir("rankedMister", booleano(entrada.ranked_mister));
+    inserir("noSteamProtection", booleano(entrada.no_steam_protection));
     inserir("updatedAt", data(Utc::now()));
     for (nome, valor) in [
         ("developer", &entrada.developer),
@@ -303,6 +314,7 @@ async fn gravar(fs: &Firestore, id: &str, entrada: JogoEntrada, novo: bool) -> R
         modes: entrada.modes,
         cover_url: entrada.cover_url,
         ranked_mister: entrada.ranked_mister,
+        no_steam_protection: entrada.no_steam_protection,
         caravan_segundos: entrada.caravan_segundos.unwrap_or(CARAVAN_PADRAO_SEGUNDOS),
     })
 }
@@ -364,6 +376,10 @@ pub fn mudancas_do_jogo(antes: Option<&Jogo>, depois: &Jogo) -> Vec<Mudanca> {
                 let texto = if depois.ranked_mister { "Ranked no MiSTer liberado" } else { "no MiSTer agora só Training" };
                 mudancas.push(item("ranked-mister", "rules", Some(format!("{}: {texto}", depois.title))));
             }
+            if antes.no_steam_protection != depois.no_steam_protection {
+                let texto = if depois.no_steam_protection { "abre direto, sem precisar abrir a Steam" } else { "volta a abrir pela Steam" };
+                mudancas.push(item("sem-steam", "fixes", Some(format!("{}: {texto}", depois.title))));
+            }
             if dados_do_jogo(antes) != dados_do_jogo(depois) || antes.platforms != depois.platforms {
                 mudancas.push(item("dados", "fixes", Some(format!("{}: informações do jogo atualizadas", depois.title))));
             }
@@ -411,6 +427,7 @@ fn jogo_de(id: String, campos: &Campos) -> Jogo {
         modes: ler_lista_de_textos(campos, "modes"),
         cover_url: ler_texto(campos, "coverUrl"),
         ranked_mister: ler_booleano(campos, "rankedMister").unwrap_or(false),
+        no_steam_protection: ler_booleano(campos, "noSteamProtection").unwrap_or(false),
         caravan_segundos: ler_inteiro(campos, "caravanSeconds").unwrap_or(CARAVAN_PADRAO_SEGUNDOS),
         created_at: None,
         updated_at: None,
@@ -508,6 +525,17 @@ mod tests {
         assert!(validar("g", JogoEntrada { modes: vec!["speedrun".into()], ..entrada() }).is_err());
         assert!(validar("g", JogoEntrada { platforms: vec!["xbox360".into()], ..entrada() }).is_err());
         assert!(validar("g", JogoEntrada { developer: Some("x".repeat(81)), ..entrada() }).is_err());
+    }
+
+    #[test]
+    fn sem_protecao_da_steam_exige_steam_e_app_id() {
+        let steam = || vec!["steam".to_string()];
+        let ok = validar("g", JogoEntrada { platforms: steam(), no_steam_protection: true, ..entrada() }).unwrap();
+        assert!(ok.no_steam_protection);
+        assert!(validar("g", JogoEntrada { platforms: vec!["emulator".into()], no_steam_protection: true, ..entrada() }).is_err());
+        assert!(validar("g", JogoEntrada { platforms: steam(), steam_app_id: 0, no_steam_protection: true, ..entrada() }).is_err());
+        let corpo = r#"{"title":"A","steam_app_id":1,"max_duration_segundos":60,"published":true,"platforms":["steam"],"no_steam_protection":true}"#;
+        assert!(serde_json::from_str::<JogoEntrada>(corpo).unwrap().no_steam_protection);
     }
 
     #[test]

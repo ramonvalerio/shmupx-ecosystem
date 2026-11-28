@@ -21,6 +21,8 @@ export interface CatalogGame {
   cover_url?: string;
   /** Ranked no MiSTer liberado: o agente do MiSTer lê o placar da memória do jogo. Exige MiSTer em `platforms`. */
   ranked_mister?: boolean;
+  /** Sem proteção da Steam (SteamStub/DRM): o Client abre o executável direto, sem abrir a Steam. Exige Steam em `platforms`. */
+  no_steam_protection?: boolean;
   /** Tempo do Caravan em segundos (30 a 3600, menor que a duração máxima): na partida Caravan o jogo fecha nesse tempo. Padrão 300. */
   caravan_segundos?: number;
   /** Data de cadastro (ISO 8601), definida pelo backend. */

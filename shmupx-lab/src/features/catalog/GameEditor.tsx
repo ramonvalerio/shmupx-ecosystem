@@ -41,6 +41,8 @@ interface Draft {
   coverUrl: string;
   /** Ranked no MiSTer: o agente lê o placar da memória lá (hoje só o Earthion, core Mega Drive). */
   rankedMister: boolean;
+  /** Jogo da Steam sem proteção (SteamStub/DRM): o Client abre o executável direto, sem a Steam. */
+  noSteamProtection: boolean;
   /** Tempo do Caravan como digitado: minutos (`5`) ou minutos e segundos (`2:30`). */
   caravan: string;
 }
@@ -63,7 +65,7 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 function toDraft(game: CatalogGame | null): Draft {
   if (!game) {
-    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "", rankedMister: false, caravan: caravanText(CARAVAN_PADRAO_SEGUNDOS) };
+    return { id: "", title: "", steamAppId: "0", minutes: "60", published: false, developer: "", publisher: "", genre: "", year: "", platform: "", platforms: [], modes: [], coverUrl: "", rankedMister: false, noSteamProtection: false, caravan: caravanText(CARAVAN_PADRAO_SEGUNDOS) };
   }
   return {
     id: game.id,
@@ -80,6 +82,7 @@ function toDraft(game: CatalogGame | null): Draft {
     modes: game.modes,
     coverUrl: game.cover_url ?? "",
     rankedMister: game.ranked_mister ?? false,
+    noSteamProtection: game.no_steam_protection ?? false,
     caravan: caravanText(game.caravan_segundos ?? CARAVAN_PADRAO_SEGUNDOS),
   };
 }
@@ -251,6 +254,7 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
         modes: draft.modes,
         cover_url: draft.coverUrl || undefined,
         ranked_mister: draft.rankedMister && draft.platforms.includes("mister"),
+        no_steam_protection: draft.noSteamProtection && draft.platforms.includes("steam") && Number(draft.steamAppId) > 0,
         caravan_segundos: draft.modes.includes("caravan") ? caravanSeconds(draft.caravan) ?? undefined : undefined,
       });
       onSaved(saved);
@@ -262,6 +266,8 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
   }
 
   const steamUnverified = unverifiedSteamId !== null && Number(draft.steamAppId) === unverifiedSteamId;
+  /** No Steam Protection só vale com Steam nas plataformas e o app_id da Steam. */
+  const onSteam = draft.platforms.includes("steam") && Number(draft.steamAppId) > 0;
 
   return (
     <aside
@@ -360,6 +366,17 @@ export default function GameEditor({ game, games, ranked, onClose, onSaved, onDe
                   })}
                 </div>
                 <p className="mt-1.5 text-xs text-zinc-500">Onde dá para jogar no ShmupX. Marque todas as que valem.</p>
+                <div className="mt-3">
+                  <Switch
+                    checked={draft.noSteamProtection && onSteam}
+                    onChange={(noSteamProtection) => patch({ noSteamProtection })}
+                    disabled={!onSteam}
+                    label="No Steam Protection"
+                    description={onSteam
+                      ? "Ligue se o jogo não tem a proteção SteamStub (DRM) da Steam: o Client abre o executável do jogo direto, sem abrir a Steam."
+                      : "Marque Steam nas plataformas para liberar."}
+                  />
+                </div>
               </div>
               <Field label="Ano">
                 <TextInput inputMode="numeric" maxLength={4} value={draft.year} onChange={(e) => patch({ year: e.target.value })} />
