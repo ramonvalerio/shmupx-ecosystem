@@ -458,7 +458,7 @@
 .room-credits .credits-label { align-self: start; font-size: 18px; letter-spacing: .1em; text-transform: uppercase; }
 /* Saldo e "COINS" da sala em branco, como os outros textos do cabeçalho (com poucas fichas, continua vermelho). */
 .room-credits:not(.is-low), .room-credits:not(.is-low) strong { color: #f0fcff; }
-.theme-light .room-credits:not(.is-low), .theme-light .room-credits:not(.is-low) strong { color: #10233f; }
+.theme-light .room-credits:not(.is-low), .theme-light .room-credits:not(.is-low) strong { color: #f0fcff; }
 .room-play-setup { display: flex; flex-wrap: wrap; gap: 10px 28px; }
 .room-setup-group { display: flex; flex-direction: column; gap: 6px; }
 .room-setup-group > span { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: #8a9aa1; }
@@ -742,5 +742,3 @@
 /* Posição no ranking online da sala (Hi-Score), à direita na linha do jogador. */
 .room-player-rank { color: #d7e4e8; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .theme-light .room-player-rank { color: #10233f; }
-/* Tema claro: os valores das estatísticas da sala no texto escuro do tema (o branco some no fundo claro). */
-.theme-light .game-room-stats dd { color: #10233f; }
