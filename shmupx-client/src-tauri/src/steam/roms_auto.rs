@@ -98,7 +98,8 @@ fn so_publicados(mut lista: BTreeMap<String, Entrada>, permitidos: &[String]) ->
     ficam.extend(exigidos);
     let fora: Vec<&String> = lista.keys().filter(|n| !ficam.contains(n)).collect();
     if !fora.is_empty() {
-        log::info!("roms: fora do download (sem jogo publicado no ShmupX): {}", fora.iter().map(|n| n.as_str()).collect::<Vec<_>>().join(", "));
+        // Aviso (o log do Client instalado só guarda avisos e erros): o jogador vê por que não baixou.
+        log::warn!("roms: fora do download (sem jogo publicado no ShmupX): {}", fora.iter().map(|n| n.as_str()).collect::<Vec<_>>().join(", "));
     }
     lista.retain(|n, _| ficam.contains(n));
     lista
@@ -170,7 +171,7 @@ pub async fn baixar_faltando(pasta: &Path, tem: &[String], permitidos: &[String]
                         continue;
                     }
                     let destino = pasta.join(format!("{nome}.zip"));
-                    log::info!("roms: baixando {nome} para {}", destino.display());
+                    log::warn!("roms: baixando {nome} para {}", destino.display());
                     match baixar(&cliente, &lista[&nome].download, destino).await {
                         Ok(()) => resultado.baixados.push(nome),
                         Err(e) => {
