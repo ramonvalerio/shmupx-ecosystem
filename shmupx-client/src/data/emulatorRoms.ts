@@ -40,6 +40,8 @@ const ROM_GAMES: Record<string, string[]> = {
   akatana: ["akai-katana"],
   cawing: ["carrier-air-wing"],
   airbustr: ["air-buster"],
+  androdun: ["andro-dunos"],
+  mushisam: ["mushihimesama", "mushihime-sama"],
   rtype: ["r-type"],
   rtype2: ["r-type-ii", "r-type-2"],
   rtypeleo: ["r-type-leo"],

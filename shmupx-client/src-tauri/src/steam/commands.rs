@@ -330,10 +330,11 @@ pub async fn emulador_identificar_monitor(app: AppHandle, id: String) -> Result<
     super::emulador::identificar_monitor(&app, &id).inspect_err(|e| log::warn!("monitor: falha ao identificar {id:?}: {e}"))
 }
 
-/// Baixa para a pasta padrão (`roms` do Client) os ROMs de `roms.json` que o jogador ainda não tem
-/// em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Ver [`super::roms_auto`].
+/// Baixa para a pasta padrão (`roms` do Client) os ROMs do `roms.json` da pasta do Client que o
+/// jogador ainda não tem em nenhuma pasta lida (a escolhida, a padrão e as do Fightcade). Só os de
+/// jogos publicados: `permitidos` (os ROMs do catálogo, da interface). Ver [`super::roms_auto`].
 #[tauri::command]
-pub async fn emulador_baixar_roms(app: AppHandle) -> super::roms_auto::ResultadoDownload {
+pub async fn emulador_baixar_roms(app: AppHandle, permitidos: Option<Vec<String>>) -> super::roms_auto::ResultadoDownload {
     let Some(padrao) = super::emulador::pasta_padrao_de_roms(&app) else {
         log::warn!("roms: sem pasta padrão de ROMs para baixar");
         return super::roms_auto::ResultadoDownload::default();
@@ -343,7 +344,7 @@ pub async fn emulador_baixar_roms(app: AppHandle) -> super::roms_auto::Resultado
     let tem = tauri::async_runtime::spawn_blocking(move || super::emulador::ler(escolhida.as_deref(), None, Some(&pasta), false).roms)
         .await
         .unwrap_or_default();
-    super::roms_auto::baixar_faltando(&padrao, &tem).await
+    super::roms_auto::baixar_faltando(&padrao, &tem, &permitidos.unwrap_or_default()).await
 }
 
 /// Guarda a pasta de ROMs escolhida pelo jogador e já lê os ROMs dela. Com `pasta` vazia, esquece a

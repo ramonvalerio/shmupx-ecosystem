@@ -80,18 +80,34 @@ export interface RomDownload {
   em_andamento: boolean;
 }
 
+/** ROMs dos jogos publicados pelo Lab (o catálogo do Client): só eles são baixados do `roms.json`. */
+let publishedRoms: string[] | null = null;
+export function setPublishedRooms(rooms: GameRoom[]) {
+  publishedRoms = rooms.length > 0 ? [...new Set(rooms.flatMap((room) => romsFor(room)))] : null;
+}
+
 /**
- * Baixa para a pasta `roms` do Client os ROMs da lista do Client (`src-tauri/roms.json`) que faltam
- * neste PC. Se baixou algum, lê os ROMs de novo e atualiza a biblioteca: os jogos ganham cor na coleção.
+ * Baixa para a pasta `roms` do Client os ROMs do `roms.json` da pasta do Client (o jogador acrescenta
+ * os endereços nele) que faltam neste PC, só os dos jogos publicados (e o que eles exigem, como a
+ * BIOS). Sem o catálogo ainda carregado, não baixa nada. Se baixou algum, lê os ROMs de novo e
+ * atualiza a biblioteca: os jogos ganham cor na coleção.
  */
 export async function downloadMissingRoms(): Promise<RomDownload> {
-  if (!isTauri()) return { baixados: [], falhas: [], em_andamento: false };
-  const result = await invoke<RomDownload>("emulador_baixar_roms");
+  if (!isTauri() || !publishedRoms) return { baixados: [], falhas: [], em_andamento: false };
+  const result = await invoke<RomDownload>("emulador_baixar_roms", { permitidos: publishedRoms });
   if (result.falhas.length > 0) console.warn("ROMs: não deu para baixar:", result.falhas.join(", "));
   if (result.baixados.length > 0 && !emulatorOff()) {
     const scan = await scanEmulator(readEmulatorLibrary()?.root || undefined);
     if (scan.found) publish({ root: scan.root ?? "", roms: scan.roms, importedAt: Date.now() });
   }
+  return result;
+}
+
+/** Baixa os ROMs que faltam (`roms.json`), lê de novo os ROMs (na pasta já conhecida) e guarda o resultado. */
+export async function refreshEmulatorLibrary(): Promise<EmulatorScan> {
+  await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
+  const result = await scanEmulator(readEmulatorLibrary()?.root || undefined);
+  if (result.found) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
   return result;
 }
 
@@ -151,12 +167,7 @@ export function useEmulatorLibrary() {
     return () => window.removeEventListener(EVENT, onChange);
   }, []);
   /** Baixa os ROMs que faltam, lê de novo os ROMs (na pasta já conhecida) e guarda o resultado. */
-  const refresh = useCallback(async () => {
-    await downloadMissingRoms().catch((error) => console.warn("ROMs: falha no download automático:", error));
-    const result = await scanEmulator(readEmulatorLibrary()?.root || undefined);
-    if (result.found) publish({ root: result.root ?? "", roms: result.roms, importedAt: Date.now() });
-    return result;
-  }, []);
+  const refresh = useCallback(() => refreshEmulatorLibrary(), []);
   /** Escolhe outra pasta de ROMs (janela do sistema); `null` = cancelou. */
   const chooseFolder = useCallback((title: string) => chooseEmulatorFolder(title), []);
   const disconnect = useCallback(() => disconnectEmulator(), []);

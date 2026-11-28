@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { GameRoom } from "../types/room";
 import { autoImportSteam } from "./steamLibrary";
-import { autoImportEmulator } from "./emulatorLibrary";
+import { autoImportEmulator, setPublishedRooms } from "./emulatorLibrary";
 import { readMisterLibrary, saveMisterLibrary, scanMister, syncMisterMenu } from "./misterLibrary";
 import { misterAuth, readMisterPlayer } from "./misterPlayer";
 
@@ -64,6 +64,7 @@ async function syncMister(rooms: GameRoom[]): Promise<number | null | "offline">
 /** Lê de novo Steam, ROMs e MiSTer. Uma chamada durante outra em andamento espera a mesma. */
 export function runLibrarySync(rooms: GameRoom[]): Promise<void> {
   if (!isTauri()) return Promise.resolve();
+  setPublishedRooms(rooms);
   if (running) return running;
   publish({ ...state, running: true });
   running = (async () => {

@@ -12,6 +12,7 @@ import RankedPanel, { useRankedLive } from "./RankedPanel";
 import { GameArt } from "./RoomView";
 import { ArcadeCabinet } from "./ArcadeCabinet";
 import { useSteamLibrary } from "../data/steamLibrary";
+import { refreshEmulatorLibrary } from "../data/emulatorLibrary";
 import { usePlatformOwnership, type PlatformTag } from "../data/platforms";
 import { isSupported } from "../data/validation";
 import DialogClose from "./DialogClose";
@@ -177,9 +178,12 @@ export default function CollectionPane({ uid, rooms, runs, selectedRoomId, recor
   // Janela About aberta pelo card.
   const [aboutId, setAboutId] = useState<string | null>(null);
   const aboutRoom = rooms.find((room) => room.id === aboutId) ?? null;
+  // Atualizar biblioteca: lê de novo a Steam e os ROMs, baixando os do `roms.json` que faltam.
   async function refreshLibrary() {
     setRefreshing(true);
-    try { await steam.refresh(); } finally { setRefreshing(false); }
+    try {
+      await Promise.all([steam.refresh(), refreshEmulatorLibrary().catch((error) => console.warn("ROMs: falha ao atualizar:", error))]);
+    } finally { setRefreshing(false); }
   }
   // Setas do teclado: andam entre os cards e selecionam o jogo (o Enter abre a sala). Não roubam as
   // setas de um campo de digitação, de uma lista ou de uma modal. No Big Picture, fora dos cards, as

@@ -24,6 +24,7 @@ import { useRemoteLaunch } from "./data/remoteLaunch";
 import { publishPlaying, setAccountPlaying, setClientMisterGame, useClientMisterGame, usePlayingClaim } from "./data/playing";
 import { liveActive, useLive } from "./data/useLive";
 import { runLibrarySync } from "./data/librarySync";
+import { setPublishedRooms } from "./data/emulatorLibrary";
 import { publishPlacement } from "./data/playerCard";
 
 interface GameLaunchedPayload {
@@ -113,6 +114,8 @@ export default function App() {
   // deste PC (baixando os da lista que faltam) e o MiSTer já conhecido, que também ganha no menu
   // ShmupX os jogos do Lab que faltam. Sair e entrar de novo lê tudo outra vez.
   const librarySyncedFor = useRef<string | null>(null);
+  // ROMs que o `roms.json` pode baixar: os dos jogos publicados, acompanhando o catálogo.
+  useEffect(() => setPublishedRooms(rooms), [rooms]);
   useEffect(() => {
     if (!signedUid) { librarySyncedFor.current = null; return; }
     if (!isTauri() || rooms.length === 0 || librarySyncedFor.current === signedUid) return;
